@@ -1,0 +1,67 @@
+{
+  "name": "dsh-whale-bongo",
+  "version": "0.1.0",
+  "description": "QQ 弹弹的类 bongo 手手挂件",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.png"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.png",
+    "assets/portrait.png",
+    "assets/dsh-whale-bongo-icon.png",
+    "assets/widget.js",
+    "assets/sounds/*",
+    "README.md",
+    "INSTALL-FOR-AI.md",
+    "LICENSE",
+    "CHANGELOG-0.1.0.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "author": "MeteorNOX",
+  "main": "index.js",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "typing",
+    "widget",
+    "bongo",
+    "desktop-pet"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MeteorNOX/dsh-whale-bongo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MeteorNOX/dsh-whale-bongo/issues"
+  },
+  "homepage": "https://github.com/MeteorNOX/dsh-whale-bongo#readme",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.1.0-rc.1"
+  },
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --check assets/widget.js"
+  }
+}
