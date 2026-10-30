@@ -9,7 +9,7 @@
 - **透明穿透与自由磁吸**：透明区域不挡点击，松手自动吸附输入框或窗口边缘。
 - **可拖动设置菜单**：折叠分类、标题固定、菜单独立于挂件大小。
 
-升级：在 DSH 插件管理器输入 `dsh-whale-bongo`；桌面端完全退出并重开 DSH，Web 端按 **Ctrl+F5** 硬刷新。
+安装：在 DSH 插件管理器输入 `dsh-whale-bongo`；桌面端完全退出并重开 DSH，Web 端按 **Ctrl+F5** 硬刷新。
 
 <details>
 <summary>详细说明（点击展开）</summary>
@@ -32,7 +32,7 @@
 
 - 安装：DSH 插件管理器输入 `dsh-whale-bongo`。
 - 卸载：从插件管理器移除 `dsh-whale-bongo`。
-- 可选清理 localStorage：`dsh-dsniang-bongo:widget:v3`、`dsh-dsniang-bongo:widget-image:v3`、`dsh-whale-bongo:diag:*`。
+- 卸载后可在浏览器站点数据中清理本插件的设置与图片。
 
 ### 4. 素材说明
 
