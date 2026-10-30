@@ -52,8 +52,6 @@
 - [这是什么](#这是什么)
 - [亮点](#亮点)
 - [安装](#安装)
-- [使用](#使用)
-- [它会改什么](#它会改什么)
 - [设置](#设置)
 - [与 dsh-bongo-fish 共存](#与-dsh-bongo-fish-共存)
 - [卸载与数据清理](#卸载与数据清理)
@@ -130,39 +128,8 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 4. 安装完成后 **完全退出并重启一次 DSH**；
 5. 打开任意对话页，挂件会出现在输入框右上方。
 
-### 从旧包升级
-
-如果你之前装的是旧包名 `dsh-dsniang-bongo`：
-
-1. 先从插件管理器移除旧 bundle / 依赖；
-2. 再安装 `dsh-whale-bongo`；
-3. 重启 DSH。
-
-设置键沿用旧版的 `dsh-dsniang-bongo:*`，所以自定义图片和参数会保留，不需要重新配置。
-
 > [!TIP]
 > 给其他 AI / 其他 DSH 的安装教程见 [`INSTALL-FOR-AI.md`](INSTALL-FOR-AI.md)，包含 `plugin_manager`、命令行兜底和 health 验证。
-
----
-
-## 使用
-
-- 在 DSH 输入框里正常打字。
-- 拖动挂件移动位置，松手后自动磁吸。
-- 鼠标悬浮到图片上，图片右上角出现 `☰`，点它打开设置。
-- 图片、手部、音效默认收起，点主题行展开；动效和大小直接显示。
-- 拖菜单标题栏可以临时移动菜单；再次唤出会回到挂件旁的固定位置。
-- 点菜单外区域关闭菜单。
-
----
-
-## 它会改什么
-
-- **Host 半**：注册 `/dsh-whale-bongo/health`、`/widget.js`、`/portrait.png` 等只读路由，并向 DSH 页面注入挂件脚本。
-- **客户端半**：在页面中创建固定定位的 `#dsh-whale-bongo` 节点，样式全部带 `dsnw-` / `dsh-whale-bongo` 前缀，不修改宿主 CSS。
-- **本地存储**：只在浏览器 localStorage 中保存设置、图片和调试标记，不上传到远端。
-- **键盘监听**：只监听 DSH 页面内的键盘事件，不是跨应用的系统级键盘钩子。
-- **音效**：播放随包附带的本地 `hit.wav`，没有外部音频请求。
 
 ---
 
@@ -211,9 +178,6 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 - 两边按键音效会同时响，可以调低其中一个的音量，或只保留一个；
 - 卸载其中一个不会影响另一个。
 
-> [!CAUTION]
-> 旧包 `dsh-dsniang-bongo` 与新包共用旧存储键，不建议两个都作为 bundle 安装；升级时移除旧包即可。
-
 ---
 
 ## 卸载与数据清理
@@ -225,14 +189,7 @@ Web / CLI 环境：
 dsh plugin --profile web remove dsh-whale-bongo
 ```
 
-卸载后挂件和 Host 路由会停止加载。可选清理浏览器数据：
-
-```text
-dsh-dsniang-bongo:widget:v3          # 设置
-dsh-dsniang-bongo:widget-image:v3    # 自定义图片
-dsh-dsniang-bongo:menu-position:v1   # 旧版菜单位置，仅残留数据
-dsh-whale-bongo:diag:*               # 调试标记
-```
+卸载后挂件会停止加载。设置与自定义图片保存在当前浏览器的 localStorage 中；如需彻底清理，可在浏览器站点数据中删除本插件的存储。
 
 ---
 
