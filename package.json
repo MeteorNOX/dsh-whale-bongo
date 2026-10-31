@@ -16,6 +16,7 @@
     "locale/*.json",
     "icon.png",
     "assets/portrait.png",
+    "assets/key-angles.json",
     "assets/dsh-whale-bongo-icon.png",
     "assets/widget.js",
     "assets/sounds/*",
