@@ -2241,8 +2241,10 @@ function mountWhaleBongoWidget() {
     curY = y
     applyFlip()
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
-    if (key !== lastPlaceKey || root.style.display === 'none') {
-      lastPlaceKey = key
+    lastPlaceKey = key
+    // 面板切换过程中可能短暂找不到卡片。此时不要抄近路瞬移，
+    // 保持当前位置和弹簧状态，等新面板出现后再平滑收敛。
+    if (root.style.display === 'none') {
       root.style.display = ''
       root.style.transform = 'none'
       setMoveImmediate(x, y)
@@ -2313,11 +2315,10 @@ function mountWhaleBongoWidget() {
     curX = x
     curY = y
     applyFlip()
-    var targetChanged = lastPlaceCard !== null && lastPlaceCard !== card
     lastPlaceCard = card
     var wasVisible = root.style.display !== 'none'
-    var shouldAnimate = !drag && wasVisible &&
-      (animate === true || (animate !== false && targetChanged))
+    // 默认对所有可见位置变化走弹簧，只有拖动、滚动和首次挂载才立即定位。
+    var shouldAnimate = !drag && wasVisible && animate !== false
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
     if (key !== lastPlaceKey || !wasVisible) {
       lastPlaceKey = key
