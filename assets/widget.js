@@ -12,8 +12,29 @@
  *   ③ 默认参数严格沿用 bongo-demo/index.html 的当前配置（reset 模式、
  *      手宽 16%、高宽比 88%、间距 20%、轴 56%、垂直 87.2% 等）。
  * ==========================================================================*/
-(function () {
+function mountWhaleBongoWidget() {
   'use strict'
+
+  var widgetDisposed = false
+  var widgetCleanups = []
+  var widgetTimeouts = []
+
+  function later(fn, ms) {
+    var id = window.setTimeout(function () {
+      var index = widgetTimeouts.indexOf(id)
+      if (index !== -1) widgetTimeouts.splice(index, 1)
+      if (!widgetDisposed) fn()
+    }, ms)
+    widgetTimeouts.push(id)
+    return id
+  }
+
+  function on(target, type, fn, options) {
+    target.addEventListener(type, fn, options)
+    widgetCleanups.push(function () {
+      target.removeEventListener(type, fn, options)
+    })
+  }
 
   function dsnDiag(stage, extra) {
     try {
@@ -22,7 +43,6 @@
         at: Date.now(),
         href: String(location.href),
         ready: document.readyState,
-        guard: Boolean(window.__dshWhaleBongo),
         card: Boolean(document.querySelector('[data-composer-card]')),
         input: Boolean(document.querySelector('[data-composer-input]')),
       }
@@ -32,7 +52,7 @@
   }
   dsnDiag('start')
   try {
-    window.addEventListener('error', function (event) {
+    on(window, 'error', function (event) {
       dsnDiag('error', {
         message: event && event.message,
         source: event && event.filename,
@@ -41,7 +61,7 @@
         stack: event && event.error && event.error.stack,
       })
     })
-    window.addEventListener('unhandledrejection', function (event) {
+    on(window, 'unhandledrejection', function (event) {
       var reason = event && event.reason
       dsnDiag('rejection', {
         message: reason && (reason.message || String(reason)),
@@ -50,11 +70,6 @@
     })
   } catch (e) {}
 
-  if (window.__dshWhaleBongo) {
-    dsnDiag('guard')
-    return
-  }
-  window.__dshWhaleBongo = true
 
   var BASE = '/dsh-whale-bongo'
   var keyPositions = null
@@ -1435,6 +1450,7 @@
   var pointerPress = null
   var roCard = null
   var ro = null
+  var mo = null
   var menuFrame = 0
   var placeFrame = 0
   var mounted = false
@@ -1505,7 +1521,7 @@
   function releaseHand(hand, delay) {
     clearReleaseTimer(hand)
     if (delay > 0) {
-      hand.releaseTimer = setTimeout(function () {
+      hand.releaseTimer = later(function () {
         hand.releaseTimer = 0
         if (hand.keys.size === 0 && !hand.seq) setPressed(hand, false)
       }, delay)
@@ -1868,6 +1884,7 @@
   }
 
   function tick(now) {
+    if (widgetDisposed) return
     var dt = Math.min((now - lastTime) / 1000, 1 / 30)
     lastTime = now
     if (dt > 0) {
@@ -1964,6 +1981,7 @@
   }
 
   function applyFlip() {
+    if (widgetDisposed) return
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
     if (cfg.flipMode === 'auto') {
@@ -2014,6 +2032,7 @@
     return input.closest('form') || input.parentElement
   }
   function schedulePlace() {
+    if (widgetDisposed) return
     if (document.visibilityState !== 'visible') {
       place()
       return
@@ -2073,6 +2092,7 @@
     }
   }
   function place() {
+    if (widgetDisposed) return
     var card = cardEl()
     if (!card) {
       placeFallback()
@@ -2176,7 +2196,7 @@
       lastPlaceKey = ''
       root.classList.add('is-anim')
       void root.offsetWidth
-      setTimeout(function () { root.classList.remove('is-anim') }, 350)
+      later(function () { root.classList.remove('is-anim') }, 350)
       place()
     }
     // 从吸附点开始拖动：本次手势不再吸附到点；拖回原点也不重新吸附。
@@ -2350,7 +2370,7 @@
       if (row) row.setAttribute('aria-expanded', 'true')
       if (arrow) arrow.textContent = '▾'
       if (!instant) {
-        setTimeout(function () {
+        later(function () {
           if (body.getAttribute('data-open') === '1') body.style.maxHeight = 'none'
         }, 260)
       }
@@ -2465,7 +2485,7 @@
     root.appendChild(popover)
     positionSelect(selectEl)
     window.requestAnimationFrame(function () {
-      if (activeSelect !== selectEl) return
+      if (widgetDisposed || activeSelect !== selectEl) return
       popover.classList.add('is-open')
       positionSelect(selectEl)
       var selected = null
@@ -2590,7 +2610,7 @@
     })
   }
 
-  document.addEventListener('pointerdown', function (event) {
+  on(document, 'pointerdown', function (event) {
     if (!activeSelect) return
     if (activeSelect.contains(event.target) || activeSelect._popover.contains(event.target)) return
     closeAllSelects()
@@ -2599,7 +2619,7 @@
   if (menuScroll) {
     menuScroll.addEventListener('scroll', function () { closeAllSelects() }, { passive: true })
   }
-  window.addEventListener('resize', function () { closeAllSelects() })
+  on(window, 'resize', function () { closeAllSelects() })
 
   function syncMenu() {
     syncSettings()
@@ -2991,7 +3011,7 @@
 
   function scheduleHideMenuButton() {
     if (buttonHideTimer) clearTimeout(buttonHideTimer)
-    buttonHideTimer = setTimeout(function () {
+    buttonHideTimer = later(function () {
       buttonHideTimer = 0
       if (menuOpen || hitboxHovered || buttonHovered) return
       root.classList.remove('is-button-visible')
@@ -3061,7 +3081,7 @@
     menuHead.addEventListener('pointercancel', endMenuDrag)
   }
 
-  document.addEventListener('pointerdown', function (event) {
+  on(document, 'pointerdown', function (event) {
     if (menuOpen && !root.contains(event.target)) closeMenu()
   }, true)
 
@@ -3115,10 +3135,10 @@
   function onWindowBlur() {
     releaseAll()
   }
-  document.addEventListener('keydown', onKeyDown, true)
-  document.addEventListener('keyup', onKeyUp, true)
-  window.addEventListener('blur', onWindowBlur)
-  document.addEventListener('visibilitychange', function () {
+  on(document, 'keydown', onKeyDown, true)
+  on(document, 'keyup', onKeyUp, true)
+  on(window, 'blur', onWindowBlur)
+  on(document, 'visibilitychange', function () {
     if (document.visibilityState !== 'visible') {
       releaseAll()
       closeMenu()
@@ -3129,11 +3149,11 @@
 
   // ------------------------------------------------------------------ 启动
   function mount() {
-    if (mounted) return
+    if (widgetDisposed || mounted) return
     mounted = true
     var host = document.body || document.head || document.documentElement
     if (!host) {
-      setTimeout(mount, 50)
+      later(mount, 50)
       return
     }
     host.appendChild(root)
@@ -3174,11 +3194,12 @@
       })
       try { ro.observe(document.documentElement) } catch (e) {}
     }
-    window.addEventListener('resize', schedulePlace)
-    window.addEventListener('scroll', schedulePlace, true)
+    on(window, 'resize', schedulePlace)
+    on(window, 'scroll', schedulePlace, true)
     if (window.MutationObserver) {
       try {
-        new MutationObserver(schedulePlace).observe(document.body || document.documentElement, {
+        mo = new MutationObserver(schedulePlace)
+        mo.observe(document.body || document.documentElement, {
           childList: true,
           subtree: true,
         })
@@ -3188,9 +3209,66 @@
     dsnDiag('mount', { hasCard: Boolean(cardEl()) })
   }
 
+  function disposeWidget() {
+    if (widgetDisposed) return
+    widgetDisposed = true
+    mounted = false
+
+    if (rafId) {
+      try { window.cancelAnimationFrame(rafId) } catch (e) {}
+      rafId = 0
+    }
+    if (menuFrame) {
+      try { window.cancelAnimationFrame(menuFrame) } catch (e) {}
+      menuFrame = 0
+    }
+    if (placeFrame) {
+      try { window.cancelAnimationFrame(placeFrame) } catch (e) {}
+      placeFrame = 0
+    }
+
+    try { closeMenu() } catch (e) {}
+    try { releaseAll() } catch (e) {}
+
+    for (var ti = 0; ti < widgetTimeouts.length; ti++) {
+      try { window.clearTimeout(widgetTimeouts[ti]) } catch (e) {}
+    }
+    widgetTimeouts.length = 0
+
+    if (ro) {
+      try { ro.disconnect() } catch (e) {}
+      ro = null
+    }
+    if (mo) {
+      try { mo.disconnect() } catch (e) {}
+      mo = null
+    }
+    roCard = null
+
+    var cleanups = widgetCleanups.slice()
+    widgetCleanups.length = 0
+    for (var ci = 0; ci < cleanups.length; ci++) {
+      try { cleanups[ci]() } catch (e) {}
+    }
+
+    for (var si = 0; si < soundPool.length; si++) {
+      try {
+        soundPool[si].pause()
+        soundPool[si].removeAttribute('src')
+        soundPool[si].load()
+      } catch (e) {}
+    }
+    soundPool = []
+
+    if (root && root.parentNode) {
+      try { root.parentNode.removeChild(root) } catch (e) {}
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mount, { once: true })
+    on(document, 'DOMContentLoaded', mount, { once: true })
   } else {
     mount()
   }
-})();
+  return disposeWidget
+}
