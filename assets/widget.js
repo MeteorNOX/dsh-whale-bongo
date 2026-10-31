@@ -98,6 +98,7 @@
     handOutlinePct: 100,
     clickPressMode: 'squash',
     flipMode: 'auto',
+    filterShortcutKeys: true,
     typingAngleMode: 'off',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -172,6 +173,7 @@
     out.clickPressMode = clickMode
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
+    out.filterShortcutKeys = out.filterShortcutKeys !== false
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'off'
     delete out.handTypingOffsetPx
     out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 30), 0, 60)
@@ -545,6 +547,60 @@
     }
     #dsh-whale-bongo .dsnw-select-option.is-selected .dsnw-select-check { opacity: 1; }
     #dsh-whale-bongo [hidden] { display: none !important; }
+    #dsh-whale-bongo .dsnw-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 2px 0;
+      color: var(--dsw-alias-label-primary, #eee);
+      font-size: 12px;
+      line-height: 1.45;
+      cursor: pointer;
+      user-select: none;
+    }
+    #dsh-whale-bongo .dsnw-toggle-label { min-width: 0; }
+    #dsh-whale-bongo .dsnw-toggle-row input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #dsh-whale-bongo .dsnw-toggle-track {
+      position: relative;
+      flex: none;
+      width: 34px;
+      height: 20px;
+      border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.35));
+      border-radius: 999px;
+      background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.12));
+      transition: background .18s ease, border-color .18s ease;
+    }
+    #dsh-whale-bongo .dsnw-toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--dsw-alias-label-secondary, #aaa);
+      transition: transform .18s ease, background .18s ease;
+    }
+    #dsh-whale-bongo .dsnw-toggle-row input:checked + .dsnw-toggle-track {
+      background: var(--dsw-alias-brand-primary, #4d6bfe);
+      border-color: var(--dsw-alias-brand-primary, #4d6bfe);
+    }
+    #dsh-whale-bongo .dsnw-toggle-row input:checked + .dsnw-toggle-track::after {
+      transform: translateX(14px);
+      background: #fff;
+    }
+    #dsh-whale-bongo .dsnw-toggle-row input:focus-visible + .dsnw-toggle-track {
+      outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe);
+      outline-offset: 2px;
+    }
     #dsh-whale-bongo .dsnw-subhead {
       margin-top: 12px;
       padding-top: 9px;
@@ -908,6 +964,11 @@
               '</div>' +
             '</div>' +
           '</div>' +
+          '<label class="dsnw-toggle-row">' +
+            '<span class="dsnw-toggle-label">过滤快捷键与修饰键</span>' +
+            '<input type="checkbox" data-filter-shortcuts>' +
+            '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
+          '</label>' +
           '<div class="dsnw-subhead">打字时手手角度偏移</div>' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">偏移方式</span>' +
@@ -949,6 +1010,7 @@
   var clickModeSelect = root.querySelector('[data-select="clickPressMode"]')
   var flipModeSelect = root.querySelector('[data-select="flipMode"]')
   var typingAngleModeSelect = root.querySelector('[data-select="typingAngleMode"]')
+  var filterShortcutsInput = root.querySelector('[data-filter-shortcuts]')
   var menuScroll = root.querySelector('.dsnw-menu-scroll')
   var imageNameEl = root.querySelector('[data-image-name]')
 
@@ -1109,6 +1171,7 @@
     if (clickModeSelect) setSelectValue(clickModeSelect, cfg.clickPressMode)
     if (flipModeSelect) setSelectValue(flipModeSelect, cfg.flipMode)
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
+    if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
     updateFoldSummaries()
   }
@@ -2207,6 +2270,13 @@
     })
     setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
   }
+  if (filterShortcutsInput) {
+    filterShortcutsInput.addEventListener('change', function () {
+      cfg.filterShortcutKeys = Boolean(this.checked)
+      saveCfg()
+      syncSettings()
+    })
+  }
 
   document.addEventListener('pointerdown', function (event) {
     if (!activeSelect) return
@@ -2587,8 +2657,10 @@
       return
     }
     if (menuOpen && root.contains(event.target)) return
-    if (event.ctrlKey || event.metaKey || event.altKey) return
-    if (MODIFIER_KEYS[event.key]) return
+    if (cfg.filterShortcutKeys !== false) {
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      if (MODIFIER_KEYS[event.key]) return
+    }
     if (event.repeat) return
     var code = event.code || event.key
     if (!code) return
