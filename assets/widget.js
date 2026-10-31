@@ -306,13 +306,14 @@
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      transition: opacity .15s ease;
+      transition: opacity .2s ease, visibility 0s linear .2s;
     }
     #dsh-whale-bongo.is-button-visible .dsnw-menu-btn,
     #dsh-whale-bongo.is-menu-open .dsnw-menu-btn {
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
+      transition: opacity .2s ease, visibility 0s linear 0s;
     }
     #dsh-whale-bongo .dsnw-menu {
       position: fixed;
