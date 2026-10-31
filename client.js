@@ -427,23 +427,120 @@ window.__ModuleLoader__.load({
       line-height: 1.45;
     }
     #dsh-whale-bongo .dsnw-behavior-label { flex: none; white-space: nowrap; }
-    #dsh-whale-bongo .dsnw-behavior select {
-      flex: 1;
-      min-width: 0;
-      padding: 5px 6px;
+    #dsh-whale-bongo .dsnw-select { position: relative; flex: 1; min-width: 0; }
+    #dsh-whale-bongo .dsnw-select-trigger {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      min-height: 30px;
+      padding: 6px 8px 6px 10px;
       border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.35));
-      border-radius: 6px;
-      background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.12));
+      border-radius: 8px;
+      background: linear-gradient(180deg,
+        var(--dsw-alias-bg-layer-2, rgba(127,127,127,.14)),
+        var(--dsw-alias-bg-layer-1, rgba(127,127,127,.08)));
       color: var(--dsw-alias-label-primary, #eee);
       font: inherit;
       font-size: 12px;
-      outline: none;
+      line-height: 18px;
+      text-align: left;
       cursor: pointer;
+      transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
     }
-    #dsh-whale-bongo .dsnw-behavior select:focus-visible {
-      outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe);
-      outline-offset: 1px;
+    #dsh-whale-bongo .dsnw-select-trigger:hover {
+      border-color: var(--dsw-alias-border-l1, rgba(127,127,127,.5));
+      background: var(--dsw-alias-bg-layer-3, rgba(127,127,127,.18));
     }
+    #dsh-whale-bongo .dsnw-select-trigger:focus-visible {
+      outline: none;
+      border-color: var(--dsw-alias-brand-primary, #4d6bfe);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 28%, transparent);
+    }
+    #dsh-whale-bongo .dsnw-select-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #dsh-whale-bongo .dsnw-select-chevron {
+      flex: none;
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--dsw-alias-bg-layer-1, rgba(127,127,127,.10));
+      color: var(--dsw-alias-label-secondary, #aaa);
+      font-size: 10px;
+      line-height: 1;
+      transition: transform .18s ease, color .18s ease;
+    }
+    #dsh-whale-bongo .dsnw-select.is-open .dsnw-select-chevron {
+      transform: rotate(180deg);
+      color: var(--dsw-alias-label-primary, #eee);
+    }
+    #dsh-whale-bongo .dsnw-select-popover {
+      position: fixed;
+      z-index: 40;
+      max-height: 220px;
+      overflow: auto;
+      padding: 4px;
+      border: 1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28));
+      border-radius: 9px;
+      background: var(--dsw-alias-bg-layer-1, rgba(22,24,32,.97));
+      box-shadow: 0 14px 34px rgba(0,0,0,.34), 0 2px 8px rgba(0,0,0,.18);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(-3px) scale(.985);
+      transform-origin: top left;
+      transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
+    }
+    #dsh-whale-bongo .dsnw-select-popover.is-open {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+      transition: opacity .16s ease, transform .16s ease, visibility 0s linear 0s;
+    }
+    #dsh-whale-bongo .dsnw-select-option {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      width: 100%;
+      padding: 7px 8px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--dsw-alias-label-secondary, #aaa);
+      font: inherit;
+      font-size: 12px;
+      line-height: 18px;
+      text-align: left;
+      cursor: pointer;
+      transition: background .12s ease, color .12s ease;
+    }
+    #dsh-whale-bongo .dsnw-select-option:hover,
+    #dsh-whale-bongo .dsnw-select-option:focus-visible {
+      outline: none;
+      background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.14));
+      color: var(--dsw-alias-label-primary, #eee);
+    }
+    #dsh-whale-bongo .dsnw-select-option.is-selected {
+      color: var(--dsw-alias-label-primary, #eee);
+      background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 12%, transparent);
+    }
+    #dsh-whale-bongo .dsnw-select-check {
+      flex: none;
+      width: 14px;
+      color: var(--dsw-alias-brand-primary, #4d6bfe);
+      opacity: 0;
+      font-size: 12px;
+      line-height: 1;
+    }
+    #dsh-whale-bongo .dsnw-select-option.is-selected .dsnw-select-check { opacity: 1; }
     #dsh-whale-bongo .dsnw-fold-body[data-open="1"] {
       background: rgba(77,107,254,.045);
       background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 4.5%, transparent);
@@ -772,11 +869,17 @@ window.__ModuleLoader__.load({
         '<div class="dsnw-fold-body" data-fold-body="behavior" data-open="0">' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">鼠标按压时</span>' +
-            '<select data-click-mode aria-label="鼠标按压时手部行为">' +
-              '<option value="press">手部跟随下压</option>' +
-              '<option value="squash">手部变扁，不下压</option>' +
-              '<option value="none">手部不跟随</option>' +
-            '</select>' +
+            '<div class="dsnw-select" data-select="clickPressMode">' +
+              '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
+                '<span class="dsnw-select-label" data-select-label>手部变扁，不下压</span>' +
+                '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
+              '</button>' +
+              '<div class="dsnw-select-popover" role="listbox" aria-label="鼠标按压时手部行为">' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="press"><span class="dsnw-select-check">✓</span><span>手部跟随下压</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="squash"><span class="dsnw-select-check">✓</span><span>手部变扁，不下压</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="none"><span class="dsnw-select-check">✓</span><span>手部不跟随</span></button>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
           '<div data-setting-list="motion"></div>' +
         '</div>' +
@@ -800,7 +903,8 @@ window.__ModuleLoader__.load({
   var sizeInput = root.querySelector('[data-size]')
   var sizeLabel = root.querySelector('[data-size-label]')
   var sizeReset = root.querySelector('[data-reset-size]')
-  var clickModeInput = root.querySelector('[data-click-mode]')
+  var clickModeSelect = root.querySelector('[data-select="clickPressMode"]')
+  var menuScroll = root.querySelector('.dsnw-menu-scroll')
   var imageNameEl = root.querySelector('[data-image-name]')
 
   var clipPath = root.querySelector('#dsnw-alpha-clip')
@@ -950,7 +1054,7 @@ window.__ModuleLoader__.load({
       var key = colorInputs[c].getAttribute('data-color')
       colorInputs[c].value = cfg[key]
     }
-    if (clickModeInput) clickModeInput.value = cfg.clickPressMode
+    if (clickModeSelect) setSelectValue(clickModeSelect, cfg.clickPressMode)
     updateFoldSummaries()
   }
 
@@ -1101,6 +1205,7 @@ window.__ModuleLoader__.load({
   }
 
   var menuOpen = false
+  var activeSelect = null
   var menuLeft = null
   var menuTop = null
   var curX = 0
@@ -1690,6 +1795,7 @@ window.__ModuleLoader__.load({
   }
   function closeMenu() {
     if (!menuOpen) return
+    closeAllSelects()
     menuOpen = false
     root.classList.remove('is-menu-open')
     menu.classList.remove('open')
@@ -1777,6 +1883,155 @@ window.__ModuleLoader__.load({
     }
   }
 
+
+  function selectOptionLabel(option) {
+    var label = option.lastElementChild
+    return label ? label.textContent : option.textContent.replace('✓', '').trim()
+  }
+
+  function setSelectValue(selectEl, value) {
+    if (!selectEl || !selectEl._options) return
+    var found = null
+    for (var i = 0; i < selectEl._options.length; i++) {
+      var option = selectEl._options[i]
+      var on = option.getAttribute('data-value') === value
+      option.classList.toggle('is-selected', on)
+      option.setAttribute('aria-selected', on ? 'true' : 'false')
+      if (on) found = option
+    }
+    if (!found && selectEl._options.length) {
+      found = selectEl._options[0]
+      found.classList.add('is-selected')
+      found.setAttribute('aria-selected', 'true')
+    }
+    if (found) {
+      selectEl._value = found.getAttribute('data-value')
+      selectEl._label.textContent = selectOptionLabel(found)
+    }
+  }
+
+  function closeAllSelects(focusTrigger) {
+    if (!activeSelect) return
+    var selectEl = activeSelect
+    activeSelect = null
+    selectEl.classList.remove('is-open')
+    selectEl._trigger.setAttribute('aria-expanded', 'false')
+    selectEl._popover.classList.remove('is-open')
+    if (focusTrigger) {
+      try { selectEl._trigger.focus({ preventScroll: true }) } catch (e) { selectEl._trigger.focus() }
+    }
+  }
+
+  function positionSelect(selectEl) {
+    var popover = selectEl._popover
+    var rect = selectEl._trigger.getBoundingClientRect()
+    var vw = window.innerWidth
+    var vh = window.innerHeight
+    var margin = 8
+    var gap = 6
+    var width = Math.max(180, Math.round(rect.width))
+    popover.style.width = width + 'px'
+    var height = popover.offsetHeight
+    var left = clamp(rect.left, margin, Math.max(margin, vw - margin - width))
+    var below = rect.bottom + gap
+    var top = below
+    if (below + height > vh - margin && rect.top - gap - height >= margin) {
+      top = rect.top - gap - height
+    } else if (below + height > vh - margin) {
+      top = Math.max(margin, vh - margin - height)
+    }
+    popover.style.left = Math.round(left) + 'px'
+    popover.style.top = Math.round(top) + 'px'
+  }
+
+  function openSelect(selectEl, focusLast) {
+    if (!selectEl || activeSelect === selectEl) return
+    closeAllSelects()
+    activeSelect = selectEl
+    selectEl.classList.add('is-open')
+    selectEl._trigger.setAttribute('aria-expanded', 'true')
+    var popover = selectEl._popover
+    popover.classList.remove('is-open')
+    root.appendChild(popover)
+    positionSelect(selectEl)
+    window.requestAnimationFrame(function () {
+      if (activeSelect !== selectEl) return
+      popover.classList.add('is-open')
+      positionSelect(selectEl)
+      var selected = null
+      for (var i = 0; i < selectEl._options.length; i++) {
+        if (selectEl._options[i].classList.contains('is-selected')) selected = selectEl._options[i]
+      }
+      var target = focusLast ? selectEl._options[selectEl._options.length - 1] : (selected || selectEl._options[0])
+      if (target) {
+        try { target.focus({ preventScroll: true }) } catch (e) { target.focus() }
+      }
+    })
+  }
+
+  function chooseSelectValue(selectEl, value) {
+    setSelectValue(selectEl, value)
+    closeAllSelects(true)
+    if (selectEl._onChange) selectEl._onChange(selectEl._value)
+  }
+
+  function initSelect(selectEl, onChange) {
+    if (!selectEl) return
+    selectEl._trigger = selectEl.querySelector('.dsnw-select-trigger')
+    selectEl._label = selectEl.querySelector('[data-select-label]')
+    selectEl._popover = selectEl.querySelector('.dsnw-select-popover')
+    selectEl._options = Array.prototype.slice.call(selectEl._popover.querySelectorAll('[data-value]'))
+    selectEl._onChange = onChange
+    if (!selectEl._trigger || !selectEl._label || !selectEl._popover) return
+
+    selectEl._trigger.addEventListener('click', function (event) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (activeSelect === selectEl) closeAllSelects(true)
+      else openSelect(selectEl)
+    })
+    selectEl._trigger.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        if (activeSelect) { event.preventDefault(); closeAllSelects(true) }
+        return
+      }
+      if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        if (activeSelect === selectEl) closeAllSelects(true)
+        else openSelect(selectEl, event.key === 'ArrowUp')
+      }
+    })
+    for (var i = 0; i < selectEl._options.length; i++) {
+      (function (option) {
+        option.addEventListener('click', function (event) {
+          event.preventDefault()
+          chooseSelectValue(selectEl, option.getAttribute('data-value'))
+        })
+      })(selectEl._options[i])
+    }
+    selectEl._popover.addEventListener('keydown', function (event) {
+      var options = selectEl._options
+      var index = options.indexOf(document.activeElement)
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeAllSelects(true)
+      } else if (event.key === 'Tab') {
+        closeAllSelects()
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        if (!options.length) return
+        var next = index
+        if (next < 0) next = event.key === 'ArrowDown' ? 0 : options.length - 1
+        else next = (next + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length
+        options[next].focus({ preventScroll: true })
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault()
+        if (!options.length) return
+        options[event.key === 'Home' ? 0 : options.length - 1].focus({ preventScroll: true })
+      }
+    })
+  }
+
   function initFolds() {
     var rows = menu.querySelectorAll('[data-fold-row]')
     for (var i = 0; i < rows.length; i++) {
@@ -1791,14 +2046,25 @@ window.__ModuleLoader__.load({
     }
     updateFoldSummaries()
   }
-  if (clickModeInput) {
-    clickModeInput.addEventListener('change', function () {
-      var value = this.value
+  if (clickModeSelect) {
+    initSelect(clickModeSelect, function (value) {
       cfg.clickPressMode = value === 'squash' || value === 'none' ? value : 'press'
       saveCfg()
       syncSettings()
     })
+    setSelectValue(clickModeSelect, cfg.clickPressMode)
   }
+
+  document.addEventListener('pointerdown', function (event) {
+    if (!activeSelect) return
+    if (activeSelect.contains(event.target) || activeSelect._popover.contains(event.target)) return
+    closeAllSelects()
+  }, true)
+
+  if (menuScroll) {
+    menuScroll.addEventListener('scroll', function () { closeAllSelects() }, { passive: true })
+  }
+  window.addEventListener('resize', function () { closeAllSelects() })
 
   function syncMenu() {
     syncSettings()
@@ -2149,7 +2415,8 @@ window.__ModuleLoader__.load({
     if (!event.isTrusted) return
     if (!widgetVisible()) return
     if (event.key === 'Escape' && menuOpen) {
-      closeMenu()
+      if (activeSelect) closeAllSelects(true)
+      else closeMenu()
       return
     }
     if (menuOpen && root.contains(event.target)) return
