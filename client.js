@@ -2058,6 +2058,10 @@ window.__ModuleLoader__.load({
       } else {
         y = r.top - imageBottom
       }
+      if (snap.edge === 'left' || snap.edge === 'right') {
+        cfg.snap = { ref: 'viewport', x: x, y: y }
+        saveCfg()
+      }
     } else {
       x = r.right - size - 8
       y = r.top - imageBottom
@@ -2137,14 +2141,6 @@ window.__ModuleLoader__.load({
       candidates.push({
         ref: 'card', edge: 'bottom', x: x,
         d: distanceToSegment(centerX, centerY, r.left, r.bottom, r.right, r.bottom),
-      })
-      candidates.push({
-        ref: 'card', edge: 'left', y: y,
-        d: distanceToSegment(centerX, centerY, r.left, r.top, r.left, r.bottom),
-      })
-      candidates.push({
-        ref: 'card', edge: 'right', y: y,
-        d: distanceToSegment(centerX, centerY, r.right, r.top, r.right, r.bottom),
       })
       if (!suppressPointId) {
         for (var i = 0; i < points.length; i++) {
