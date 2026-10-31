@@ -1051,6 +1051,7 @@ window.__ModuleLoader__.load({
   var lastPlaceKey = ''
   var lastDiagPlace = ''
   var drag = null
+  var pointerPress = null
   var roCard = null
   var ro = null
   var menuFrame = 0
@@ -1121,7 +1122,7 @@ window.__ModuleLoader__.load({
     if (delay > 0) {
       hand.releaseTimer = setTimeout(function () {
         hand.releaseTimer = 0
-        if (hand.keys.size === 0) setPressed(hand, false)
+        if (hand.keys.size === 0 && !hand.seq) setPressed(hand, false)
       }, delay)
     } else if (hand.keys.size === 0) {
       setPressed(hand, false)
@@ -1178,6 +1179,49 @@ window.__ModuleLoader__.load({
     playHit()
     render()
   }
+
+  function startPointerPress() {
+    if (pointerPress) return
+    var now = nowMs()
+    var pressed = []
+    for (var i = 0; i < hands.length; i++) {
+      var hand = hands[i]
+      if (hand.down || hand.seq || hand.keys.size > 0) continue
+      hand.downAt = now
+      setPressed(hand, true)
+      hand.tap = Math.min(1.25, hand.tap + 0.95)
+      hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4
+      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2
+      pressed.push(hand)
+    }
+    if (!pressed.length) return
+    pointerPress = { downAt: now, hands: pressed }
+    kickImage()
+    playHit()
+    render()
+  }
+
+  function endPointerPress() {
+    if (!pointerPress) return
+    var press = pointerPress
+    pointerPress = null
+    var delay = Math.max(0, CONFIG.minPressTime - (nowMs() - press.downAt))
+    for (var i = 0; i < press.hands.length; i++) {
+      var hand = press.hands[i]
+      if (hand.keys.size === 0 && !hand.seq) releaseHand(hand, delay)
+    }
+  }
+
+  function cancelPointerPress() {
+    if (!pointerPress) return
+    var press = pointerPress
+    pointerPress = null
+    for (var i = 0; i < press.hands.length; i++) {
+      var hand = press.hands[i]
+      if (hand.keys.size === 0 && !hand.seq) setPressed(hand, false)
+    }
+  }
+
   function pointA() { return CONFIG.pressDepth * CONFIG.logic3Midpoint }
   function beginLogic3ReturnToA(hand) {
     hand.seq = { phase: 'toA' }
@@ -1257,6 +1301,7 @@ window.__ModuleLoader__.load({
     }
   }
   function releaseAll() {
+    pointerPress = null
     activeInputs.clear()
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
@@ -1864,6 +1909,7 @@ window.__ModuleLoader__.load({
     }
     try { hitbox.setPointerCapture(event.pointerId) } catch (e) {}
     event.preventDefault()
+    startPointerPress()
   }
   function onHitPointerMove(event) {
     if (!drag || event.pointerId !== drag.id) return
@@ -1871,6 +1917,7 @@ window.__ModuleLoader__.load({
     var dy = event.clientY - drag.y
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return
     drag.moved = true
+    cancelPointerPress()
     root.classList.add('is-drag')
     closeMenu()
     var size = cfg.size
@@ -1892,6 +1939,8 @@ window.__ModuleLoader__.load({
     if (moved) {
       magnetize(curX, curY)
       syncMenu()
+    } else {
+      endPointerPress()
     }
   }
   hitbox.addEventListener('pointerdown', onHitPointerDown)
