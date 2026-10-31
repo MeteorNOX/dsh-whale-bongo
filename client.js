@@ -2032,11 +2032,28 @@ function mountWhaleBongoWidget() {
     return null
   }
 
+  function todoPanelCard() {
+    var panels = document.querySelectorAll('[data-testid="todo-panel"]')
+    for (var i = panels.length - 1; i >= 0; i--) {
+      var panel = panels[i]
+      if (!panel || !panel.isConnected) continue
+      var rect = panel.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      var style = window.getComputedStyle(panel)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      return panel
+    }
+    return null
+  }
+
   function cardEl() {
     // 提问、授权、计划确认会以 composer takeover 形式暂时替换输入框。
     // 优先把当前面板当作吸附元素；面板关闭后再回到输入框。
     var panel = activePanelCard()
     if (panel) return panel
+    // 输入框上方有任务清单时，优先吸附到任务条，而不是隔着它吸输入框。
+    var todo = todoPanelCard()
+    if (todo) return todo
     var card = document.querySelector('[data-composer-card]')
     if (card) return card
     var input = document.querySelector('[data-composer-input]')
