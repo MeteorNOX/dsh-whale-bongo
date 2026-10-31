@@ -1464,6 +1464,13 @@ function mountWhaleBongoWidget() {
   var moveSquash = 0
   var moveSquashV = 0
   var moveSquashArmed = false
+  var lastProbeCard = null
+  var lastProbeLeft = 0
+  var lastProbeTop = 0
+  var lastProbeWidth = 0
+  var lastProbeHeight = 0
+  var lastProbeAt = 0
+  var scrollActiveUntil = 0
   var lastDiagPlace = ''
   var drag = null
   var pointerPress = null
@@ -1907,6 +1914,7 @@ function mountWhaleBongoWidget() {
     var dt = Math.min((now - lastTime) / 1000, 1 / 30)
     lastTime = now
     if (dt > 0) {
+      probeCardPosition(now)
       stepMove(dt)
       var steps = Math.max(1, Math.ceil(dt / (1 / 240)))
       var sub = dt / steps
@@ -2178,6 +2186,38 @@ function mountWhaleBongoWidget() {
     }
   }
 
+  function rememberCardRect(card, rect) {
+    lastProbeCard = card
+    lastProbeLeft = rect.left
+    lastProbeTop = rect.top
+    lastProbeWidth = rect.width
+    lastProbeHeight = rect.height
+  }
+
+  function probeCardPosition(now) {
+    if (widgetDisposed || drag) return
+    if (now < scrollActiveUntil) return
+    if (now - lastProbeAt < 50) return
+    lastProbeAt = now
+    var card = cardEl()
+    if (!card) {
+      lastProbeCard = null
+      return
+    }
+    var rect = card.getBoundingClientRect()
+    if (!rect.width || !rect.height) {
+      lastProbeCard = null
+      return
+    }
+    var changed = card !== lastProbeCard ||
+      Math.abs(rect.left - lastProbeLeft) > 0.75 ||
+      Math.abs(rect.top - lastProbeTop) > 0.75 ||
+      Math.abs(rect.width - lastProbeWidth) > 0.75 ||
+      Math.abs(rect.height - lastProbeHeight) > 0.75
+    rememberCardRect(card, rect)
+    if (changed) schedulePlace(true)
+  }
+
   function schedulePlace(animate) {
     if (widgetDisposed) return
     if (animate !== false) pendingPlaceAnimate = true
@@ -2262,6 +2302,7 @@ function mountWhaleBongoWidget() {
       placeFallback()
       return
     }
+    rememberCardRect(card, r)
     syncCardObserver(card)
     var size = cfg.size
     var vw = window.innerWidth
@@ -3367,7 +3408,10 @@ function mountWhaleBongoWidget() {
       try { ro.observe(document.documentElement) } catch (e) {}
     }
     on(window, 'resize', schedulePlace)
-    on(window, 'scroll', function () { schedulePlace(false) }, true)
+    on(window, 'scroll', function () {
+      scrollActiveUntil = nowMs() + 120
+      schedulePlace(false)
+    }, true)
     if (window.MutationObserver) {
       try {
         mo = new MutationObserver(schedulePlace)
