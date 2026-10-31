@@ -1927,7 +1927,26 @@
     root.classList.toggle('is-flipped', flipped)
   }
 
+  function activePanelCard() {
+    var panels = document.querySelectorAll('[data-question-key], [data-approval-key], [data-plan-review-key]')
+    for (var i = panels.length - 1; i >= 0; i--) {
+      var panel = panels[i]
+      if (!panel || !panel.isConnected) continue
+      var card = panel.querySelector('[class*="_card"]') || panel.querySelector('section') || panel.firstElementChild || panel
+      var rect = card.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      var style = window.getComputedStyle(card)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      return card
+    }
+    return null
+  }
+
   function cardEl() {
+    // 提问、授权、计划确认会以 composer takeover 形式暂时替换输入框。
+    // 优先把当前面板当作吸附元素；面板关闭后再回到输入框。
+    var panel = activePanelCard()
+    if (panel) return panel
     var card = document.querySelector('[data-composer-card]')
     if (card) return card
     var input = document.querySelector('[data-composer-input]')
