@@ -1454,16 +1454,17 @@ function mountWhaleBongoWidget() {
   var lastPlaceKey = ''
   var lastPlaceCard = null
   var pendingPlaceAnimate = false
-  var springX = 0
-  var springY = 0
+  var springAnchorX = 0
+  var springAnchorY = 0
   var springVX = 0
   var springVY = 0
-  var springTargetX = 0
-  var springTargetY = 0
+  var springTargetAnchorX = 0
+  var springTargetAnchorY = 0
   var springActive = false
   var moveSquash = 0
   var moveSquashV = 0
   var moveSquashArmed = false
+  var bodyStretch = 0
   var lastProbeCard = null
   var lastProbeLeft = 0
   var lastProbeTop = 0
@@ -2078,42 +2079,48 @@ function mountWhaleBongoWidget() {
   }
   var MOVE_STIFFNESS_BASE = 240
   var MOVE_STIFFNESS_RANGE = 60
-  var MOVE_DAMPING_BASE = 24
-  var MOVE_DAMPING_RANGE = 16
-  var MOVE_START_BASE = 3.2
-  var MOVE_START_RANGE = 2.0
+  var MOVE_DAMPING_BASE = 32
+  var MOVE_DAMPING_RANGE = 12
+  var MOVE_START_BASE = 2.6
+  var MOVE_START_RANGE = 1.4
 
   function moveBounceRatio() {
     return clamp(numberOr(cfg.imageQBounceLevel, 5) / 10, 0, 1)
   }
 
   function setMoveImmediate(x, y) {
-    springX = x
-    springY = y
+    var size = cfg.size
+    // 位置弹簧与落地挤压共用同一个底部中心锚点。
+    springAnchorX = x + size / 2
+    springAnchorY = y + size
     springVX = 0
     springVY = 0
-    springTargetX = x
-    springTargetY = y
+    springTargetAnchorX = springAnchorX
+    springTargetAnchorY = springAnchorY
     springActive = false
     moveSquash = 0
     moveSquashV = 0
     moveSquashArmed = false
+    bodyStretch = 0
     if (moveShell) moveShell.style.transform = ''
     root.style.left = x.toFixed(2) + 'px'
     root.style.top = y.toFixed(2) + 'px'
   }
 
   function retargetMove(x, y, animate) {
-    if (!animate || Math.abs(x - springX) < 0.4 && Math.abs(y - springY) < 0.4) {
+    var size = cfg.size
+    var anchorX = x + size / 2
+    var anchorY = y + size
+    if (!animate || Math.abs(anchorX - springAnchorX) < 0.4 && Math.abs(anchorY - springAnchorY) < 0.4) {
       setMoveImmediate(x, y)
       return
     }
-    var dx = x - springX
-    var dy = y - springY
+    var dx = anchorX - springAnchorX
+    var dy = anchorY - springAnchorY
     var q = moveBounceRatio()
     var startVelocity = MOVE_START_BASE + MOVE_START_RANGE * q
-    springTargetX = x
-    springTargetY = y
+    springTargetAnchorX = anchorX
+    springTargetAnchorY = anchorY
     if (!springActive) {
       springVX = clamp(dx * startVelocity, -1400, 1400)
       springVY = clamp(dy * startVelocity, -1400, 1400)
@@ -2127,18 +2134,20 @@ function mountWhaleBongoWidget() {
     var q = moveBounceRatio()
     var moveStiffness = MOVE_STIFFNESS_BASE + MOVE_STIFFNESS_RANGE * q
     var moveDamping = MOVE_DAMPING_BASE - MOVE_DAMPING_RANGE * q
+    var size = cfg.size
+
     if (springActive) {
-      var errXBefore = springTargetX - springX
-      var errYBefore = springTargetY - springY
+      var errXBefore = springTargetAnchorX - springAnchorX
+      var errYBefore = springTargetAnchorY - springAnchorY
       var ax = errXBefore * moveStiffness - springVX * moveDamping
       var ay = errYBefore * moveStiffness - springVY * moveDamping
       springVX += ax * dt
       springVY += ay * dt
-      springX += springVX * dt
-      springY += springVY * dt
+      springAnchorX += springVX * dt
+      springAnchorY += springVY * dt
 
-      var errXAfter = springTargetX - springX
-      var errYAfter = springTargetY - springY
+      var errXAfter = springTargetAnchorX - springAnchorX
+      var errYAfter = springTargetAnchorY - springAnchorY
       var speed = Math.sqrt(springVX * springVX + springVY * springVY)
       var crossed = (errXBefore * errXAfter <= 0 && Math.abs(errXBefore) > 0.5) ||
         (errYBefore * errYAfter <= 0 && Math.abs(errYBefore) > 0.5)
@@ -2150,24 +2159,29 @@ function mountWhaleBongoWidget() {
 
       var vw = window.innerWidth
       var vh = window.innerHeight
-      var maxX = Math.max(0, vw - cfg.size)
-      var maxY = Math.max(0, vh - imageBottomNorm * cfg.size)
-      root.style.left = clamp(springX, 0, maxX).toFixed(2) + 'px'
-      root.style.top = clamp(springY, 0, maxY).toFixed(2) + 'px'
+      var maxLeft = Math.max(0, vw - size)
+      var maxTop = Math.max(0, vh - imageBottomNorm * size)
+      root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
+      root.style.top = clamp(springAnchorY - size, 0, maxTop).toFixed(2) + 'px'
 
       var restX = Math.abs(errXAfter)
       var restY = Math.abs(errYAfter)
       if (restX < 0.4 && restY < 0.4 && speed < 8) {
-        springX = springTargetX
-        springY = springTargetY
+        springAnchorX = springTargetAnchorX
+        springAnchorY = springTargetAnchorY
         springVX = 0
         springVY = 0
         springActive = false
         moveSquashArmed = false
-        root.style.left = clamp(springX, 0, maxX).toFixed(2) + 'px'
-        root.style.top = clamp(springY, 0, maxY).toFixed(2) + 'px'
+        root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
+        root.style.top = clamp(springAnchorY - size, 0, maxTop).toFixed(2) + 'px'
       }
     }
+
+    var stretchTarget = springActive
+      ? clamp(Math.abs(springVY) / 9000, 0, 0.025) * (0.6 + 0.8 * q)
+      : 0
+    bodyStretch += (stretchTarget - bodyStretch) * (1 - Math.exp(-dt * 10))
 
     if (moveSquash !== 0 || moveSquashV !== 0) {
       var squashStiffness = 240 + 90 * q
@@ -2178,44 +2192,18 @@ function mountWhaleBongoWidget() {
       if (Math.abs(moveSquash) < 0.001 && Math.abs(moveSquashV) < 0.02) {
         moveSquash = 0
         moveSquashV = 0
-        if (moveShell) moveShell.style.transform = ''
-      } else if (moveShell) {
-        moveShell.style.transform =
-          'scale(' + (1 + moveSquash * (0.55 + 0.30 * q)).toFixed(4) + ',' + (1 - moveSquash).toFixed(4) + ')'
       }
     }
-  }
 
-  function rememberCardRect(card, rect) {
-    lastProbeCard = card
-    lastProbeLeft = rect.left
-    lastProbeTop = rect.top
-    lastProbeWidth = rect.width
-    lastProbeHeight = rect.height
-  }
-
-  function probeCardPosition(now) {
-    if (widgetDisposed || drag) return
-    if (now < scrollActiveUntil) return
-    if (now - lastProbeAt < 50) return
-    lastProbeAt = now
-    var card = cardEl()
-    if (!card) {
-      lastProbeCard = null
-      return
+    if (moveShell) {
+      var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
+      var scaleY = (1 - moveSquash) * (1 + bodyStretch)
+      if (Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005) {
+        moveShell.style.transform = 'scale(' + scaleX.toFixed(4) + ',' + scaleY.toFixed(4) + ')'
+      } else {
+        moveShell.style.transform = ''
+      }
     }
-    var rect = card.getBoundingClientRect()
-    if (!rect.width || !rect.height) {
-      lastProbeCard = null
-      return
-    }
-    var changed = card !== lastProbeCard ||
-      Math.abs(rect.left - lastProbeLeft) > 0.75 ||
-      Math.abs(rect.top - lastProbeTop) > 0.75 ||
-      Math.abs(rect.width - lastProbeWidth) > 0.75 ||
-      Math.abs(rect.height - lastProbeHeight) > 0.75
-    rememberCardRect(card, rect)
-    if (changed) schedulePlace(true)
   }
 
   function schedulePlace(animate) {
@@ -2255,6 +2243,7 @@ function mountWhaleBongoWidget() {
     moveSquash = 0
     moveSquashV = 0
     moveSquashArmed = false
+    bodyStretch = 0
     if (moveShell) moveShell.style.transform = ''
     root.style.display = 'none'
     lastPlaceKey = ''
@@ -3135,8 +3124,8 @@ function mountWhaleBongoWidget() {
     if (event.button !== 0) return
     hideSnapDots()
     if (springActive) {
-      curX = springX
-      curY = springY
+      curX = springAnchorX - cfg.size / 2
+      curY = springAnchorY - cfg.size
     }
     setMoveImmediate(curX, curY)
     drag = {
@@ -3171,14 +3160,15 @@ function mountWhaleBongoWidget() {
     root.style.transform = 'none'
     root.style.left = curX.toFixed(2) + 'px'
     root.style.top = curY.toFixed(2) + 'px'
-    springX = curX
-    springY = curY
+    springAnchorX = curX + size / 2
+    springAnchorY = curY + size
     springVX = 0
     springVY = 0
     springActive = false
     moveSquash = 0
     moveSquashV = 0
     moveSquashArmed = false
+    bodyStretch = 0
     if (moveShell) moveShell.style.transform = ''
     updateSnapDots()
   }
