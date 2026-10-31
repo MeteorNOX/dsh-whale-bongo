@@ -1,24 +1,24 @@
 # dsh-whale-bongo · 给 AI 的安装教程
 
 这是一个 **DSH 本地 UI bundle**，不是普通网页，也不是需要 `npm install/build` 的前端项目。  
-请安装**整个 `dsh-whale-bongo` 目录**（或 `.tgz` 包），然后把当前 DSH profile 重启一次。
+请安装**整个 `dsh-whale-bongo` 目录**（或 `.tgz` 包），然后确认当前 DSH profile 已启用该插件。
 
 - 插件名：`dsh-whale-bongo`
-- 当前版本：`0.2.1`
+- 当前版本：`0.2.2`
 - 形态：输入框旁的打字挂件，没有侧边栏页面
 - 默认：逻辑 3、`本体.png`、手部 14/81/35/41/77.5、音量 60
 - bundle 本身不需要构建，也没有 npm 运行时依赖
 
 > [!WARNING]
 > **npm 包暂未发布。** 作者 npm 账号因安全问题暂时冻结，预计 **2026-11-03** 解封后上传。  
-> 当前不要执行 `dsh plugin add dsh-whale-bongo@0.2.1`；请使用 GitHub Release 的 `dsh-whale-bongo-0.2.1-package.zip` / `.tgz`，或本地目录安装。  
-> Release：https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.2.1
+> 当前不要执行 `dsh plugin add dsh-whale-bongo@0.2.2`；请使用 GitHub Release 的 `dsh-whale-bongo-0.2.2-package.zip` / `.tgz`，或本地目录安装。  
+> Release：https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.2.2
 
 ---
 
 ## 1. 准备
 
-1. 解压 `dsh-whale-bongo-0.2.1-package.zip`，得到：
+1. 解压 `dsh-whale-bongo-0.2.2-package.zip`，得到：
 
    ```text
    dsh-whale-bongo/
@@ -64,7 +64,7 @@ profile = desktop
 如果工具支持 tarball，也可以直接安装：
 
 ```text
-dsh-whale-bongo-0.2.1.tgz
+dsh-whale-bongo-0.2.2.tgz
 ```
 
 ### 没有工具、用桌面 UI 时
@@ -73,10 +73,10 @@ dsh-whale-bongo-0.2.1.tgz
 2. 选择 **添加插件 / 安装本地 bundle**。
 3. 指向解压后的 `dsh-whale-bongo` 目录，或 `.tgz`。
 4. profile 选当前正在使用的 profile（通常是 `desktop`）。
-5. 安装完成后 **完全退出并重启一次 DSH**。
+5. 在插件列表启用，挂件会即时挂载；如果 Host 路由尚未加载，刷新一次页面。
 
-> 必须重启一次，而不是只刷新页面：宿主半的注入行只在 DSH 启动时收集。  
-> 安装后不需要在插件里再点“启用”。
+> 之后启用/关闭插件会即时挂载或移除挂件，不需要重启 DSH。  
+> 首次安装如果页面还没有加载新的 Host 路由，刷新一次即可。
 
 ---
 
@@ -145,9 +145,9 @@ dsh plugin --profile <profile> add "link:<插件绝对路径>"
 不需要手工改 profile 的 `cordis.patch.yml`。  
 插件的 `cordis.patch.yml` 会插入自己的 Host 行。
 
-### 3.4 重启并验证
+### 3.4 启用并验证
 
-完全退出 DSH，再打开一次。
+在插件列表中启用 `dsh-whale-bongo`；正常情况下挂件会即时出现。如果正在运行的页面尚未加载新的 Host 路由，刷新一次页面。
 
 查看 health：
 
@@ -160,14 +160,14 @@ curl http://127.0.0.1:<DSH端口>/dsh-whale-bongo/health
 ```json
 {
   "ok": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "widget": "/dsh-whale-bongo/widget.js",
   "portrait": "/dsh-whale-bongo/portrait.png"
 }
 ```
 
 如果 404：
-- Host 行没有加载，通常是没重启，或 bundle 没加进 `dsh.profile.bundles`。
+- Host 行没有加载，通常是 Host 还没加载新包，或 bundle 没加进 `dsh.profile.bundles`；先刷新页面，仍无再重启 DSH。
 - 检查 profile 的 `package.json` 和 `node_modules/dsh-whale-bongo`。
 
 ---
@@ -222,6 +222,6 @@ profile = 当前 profile（桌面端通常是 desktop）
 - 完全重启 DSH
 安装后确认：
 curl http://127.0.0.1:<端口>/dsh-whale-bongo/health
-应返回 ok:true / version:0.2.1。
+应返回 ok:true / version:0.2.2。
 不要修改插件源码，不要手工改 profile 的 cordis.patch.yml。
 ```

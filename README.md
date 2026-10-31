@@ -2,7 +2,7 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>v0.2.1</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
+  <p><code>v0.2.2</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
@@ -102,6 +102,9 @@
 | **菜单安全区** | 菜单不会进入 DSH 标题栏，关闭按钮始终可点。 |
 | **自定义音效** | 支持上传本地音频替换默认敲击音，可恢复默认；音效保存在浏览器本地。 |
 | **面板同步吸附** | 提问、授权、计划确认面板出现时，按输入框的吸附方式贴到当前面板上；面板关闭后回到输入框。 |
+| **任务栏优先吸附** | 输入框上方出现「任务 N 已完成」任务条时，优先吸附任务条，而不是隔着它吸输入框。 |
+| **布局平滑过渡** | 任务栏展开/收起、提问/授权面板出现/消失时，挂件以底部中心为锚点，通过克制的弹簧位移和明显的身体拉伸/落地挤压平滑移动，幅度随「Q 弹程度」变化。 |
+| **热启用 / 热关闭** | 在插件列表启用或关闭时即时挂载/移除，不需要重启 DSH。 |
 | **无构建依赖** | 纯 DSH bundle，不需要 `npm install`，不需要前端 build。 |
 
 ---
@@ -111,9 +114,9 @@
 ### 从 GitHub Release 安装
 
 1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
-2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.1-package.zip` 或 `dsh-whale-bongo-0.2.1.tgz`；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.2-package.zip` 或 `dsh-whale-bongo-0.2.2.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
-4. **完全退出并重开 DSH**。
+4. 在插件列表启用；正常情况下挂件会即时出现。若 Host 路由尚未加载，刷新一次页面即可。
 
 ### 本地开发安装
 
@@ -125,8 +128,8 @@
    link:<本仓库绝对路径>
    ```
 
-4. 安装完成后 **完全退出并重启一次 DSH**；
-5. 打开任意对话页，挂件会出现在输入框右上方。
+4. 在插件列表启用，挂件会即时挂载；如果 Host 路由尚未加载，刷新一次页面；
+5. 之后在插件列表启用/关闭会即时显示或移除挂件，无需重启 DSH。
 
 ### npm（暂不可用）
 
@@ -138,7 +141,7 @@ dsh-whale-bongo
 
 ```bash
 # 仅 npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.2.1
+dsh plugin --profile web add dsh-whale-bongo@0.2.2
 ```
 
 > [!TIP]
@@ -218,10 +221,11 @@ dsh plugin --profile web remove dsh-whale-bongo
 <details>
 <summary><strong>安装后看不到挂件</strong></summary>
 
-1. 确认已经**完全重启 DSH**，而不只是刷新页面；
+1. 确认插件列表里 `dsh-whale-bongo` 已启用；
 2. `Ctrl + F5` 硬刷新；
 3. 确认当前在**对话页**，不是设置页或插件页；
-4. 检查 Host 路由：
+4. 如果 Host 路由 404，再重启一次 DSH 加载新的 Host 半；
+5. 检查 Host 路由：
 
    ```text
    /dsh-whale-bongo/health

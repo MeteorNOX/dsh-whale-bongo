@@ -1,18 +1,15 @@
 window.__ModuleLoader__.load({
   id: 'dsh-whale-bongo',
   factory() {
-    return {
-      inject: [],
-      apply() {
-        try {
-          localStorage.setItem('dsh-whale-bongo:diag:client', JSON.stringify({
-            at: Date.now(),
-            href: String(location.href),
-            ready: document.readyState,
-            guard: Boolean(window.__dshWhaleBongo),
-          }))
-        } catch (e) {}
-        if (window.__dshWhaleBongo) return
+    var activeDispose = null
+
+    function cleanupWidget() {
+      if (!activeDispose) return
+      var dispose = activeDispose
+      activeDispose = null
+      try { dispose() } catch (e) {}
+    }
+
 /* ============================================================================
  * dsh-whale-bongo · browser half
  * ----------------------------------------------------------------------------
@@ -27,8 +24,29 @@ window.__ModuleLoader__.load({
  *   ③ 默认参数严格沿用 bongo-demo/index.html 的当前配置（reset 模式、
  *      手宽 16%、高宽比 88%、间距 20%、轴 56%、垂直 87.2% 等）。
  * ==========================================================================*/
-(function () {
+function mountWhaleBongoWidget() {
   'use strict'
+
+  var widgetDisposed = false
+  var widgetCleanups = []
+  var widgetTimeouts = []
+
+  function later(fn, ms) {
+    var id = window.setTimeout(function () {
+      var index = widgetTimeouts.indexOf(id)
+      if (index !== -1) widgetTimeouts.splice(index, 1)
+      if (!widgetDisposed) fn()
+    }, ms)
+    widgetTimeouts.push(id)
+    return id
+  }
+
+  function on(target, type, fn, options) {
+    target.addEventListener(type, fn, options)
+    widgetCleanups.push(function () {
+      target.removeEventListener(type, fn, options)
+    })
+  }
 
   function dsnDiag(stage, extra) {
     try {
@@ -37,7 +55,6 @@ window.__ModuleLoader__.load({
         at: Date.now(),
         href: String(location.href),
         ready: document.readyState,
-        guard: Boolean(window.__dshWhaleBongo),
         card: Boolean(document.querySelector('[data-composer-card]')),
         input: Boolean(document.querySelector('[data-composer-input]')),
       }
@@ -47,7 +64,7 @@ window.__ModuleLoader__.load({
   }
   dsnDiag('start')
   try {
-    window.addEventListener('error', function (event) {
+    on(window, 'error', function (event) {
       dsnDiag('error', {
         message: event && event.message,
         source: event && event.filename,
@@ -56,7 +73,7 @@ window.__ModuleLoader__.load({
         stack: event && event.error && event.error.stack,
       })
     })
-    window.addEventListener('unhandledrejection', function (event) {
+    on(window, 'unhandledrejection', function (event) {
       var reason = event && event.reason
       dsnDiag('rejection', {
         message: reason && (reason.message || String(reason)),
@@ -65,11 +82,6 @@ window.__ModuleLoader__.load({
     })
   } catch (e) {}
 
-  if (window.__dshWhaleBongo) {
-    dsnDiag('guard')
-    return
-  }
-  window.__dshWhaleBongo = true
 
   var BASE = '/dsh-whale-bongo'
   var keyPositions = null
@@ -294,6 +306,13 @@ window.__ModuleLoader__.load({
       pointer-events: none;
       filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .18));
     }
+    #dsh-whale-bongo .dsnw-move-shell {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 100%;
+      pointer-events: none;
+      will-change: transform;
+    }
     #dsh-whale-bongo .dsnw-stage {
       position: absolute;
       inset: 0;
@@ -372,7 +391,6 @@ window.__ModuleLoader__.load({
       touch-action: none;
     }
     #dsh-whale-bongo.is-drag .dsnw-hitbox { cursor: grabbing; }
-    #dsh-whale-bongo.is-anim { transition: left .30s cubic-bezier(.22, .61, .36, 1), top .30s cubic-bezier(.22, .61, .36, 1); }
     #dsh-whale-bongo .dsnw-snap-dots {
       position: fixed;
       inset: 0;
@@ -959,7 +977,7 @@ window.__ModuleLoader__.load({
     '<svg class="dsnw-clip-defs" width="0" height="0" aria-hidden="true">' +
       '<defs><clipPath id="dsnw-alpha-clip" clipPathUnits="objectBoundingBox"></clipPath></defs>' +
     '</svg>' +
-    '<div class="dsnw-art"><div class="dsnw-stage">' +
+    '<div class="dsnw-move-shell"><div class="dsnw-art"><div class="dsnw-stage">' +
       '<div class="dsnw-image-motion"><img class="dsnw-portrait" alt="" draggable="false"></div>' +
       '<div class="dsnw-hand" data-side="left">' +
         '<div class="dsnw-trail dsnw-trail--far"></div>' +
@@ -971,7 +989,7 @@ window.__ModuleLoader__.load({
         '<div class="dsnw-trail dsnw-trail--near"></div>' +
         '<div class="dsnw-motion"><div class="dsnw-ball"></div></div>' +
       '</div>' +
-    '</div></div>' +
+    '</div></div></div>' +
     '<div class="dsnw-hitbox" title="拖动移动位置；靠近边缘自动吸附"></div>' +
     '<div class="dsnw-snap-dots" aria-hidden="true"></div>' +
     '<button class="dsnw-menu-btn" type="button" aria-label="打开设置">☰</button>' +
@@ -1084,13 +1102,14 @@ window.__ModuleLoader__.load({
         '<span class="dsnw-setting-value"><span data-size-label>140</span><button type="button" data-reset-size title="恢复默认大小">↺</button></span></div>' +
       '</div>' +
       '<button class="dsnw-reset" type="button" data-reset>恢复默认设置</button>' +
-      '<div class="dsnw-foot">v0.2.1</div>' +
+      '<div class="dsnw-foot">v0.2.2</div>' +
     '</div></div>'
 
   var stage = root.querySelector('.dsnw-stage')
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
+  var moveShell = root.querySelector('.dsnw-move-shell')
   var snapDots = root.querySelector('.dsnw-snap-dots')
   var menuBtn = root.querySelector('.dsnw-menu-btn')
   var menu = root.querySelector('.dsnw-menu')
@@ -1445,11 +1464,32 @@ window.__ModuleLoader__.load({
   var curX = 0
   var curY = 0
   var lastPlaceKey = ''
+  var lastPlaceCard = null
+  var pendingPlaceAnimate = false
+  var springAnchorX = 0
+  var springAnchorY = 0
+  var springVX = 0
+  var springVY = 0
+  var springTargetAnchorX = 0
+  var springTargetAnchorY = 0
+  var springActive = false
+  var moveSquash = 0
+  var moveSquashV = 0
+  var moveSquashArmed = false
+  var bodyStretch = 0
+  var lastProbeCard = null
+  var lastProbeLeft = 0
+  var lastProbeTop = 0
+  var lastProbeWidth = 0
+  var lastProbeHeight = 0
+  var lastProbeAt = 0
+  var scrollActiveUntil = 0
   var lastDiagPlace = ''
   var drag = null
   var pointerPress = null
   var roCard = null
   var ro = null
+  var mo = null
   var menuFrame = 0
   var placeFrame = 0
   var mounted = false
@@ -1520,7 +1560,7 @@ window.__ModuleLoader__.load({
   function releaseHand(hand, delay) {
     clearReleaseTimer(hand)
     if (delay > 0) {
-      hand.releaseTimer = setTimeout(function () {
+      hand.releaseTimer = later(function () {
         hand.releaseTimer = 0
         if (hand.keys.size === 0 && !hand.seq) setPressed(hand, false)
       }, delay)
@@ -1883,9 +1923,12 @@ window.__ModuleLoader__.load({
   }
 
   function tick(now) {
+    if (widgetDisposed) return
     var dt = Math.min((now - lastTime) / 1000, 1 / 30)
     lastTime = now
     if (dt > 0) {
+      probeCardPosition(now)
+      stepMove(dt)
       var steps = Math.max(1, Math.ceil(dt / (1 / 240)))
       var sub = dt / steps
       for (var s = 0; s < steps; s++) {
@@ -1979,6 +2022,7 @@ window.__ModuleLoader__.load({
   }
 
   function applyFlip() {
+    if (widgetDisposed) return
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
     if (cfg.flipMode === 'auto') {
@@ -2017,26 +2061,210 @@ window.__ModuleLoader__.load({
     return null
   }
 
+  function todoPanelCard() {
+    var panels = document.querySelectorAll('[data-testid="todo-panel"]')
+    for (var i = panels.length - 1; i >= 0; i--) {
+      var panel = panels[i]
+      if (!panel || !panel.isConnected) continue
+      var rect = panel.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      var style = window.getComputedStyle(panel)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      return panel
+    }
+    return null
+  }
+
   function cardEl() {
     // 提问、授权、计划确认会以 composer takeover 形式暂时替换输入框。
     // 优先把当前面板当作吸附元素；面板关闭后再回到输入框。
     var panel = activePanelCard()
     if (panel) return panel
+    // 输入框上方有任务清单时，优先吸附到任务条，而不是隔着它吸输入框。
+    var todo = todoPanelCard()
+    if (todo) return todo
     var card = document.querySelector('[data-composer-card]')
     if (card) return card
     var input = document.querySelector('[data-composer-input]')
     if (!input) return null
     return input.closest('form') || input.parentElement
   }
-  function schedulePlace() {
+  var MOVE_STIFFNESS_BASE = 240
+  var MOVE_STIFFNESS_RANGE = 60
+  var MOVE_DAMPING_BASE = 36
+  var MOVE_DAMPING_RANGE = 6
+  var MOVE_START_BASE = 2.6
+  var MOVE_START_RANGE = 1.4
+
+  function moveBounceRatio() {
+    return clamp(numberOr(cfg.imageQBounceLevel, 5) / 10, 0, 1)
+  }
+
+  function setMoveImmediate(x, y) {
+    var size = cfg.size
+    // 位置弹簧与落地挤压共用同一个底部中心锚点。
+    springAnchorX = x + size / 2
+    springAnchorY = y + size
+    springVX = 0
+    springVY = 0
+    springTargetAnchorX = springAnchorX
+    springTargetAnchorY = springAnchorY
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    bodyStretch = 0
+    if (moveShell) moveShell.style.transform = ''
+    root.style.left = x.toFixed(2) + 'px'
+    root.style.top = y.toFixed(2) + 'px'
+  }
+
+  function retargetMove(x, y, animate) {
+    var size = cfg.size
+    var anchorX = x + size / 2
+    var anchorY = y + size
+    if (!animate || Math.abs(anchorX - springAnchorX) < 0.4 && Math.abs(anchorY - springAnchorY) < 0.4) {
+      setMoveImmediate(x, y)
+      return
+    }
+    var dx = anchorX - springAnchorX
+    var dy = anchorY - springAnchorY
+    var q = moveBounceRatio()
+    var startVelocity = MOVE_START_BASE + MOVE_START_RANGE * q
+    springTargetAnchorX = anchorX
+    springTargetAnchorY = anchorY
+    if (!springActive) {
+      springVX = clamp(dx * startVelocity, -1400, 1400)
+      springVY = clamp(dy * startVelocity, -1400, 1400)
+      springActive = true
+    }
+    moveSquashArmed = true
+  }
+
+  function stepMove(dt) {
+    if (!dt) return
+    var q = moveBounceRatio()
+    var moveStiffness = MOVE_STIFFNESS_BASE + MOVE_STIFFNESS_RANGE * q
+    var moveDamping = MOVE_DAMPING_BASE - MOVE_DAMPING_RANGE * q
+    var size = cfg.size
+
+    if (springActive) {
+      var errXBefore = springTargetAnchorX - springAnchorX
+      var errYBefore = springTargetAnchorY - springAnchorY
+      var ax = errXBefore * moveStiffness - springVX * moveDamping
+      var ay = errYBefore * moveStiffness - springVY * moveDamping
+      springVX += ax * dt
+      springVY += ay * dt
+      springAnchorX += springVX * dt
+      springAnchorY += springVY * dt
+
+      var errXAfter = springTargetAnchorX - springAnchorX
+      var errYAfter = springTargetAnchorY - springAnchorY
+      var speed = Math.sqrt(springVX * springVX + springVY * springVY)
+      var crossed = (errXBefore * errXAfter <= 0 && Math.abs(errXBefore) > 0.5) ||
+        (errYBefore * errYAfter <= 0 && Math.abs(errYBefore) > 0.5)
+      var nearTarget = Math.abs(errXAfter) < 14 && Math.abs(errYAfter) < 14
+      if (moveSquashArmed && speed > 20 && (crossed || nearTarget)) {
+        moveSquashArmed = false
+        moveSquashV += clamp(speed / (300 - 100 * q), 0.25, 1.0 + 2.4 * q)
+      }
+
+      var vw = window.innerWidth
+      var vh = window.innerHeight
+      var maxLeft = Math.max(0, vw - size)
+      var maxTop = Math.max(0, vh - imageBottomNorm * size)
+      root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
+      root.style.top = clamp(springAnchorY - size, 0, maxTop).toFixed(2) + 'px'
+
+      var restX = Math.abs(errXAfter)
+      var restY = Math.abs(errYAfter)
+      if (restX < 0.4 && restY < 0.4 && speed < 8) {
+        springAnchorX = springTargetAnchorX
+        springAnchorY = springTargetAnchorY
+        springVX = 0
+        springVY = 0
+        springActive = false
+        moveSquashArmed = false
+        root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
+        root.style.top = clamp(springAnchorY - size, 0, maxTop).toFixed(2) + 'px'
+      }
+    }
+
+    var stretchTarget = springActive
+      ? clamp(Math.abs(springVY) / 7000, 0, 0.04) * (0.6 + 0.8 * q)
+      : 0
+    bodyStretch += (stretchTarget - bodyStretch) * (1 - Math.exp(-dt * 10))
+
+    if (moveSquash !== 0 || moveSquashV !== 0) {
+      var squashStiffness = 240 + 90 * q
+      var squashDamping = 18 - 4 * q
+      var sa = -moveSquash * squashStiffness - moveSquashV * squashDamping
+      moveSquashV += sa * dt
+      moveSquash += moveSquashV * dt
+      if (Math.abs(moveSquash) < 0.001 && Math.abs(moveSquashV) < 0.02) {
+        moveSquash = 0
+        moveSquashV = 0
+      }
+    }
+
+    if (moveShell) {
+      var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
+      var scaleY = (1 - moveSquash) * (1 + bodyStretch)
+      if (Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005) {
+        moveShell.style.transform = 'scale(' + scaleX.toFixed(4) + ',' + scaleY.toFixed(4) + ')'
+      } else {
+        moveShell.style.transform = ''
+      }
+    }
+  }
+
+  function rememberCardRect(card, rect) {
+    lastProbeCard = card
+    lastProbeLeft = rect.left
+    lastProbeTop = rect.top
+    lastProbeWidth = rect.width
+    lastProbeHeight = rect.height
+  }
+
+  function probeCardPosition(now) {
+    if (widgetDisposed || drag) return
+    if (now < scrollActiveUntil) return
+    if (now - lastProbeAt < 50) return
+    lastProbeAt = now
+    var card = cardEl()
+    if (!card) {
+      lastProbeCard = null
+      return
+    }
+    var rect = card.getBoundingClientRect()
+    if (!rect.width || !rect.height) {
+      lastProbeCard = null
+      return
+    }
+    var changed = card !== lastProbeCard ||
+      Math.abs(rect.left - lastProbeLeft) > 0.75 ||
+      Math.abs(rect.top - lastProbeTop) > 0.75 ||
+      Math.abs(rect.width - lastProbeWidth) > 0.75 ||
+      Math.abs(rect.height - lastProbeHeight) > 0.75
+    rememberCardRect(card, rect)
+    if (changed) schedulePlace(true)
+  }
+
+  function schedulePlace(animate) {
+    if (widgetDisposed) return
+    if (animate !== false) pendingPlaceAnimate = true
     if (document.visibilityState !== 'visible') {
-      place()
+      var immediateAnimate = pendingPlaceAnimate
+      pendingPlaceAnimate = false
+      place(immediateAnimate)
       return
     }
     if (!placeFrame) {
       placeFrame = window.requestAnimationFrame(function () {
         placeFrame = 0
-        place()
+        var nextAnimate = pendingPlaceAnimate
+        pendingPlaceAnimate = false
+        place(nextAnimate)
       })
     }
   }
@@ -2055,12 +2283,19 @@ window.__ModuleLoader__.load({
     } catch (e) {}
   }
   function hideWidget() {
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    bodyStretch = 0
+    if (moveShell) moveShell.style.transform = ''
     root.style.display = 'none'
     lastPlaceKey = ''
     closeMenu()
     releaseAll()
   }
   function placeFallback() {
+    lastPlaceCard = null
     var size = cfg.size
     var vw = window.innerWidth
     var vh = window.innerHeight
@@ -2079,15 +2314,17 @@ window.__ModuleLoader__.load({
     curY = y
     applyFlip()
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
-    if (key !== lastPlaceKey || root.style.display === 'none') {
-      lastPlaceKey = key
+    lastPlaceKey = key
+    // 面板切换过程中可能短暂找不到卡片。此时不要抄近路瞬移，
+    // 保持当前位置和弹簧状态，等新面板出现后再平滑收敛。
+    if (root.style.display === 'none') {
       root.style.display = ''
       root.style.transform = 'none'
-      root.style.left = x.toFixed(2) + 'px'
-      root.style.top = y.toFixed(2) + 'px'
+      setMoveImmediate(x, y)
     }
   }
-  function place() {
+  function place(animate) {
+    if (widgetDisposed) return
     var card = cardEl()
     if (!card) {
       placeFallback()
@@ -2098,6 +2335,7 @@ window.__ModuleLoader__.load({
       placeFallback()
       return
     }
+    rememberCardRect(card, r)
     syncCardObserver(card)
     var size = cfg.size
     var vw = window.innerWidth
@@ -2151,13 +2389,16 @@ window.__ModuleLoader__.load({
     curX = x
     curY = y
     applyFlip()
+    lastPlaceCard = card
+    var wasVisible = root.style.display !== 'none'
+    // 默认对所有可见位置变化走弹簧，只有拖动、滚动和首次挂载才立即定位。
+    var shouldAnimate = !drag && wasVisible && animate !== false
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
-    if (key !== lastPlaceKey || root.style.display === 'none') {
+    if (key !== lastPlaceKey || !wasVisible) {
       lastPlaceKey = key
       root.style.display = ''
       root.style.transform = 'none'
-      root.style.left = x.toFixed(2) + 'px'
-      root.style.top = y.toFixed(2) + 'px'
+      retargetMove(x, y, shouldAnimate)
     }
     var diagKey = Math.round(curX) + ',' + Math.round(curY) + ',' + cfg.size + ',' + root.style.display
     if (diagKey !== lastDiagPlace) {
@@ -2189,10 +2430,7 @@ window.__ModuleLoader__.load({
     function finish() {
       saveCfg()
       lastPlaceKey = ''
-      root.classList.add('is-anim')
-      void root.offsetWidth
-      setTimeout(function () { root.classList.remove('is-anim') }, 350)
-      place()
+      place(true)
     }
     // 从吸附点开始拖动：本次手势不再吸附到点；拖回原点也不重新吸附。
     if (suppressPointId) {
@@ -2365,7 +2603,7 @@ window.__ModuleLoader__.load({
       if (row) row.setAttribute('aria-expanded', 'true')
       if (arrow) arrow.textContent = '▾'
       if (!instant) {
-        setTimeout(function () {
+        later(function () {
           if (body.getAttribute('data-open') === '1') body.style.maxHeight = 'none'
         }, 260)
       }
@@ -2480,7 +2718,7 @@ window.__ModuleLoader__.load({
     root.appendChild(popover)
     positionSelect(selectEl)
     window.requestAnimationFrame(function () {
-      if (activeSelect !== selectEl) return
+      if (widgetDisposed || activeSelect !== selectEl) return
       popover.classList.add('is-open')
       positionSelect(selectEl)
       var selected = null
@@ -2605,7 +2843,7 @@ window.__ModuleLoader__.load({
     })
   }
 
-  document.addEventListener('pointerdown', function (event) {
+  on(document, 'pointerdown', function (event) {
     if (!activeSelect) return
     if (activeSelect.contains(event.target) || activeSelect._popover.contains(event.target)) return
     closeAllSelects()
@@ -2614,7 +2852,7 @@ window.__ModuleLoader__.load({
   if (menuScroll) {
     menuScroll.addEventListener('scroll', function () { closeAllSelects() }, { passive: true })
   }
-  window.addEventListener('resize', function () { closeAllSelects() })
+  on(window, 'resize', function () { closeAllSelects() })
 
   function syncMenu() {
     syncSettings()
@@ -2929,7 +3167,11 @@ window.__ModuleLoader__.load({
   function onHitPointerDown(event) {
     if (event.button !== 0) return
     hideSnapDots()
-    root.classList.remove('is-anim')
+    if (springActive) {
+      curX = springAnchorX - cfg.size / 2
+      curY = springAnchorY - cfg.size
+    }
+    setMoveImmediate(curX, curY)
     drag = {
       id: event.pointerId,
       x: event.clientX,
@@ -2962,6 +3204,16 @@ window.__ModuleLoader__.load({
     root.style.transform = 'none'
     root.style.left = curX.toFixed(2) + 'px'
     root.style.top = curY.toFixed(2) + 'px'
+    springAnchorX = curX + size / 2
+    springAnchorY = curY + size
+    springVX = 0
+    springVY = 0
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    bodyStretch = 0
+    if (moveShell) moveShell.style.transform = ''
     updateSnapDots()
   }
   function onHitPointerUp(event) {
@@ -3006,7 +3258,7 @@ window.__ModuleLoader__.load({
 
   function scheduleHideMenuButton() {
     if (buttonHideTimer) clearTimeout(buttonHideTimer)
-    buttonHideTimer = setTimeout(function () {
+    buttonHideTimer = later(function () {
       buttonHideTimer = 0
       if (menuOpen || hitboxHovered || buttonHovered) return
       root.classList.remove('is-button-visible')
@@ -3076,7 +3328,7 @@ window.__ModuleLoader__.load({
     menuHead.addEventListener('pointercancel', endMenuDrag)
   }
 
-  document.addEventListener('pointerdown', function (event) {
+  on(document, 'pointerdown', function (event) {
     if (menuOpen && !root.contains(event.target)) closeMenu()
   }, true)
 
@@ -3130,10 +3382,10 @@ window.__ModuleLoader__.load({
   function onWindowBlur() {
     releaseAll()
   }
-  document.addEventListener('keydown', onKeyDown, true)
-  document.addEventListener('keyup', onKeyUp, true)
-  window.addEventListener('blur', onWindowBlur)
-  document.addEventListener('visibilitychange', function () {
+  on(document, 'keydown', onKeyDown, true)
+  on(document, 'keyup', onKeyUp, true)
+  on(window, 'blur', onWindowBlur)
+  on(document, 'visibilitychange', function () {
     if (document.visibilityState !== 'visible') {
       releaseAll()
       closeMenu()
@@ -3144,11 +3396,11 @@ window.__ModuleLoader__.load({
 
   // ------------------------------------------------------------------ 启动
   function mount() {
-    if (mounted) return
+    if (widgetDisposed || mounted) return
     mounted = true
     var host = document.body || document.head || document.documentElement
     if (!host) {
-      setTimeout(mount, 50)
+      later(mount, 50)
       return
     }
     host.appendChild(root)
@@ -3185,15 +3437,19 @@ window.__ModuleLoader__.load({
             roCard = card
           } catch (e) {}
         }
-        place()
+        place(true)
       })
       try { ro.observe(document.documentElement) } catch (e) {}
     }
-    window.addEventListener('resize', schedulePlace)
-    window.addEventListener('scroll', schedulePlace, true)
+    on(window, 'resize', schedulePlace)
+    on(window, 'scroll', function () {
+      // 滚动只用于暂停位置探针；绝不因为滚动把挂件直接瞬移。
+      scrollActiveUntil = nowMs() + 120
+    }, true)
     if (window.MutationObserver) {
       try {
-        new MutationObserver(schedulePlace).observe(document.body || document.documentElement, {
+        mo = new MutationObserver(schedulePlace)
+        mo.observe(document.body || document.documentElement, {
           childList: true,
           subtree: true,
         })
@@ -3203,13 +3459,90 @@ window.__ModuleLoader__.load({
     dsnDiag('mount', { hasCard: Boolean(cardEl()) })
   }
 
+  function disposeWidget() {
+    if (widgetDisposed) return
+    widgetDisposed = true
+    mounted = false
+
+    if (rafId) {
+      try { window.cancelAnimationFrame(rafId) } catch (e) {}
+      rafId = 0
+    }
+    if (menuFrame) {
+      try { window.cancelAnimationFrame(menuFrame) } catch (e) {}
+      menuFrame = 0
+    }
+    if (placeFrame) {
+      try { window.cancelAnimationFrame(placeFrame) } catch (e) {}
+      placeFrame = 0
+    }
+
+    try { closeMenu() } catch (e) {}
+    try { releaseAll() } catch (e) {}
+
+    for (var ti = 0; ti < widgetTimeouts.length; ti++) {
+      try { window.clearTimeout(widgetTimeouts[ti]) } catch (e) {}
+    }
+    widgetTimeouts.length = 0
+
+    if (ro) {
+      try { ro.disconnect() } catch (e) {}
+      ro = null
+    }
+    if (mo) {
+      try { mo.disconnect() } catch (e) {}
+      mo = null
+    }
+    roCard = null
+
+    var cleanups = widgetCleanups.slice()
+    widgetCleanups.length = 0
+    for (var ci = 0; ci < cleanups.length; ci++) {
+      try { cleanups[ci]() } catch (e) {}
+    }
+
+    for (var si = 0; si < soundPool.length; si++) {
+      try {
+        soundPool[si].pause()
+        soundPool[si].removeAttribute('src')
+        soundPool[si].load()
+      } catch (e) {}
+    }
+    soundPool = []
+
+    if (root && root.parentNode) {
+      try { root.parentNode.removeChild(root) } catch (e) {}
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mount, { once: true })
+    on(document, 'DOMContentLoaded', mount, { once: true })
   } else {
     mount()
   }
-})();
+  return disposeWidget
+}
 
+
+    return {
+      inject: [],
+      apply(ctx) {
+        try {
+          localStorage.setItem('dsh-whale-bongo:diag:client', JSON.stringify({
+            at: Date.now(),
+            href: String(location.href),
+            ready: document.readyState,
+            active: Boolean(activeDispose),
+          }))
+        } catch (e) {}
+        if (activeDispose) return cleanupWidget
+        activeDispose = mountWhaleBongoWidget()
+        if (ctx && typeof ctx.effect === 'function') {
+          ctx.effect(function () { return cleanupWidget })
+        } else if (ctx && typeof ctx.on === 'function') {
+          ctx.on('dispose', cleanupWidget)
+        }
+        return cleanupWidget
       },
     }
   },
