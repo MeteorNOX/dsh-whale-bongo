@@ -1895,6 +1895,19 @@ window.__ModuleLoader__.load({
     return { mode: 'ratio', value: p }
   }
 
+  function distanceToSegment(px, py, x1, y1, x2, y2) {
+    var dx = x2 - x1
+    var dy = y2 - y1
+    var lengthSq = dx * dx + dy * dy
+    var t = lengthSq ? ((px - x1) * dx + (py - y1) * dy) / lengthSq : 0
+    t = clamp(t, 0, 1)
+    var qx = x1 + t * dx
+    var qy = y1 + t * dy
+    var ex = px - qx
+    var ey = py - qy
+    return Math.sqrt(ex * ex + ey * ey)
+  }
+
   function anchorCenterX(anchor, rect) {
     if (!rect || !rect.width) return 0
     if (!anchor || anchor.mode === 'ratio') {
@@ -2115,10 +2128,24 @@ window.__ModuleLoader__.load({
     }
     var candidates = []
     if (r && r.width && r.height) {
-      candidates.push({ ref: 'card', edge: 'top', d: Math.abs((y + imageBottom) - r.top), x: x })
-      candidates.push({ ref: 'card', edge: 'bottom', d: Math.abs((y + imageBottom) - r.bottom), x: x })
-      candidates.push({ ref: 'card', edge: 'left', d: Math.abs(x - (r.left - size)), y: y })
-      candidates.push({ ref: 'card', edge: 'right', d: Math.abs(x - r.right), y: y })
+      var centerX = x + size / 2
+      var centerY = y + imageBottom
+      candidates.push({
+        ref: 'card', edge: 'top', x: x,
+        d: distanceToSegment(centerX, centerY, r.left, r.top, r.right, r.top),
+      })
+      candidates.push({
+        ref: 'card', edge: 'bottom', x: x,
+        d: distanceToSegment(centerX, centerY, r.left, r.bottom, r.right, r.bottom),
+      })
+      candidates.push({
+        ref: 'card', edge: 'left', y: y,
+        d: distanceToSegment(centerX, centerY, r.left, r.top, r.left, r.bottom),
+      })
+      candidates.push({
+        ref: 'card', edge: 'right', y: y,
+        d: distanceToSegment(centerX, centerY, r.right, r.top, r.right, r.bottom),
+      })
       if (!suppressPointId) {
         for (var i = 0; i < points.length; i++) {
           var p = points[i]
