@@ -306,6 +306,11 @@ window.__ModuleLoader__.load({
       border: 3px solid var(--dsnw-ink);
       border: clamp(2.4px, 1.62cqi, 5.2px) solid var(--dsnw-ink);
     }
+    #dsh-whale-bongo .dsnw-art,
+    #dsh-whale-bongo .dsnw-hitbox {
+      transform-origin: 50% 50%;
+      transition: transform .32s cubic-bezier(.34, 1.35, .64, 1);
+    }
     #dsh-whale-bongo.is-flipped .dsnw-art,
     #dsh-whale-bongo.is-flipped .dsnw-hitbox {
       transform: scaleX(-1);
