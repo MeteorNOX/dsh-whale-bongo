@@ -288,9 +288,7 @@ dsh-whale-bongo/
   icon.png              # 插件列表图标（版权归原作者）
   locale/               # 中英文标题
   LICENSE
-  CHANGELOG-0.1.0.md
-  CHANGELOG-0.2.0.md
-  CHANGELOG-0.2.1.md
+  CHANGELOG.md
   CONTRIBUTORS.md
   .gitignore
   README.md

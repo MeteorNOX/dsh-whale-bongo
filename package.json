@@ -23,9 +23,7 @@
     "README.md",
     "INSTALL-FOR-AI.md",
     "LICENSE",
-    "CHANGELOG-0.1.0.md",
-    "CHANGELOG-0.2.0.md",
-    "CHANGELOG-0.2.1.md"
+    "CHANGELOG.md"
   ],
   "dsh": {
     "bundle": {
