@@ -2080,8 +2080,9 @@ function mountWhaleBongoWidget() {
     if (!input) return null
     return input.closest('form') || input.parentElement
   }
-  var MOVE_STIFFNESS = 165
-  var MOVE_DAMPING = 14.5
+  var MOVE_STIFFNESS = 240
+  var MOVE_DAMPING = 22
+  var MOVE_START_VELOCITY = 3.8
   var SQUASH_STIFFNESS = 260
   var SQUASH_DAMPING = 17
 
@@ -2106,11 +2107,13 @@ function mountWhaleBongoWidget() {
       setMoveImmediate(x, y)
       return
     }
+    var dx = x - springX
+    var dy = y - springY
     springTargetX = x
     springTargetY = y
     if (!springActive) {
-      springVX = 0
-      springVY = 0
+      springVX = clamp(dx * MOVE_START_VELOCITY, -1200, 1200)
+      springVY = clamp(dy * MOVE_START_VELOCITY, -1200, 1200)
       springActive = true
     }
     moveSquashArmed = true
@@ -2119,12 +2122,25 @@ function mountWhaleBongoWidget() {
   function stepMove(dt) {
     if (!dt) return
     if (springActive) {
-      var ax = (springTargetX - springX) * MOVE_STIFFNESS - springVX * MOVE_DAMPING
-      var ay = (springTargetY - springY) * MOVE_STIFFNESS - springVY * MOVE_DAMPING
+      var errXBefore = springTargetX - springX
+      var errYBefore = springTargetY - springY
+      var ax = errXBefore * MOVE_STIFFNESS - springVX * MOVE_DAMPING
+      var ay = errYBefore * MOVE_STIFFNESS - springVY * MOVE_DAMPING
       springVX += ax * dt
       springVY += ay * dt
       springX += springVX * dt
       springY += springVY * dt
+
+      var errXAfter = springTargetX - springX
+      var errYAfter = springTargetY - springY
+      var speed = Math.sqrt(springVX * springVX + springVY * springVY)
+      var crossed = (errXBefore * errXAfter <= 0 && Math.abs(errXBefore) > 0.5) ||
+        (errYBefore * errYAfter <= 0 && Math.abs(errYBefore) > 0.5)
+      var nearTarget = Math.abs(errXAfter) < 2 && Math.abs(errYAfter) < 2
+      if (moveSquashArmed && speed > 40 && (crossed || nearTarget)) {
+        moveSquashArmed = false
+        moveSquashV += clamp(speed / 250, 0.25, 1.4)
+      }
 
       var vw = window.innerWidth
       var vh = window.innerHeight
@@ -2133,22 +2149,17 @@ function mountWhaleBongoWidget() {
       root.style.left = clamp(springX, 0, maxX).toFixed(2) + 'px'
       root.style.top = clamp(springY, 0, maxY).toFixed(2) + 'px'
 
-      var restX = Math.abs(springTargetX - springX)
-      var restY = Math.abs(springTargetY - springY)
-      var speed = Math.sqrt(springVX * springVX + springVY * springVY)
+      var restX = Math.abs(errXAfter)
+      var restY = Math.abs(errYAfter)
       if (restX < 0.4 && restY < 0.4 && speed < 8) {
         springX = springTargetX
         springY = springTargetY
         springVX = 0
         springVY = 0
         springActive = false
+        moveSquashArmed = false
         root.style.left = clamp(springX, 0, maxX).toFixed(2) + 'px'
         root.style.top = clamp(springY, 0, maxY).toFixed(2) + 'px'
-        if (moveSquashArmed) {
-          moveSquashArmed = false
-          moveSquash = 0.11
-          moveSquashV = 0
-        }
       }
     }
 
@@ -3084,8 +3095,8 @@ function mountWhaleBongoWidget() {
     if (springActive) {
       curX = springX
       curY = springY
-      setMoveImmediate(curX, curY)
     }
+    setMoveImmediate(curX, curY)
     drag = {
       id: event.pointerId,
       x: event.clientX,
