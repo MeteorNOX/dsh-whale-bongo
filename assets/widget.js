@@ -1181,7 +1181,7 @@
     }
     if (!pressed.length) return
     pointerPress = { downAt: now, hands: pressed }
-    kickImage()
+    imageSquash.target = clamp(0.03 * (cfg.imageQBouncePct / 100), 0, 0.14)
     playHit()
     render()
   }
@@ -1190,6 +1190,8 @@
     if (!pointerPress) return
     var press = pointerPress
     pointerPress = null
+    imageSquash.target = 0
+    kickImage()
     var delay = Math.max(0, CONFIG.minPressTime - (nowMs() - press.downAt))
     for (var i = 0; i < press.hands.length; i++) {
       var hand = press.hands[i]
@@ -1201,6 +1203,7 @@
     if (!pointerPress) return
     var press = pointerPress
     pointerPress = null
+    imageSquash.target = 0
     for (var i = 0; i < press.hands.length; i++) {
       var hand = press.hands[i]
       if (hand.keys.size === 0 && !hand.seq) setPressed(hand, false)
@@ -1287,6 +1290,7 @@
   }
   function releaseAll() {
     pointerPress = null
+    imageSquash.target = 0
     activeInputs.clear()
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
