@@ -109,7 +109,7 @@ window.__ModuleLoader__.load({
     handAxisPct: 41,
     handCenterYPct: 77.5,
     handOutlinePct: 100,
-    clickPressHands: true,
+    clickPressMode: 'press',
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
     volume: 60,
@@ -169,7 +169,12 @@ window.__ModuleLoader__.load({
     out.handAxisPct = clamp(numberOr(out.handAxisPct, 41), 30, 75)
     out.handCenterYPct = clamp(numberOr(out.handCenterYPct, 77.5), 0, 120)
     out.handOutlinePct = clamp(numberOr(out.handOutlinePct, 100), 0, 250)
-    out.clickPressHands = out.clickPressHands !== false
+    var clickMode = out.clickPressMode
+    if (clickMode !== 'press' && clickMode !== 'squash' && clickMode !== 'none') {
+      clickMode = out.clickPressHands === false ? 'none' : 'press'
+    }
+    out.clickPressMode = clickMode
+    delete out.clickPressHands
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
     out.volume = clamp(numberOr(out.volume, 60), 0, 100)
@@ -405,7 +410,7 @@ window.__ModuleLoader__.load({
       transition: max-height .24s ease, opacity .18s ease;
     }
 
-    #dsh-whale-bongo .dsnw-switch {
+    #dsh-whale-bongo .dsnw-behavior {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -414,48 +419,24 @@ window.__ModuleLoader__.load({
       color: var(--dsw-alias-label-primary, #eee);
       font-size: 12px;
       line-height: 1.45;
-      cursor: pointer;
-      user-select: none;
     }
-    #dsh-whale-bongo .dsnw-switch input {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      pointer-events: none;
-    }
-    #dsh-whale-bongo .dsnw-switch-track {
-      position: relative;
-      flex: none;
-      width: 34px;
-      height: 20px;
+    #dsh-whale-bongo .dsnw-behavior-label { flex: none; white-space: nowrap; }
+    #dsh-whale-bongo .dsnw-behavior select {
+      flex: 1;
+      min-width: 0;
+      padding: 5px 6px;
       border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.35));
-      border-radius: 999px;
+      border-radius: 6px;
       background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.12));
-      transition: background .18s ease, border-color .18s ease;
+      color: var(--dsw-alias-label-primary, #eee);
+      font: inherit;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
     }
-    #dsh-whale-bongo .dsnw-switch-track::after {
-      content: '';
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: var(--dsw-alias-label-secondary, #aaa);
-      transition: transform .18s ease, background .18s ease;
-    }
-    #dsh-whale-bongo .dsnw-switch input:checked + .dsnw-switch-track {
-      background: var(--dsw-alias-brand-primary, #4d6bfe);
-      border-color: var(--dsw-alias-brand-primary, #4d6bfe);
-    }
-    #dsh-whale-bongo .dsnw-switch input:checked + .dsnw-switch-track::after {
-      transform: translateX(14px);
-      background: #fff;
-    }
-    #dsh-whale-bongo .dsnw-switch input:focus-visible + .dsnw-switch-track {
+    #dsh-whale-bongo .dsnw-behavior select:focus-visible {
       outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe);
-      outline-offset: 2px;
+      outline-offset: 1px;
     }
     #dsh-whale-bongo .dsnw-fold-body[data-open="1"] {
       background: rgba(77,107,254,.045);
@@ -783,11 +764,14 @@ window.__ModuleLoader__.load({
           '<span>行为</span><span class="dsnw-fold-sum" data-fold-summary="behavior"></span><span class="dsnw-fold-arrow" data-fold-arrow="behavior">▸</span>' +
         '</div>' +
         '<div class="dsnw-fold-body" data-fold-body="behavior" data-open="0">' +
-          '<label class="dsnw-switch">' +
-            '<input type="checkbox" data-click-hands>' +
-            '<span class="dsnw-switch-track" aria-hidden="true"></span>' +
-            '<span class="dsnw-switch-label">鼠标按压时手部跟随</span>' +
-          '</label>' +
+          '<div class="dsnw-behavior">' +
+            '<span class="dsnw-behavior-label">鼠标按压时</span>' +
+            '<select data-click-mode aria-label="鼠标按压时手部行为">' +
+              '<option value="press">手部跟随下压</option>' +
+              '<option value="squash">手部变扁，不下压</option>' +
+              '<option value="none">手部不跟随</option>' +
+            '</select>' +
+          '</div>' +
         '</div>' +
       '</div>' +
       '<div class="dsnw-direct" data-direct="motion">' +
@@ -812,7 +796,7 @@ window.__ModuleLoader__.load({
   var sizeInput = root.querySelector('[data-size]')
   var sizeLabel = root.querySelector('[data-size-label]')
   var sizeReset = root.querySelector('[data-reset-size]')
-  var clickHandsInput = root.querySelector('[data-click-hands]')
+  var clickModeInput = root.querySelector('[data-click-mode]')
   var imageNameEl = root.querySelector('[data-image-name]')
 
   var clipPath = root.querySelector('#dsnw-alpha-clip')
@@ -962,7 +946,7 @@ window.__ModuleLoader__.load({
       var key = colorInputs[c].getAttribute('data-color')
       colorInputs[c].value = cfg[key]
     }
-    if (clickHandsInput) clickHandsInput.checked = cfg.clickPressHands !== false
+    if (clickModeInput) clickModeInput.value = cfg.clickPressMode
     updateFoldSummaries()
   }
 
@@ -1166,6 +1150,8 @@ window.__ModuleLoader__.load({
       squash: new Spring(0, 1050, 14),
       down: false,
       hit: false,
+      manualSquash: false,
+      manualSquashValue: 0,
       tap: 0,
       trailY: 0,
       trailY2: 0,
@@ -1198,6 +1184,7 @@ window.__ModuleLoader__.load({
     }
   }
   function setPressed(hand, down) {
+    hand.manualSquash = false
     hand.down = down
     if (down) {
       hand.y.stiffness = 2600
@@ -1252,20 +1239,36 @@ window.__ModuleLoader__.load({
   function startPointerPress() {
     if (pointerPress) return
     var now = nowMs()
+    var mode = cfg.clickPressMode
     var pressed = []
-    if (cfg.clickPressHands !== false) {
+    if (mode === 'press' || mode === 'squash') {
       for (var i = 0; i < hands.length; i++) {
         var hand = hands[i]
         if (hand.down || hand.seq || hand.keys.size > 0) continue
-        hand.downAt = now
-        setPressed(hand, true)
-        hand.tap = Math.min(1.25, hand.tap + 0.95)
-        hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4
-        hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2
+        hand.manualSquash = false
+        hand.tap = 0
+        hand.y.target = 0
+        if (mode === 'squash') {
+          hand.down = false
+          hand.hit = false
+          hand.manualSquash = true
+          hand.manualSquashValue = CONFIG.squash * 0.90
+          hand.y.stiffness = 1100
+          hand.y.damping = 26
+          hand.squash.stiffness = 1500
+          hand.squash.damping = 28
+          hand.squash.velocity = Math.max(0, hand.squash.velocity) + 0.65
+        } else {
+          hand.downAt = now
+          setPressed(hand, true)
+          hand.tap = Math.min(1.25, hand.tap + 0.95)
+          hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4
+          hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2
+        }
         pressed.push(hand)
       }
     }
-    pointerPress = { downAt: now, hands: pressed }
+    pointerPress = { downAt: now, hands: pressed, mode: mode }
     imageSquash.target = clamp(0.03 * (cfg.imageQBouncePct / 100), 0, 0.14)
     playHit()
     render()
@@ -1326,6 +1329,7 @@ window.__ModuleLoader__.load({
     render()
   }
   function startLogic3(hand) {
+    hand.manualSquash = false
     var a = pointA()
     var movingDown = hand.down &&
       (hand.y.velocity > 0.2 || hand.y.value >= CONFIG.pressDepth - 0.02)
@@ -1380,10 +1384,11 @@ window.__ModuleLoader__.load({
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
       var hadSequence = Boolean(hand.seq)
+      var hadManualSquash = Boolean(hand.manualSquash)
       hand.keys.clear()
       hand.seq = null
       clearReleaseTimer(hand)
-      if (hand.down || hadSequence) setPressed(hand, false)
+      if (hand.down || hadSequence || hadManualSquash) setPressed(hand, false)
     }
   }
   function layoutHands() {
@@ -1449,8 +1454,12 @@ window.__ModuleLoader__.load({
     }
     if (!hand.down) hand.hit = false
 
-    var progress = clamp(hand.y.value / CONFIG.pressDepth, 0, 1)
-    hand.squash.target = hand.down ? CONFIG.squash * Math.pow(progress, 1.18) : 0
+    if (hand.manualSquash) {
+      hand.squash.target = hand.manualSquashValue
+    } else {
+      var progress = clamp(hand.y.value / CONFIG.pressDepth, 0, 1)
+      hand.squash.target = hand.down ? CONFIG.squash * Math.pow(progress, 1.18) : 0
+    }
     hand.squash.step(dt)
     hand.tap *= Math.exp(-dt * CONFIG.tapDecay)
     if (hand.tap < 0.001) hand.tap = 0
@@ -1755,7 +1764,7 @@ window.__ModuleLoader__.load({
       image: fmtSetting(cfg.imageScalePct) + '% · ' + fmtSetting(cfg.imageXPct) + ',' + fmtSetting(cfg.imageYPct),
       hand: '宽' + fmtSetting(cfg.handWidthPct) + ' 高' + fmtSetting(cfg.handAspectPct) + ' 距' + fmtSetting(cfg.handSpreadPct) + ' 轴' + fmtSetting(cfg.handAxisPct) + ' 纵' + fmtSetting(cfg.handCenterYPct),
       sound: '音量 ' + fmtSetting(cfg.volume),
-      behavior: cfg.clickPressHands === false ? '仅图片压缩' : '手部跟随按压',
+      behavior: cfg.clickPressMode === 'none' ? '手部不跟随' : (cfg.clickPressMode === 'squash' ? '手部变扁' : '手部跟随下压'),
     }
     for (var key in summaries) {
       if (!Object.prototype.hasOwnProperty.call(summaries, key)) continue
@@ -1778,9 +1787,10 @@ window.__ModuleLoader__.load({
     }
     updateFoldSummaries()
   }
-  if (clickHandsInput) {
-    clickHandsInput.addEventListener('change', function () {
-      cfg.clickPressHands = Boolean(this.checked)
+  if (clickModeInput) {
+    clickModeInput.addEventListener('change', function () {
+      var value = this.value
+      cfg.clickPressMode = value === 'squash' || value === 'none' ? value : 'press'
       saveCfg()
       syncSettings()
     })
