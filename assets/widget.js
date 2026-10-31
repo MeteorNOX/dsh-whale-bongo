@@ -2079,8 +2079,8 @@ function mountWhaleBongoWidget() {
   }
   var MOVE_STIFFNESS_BASE = 240
   var MOVE_STIFFNESS_RANGE = 60
-  var MOVE_DAMPING_BASE = 32
-  var MOVE_DAMPING_RANGE = 12
+  var MOVE_DAMPING_BASE = 36
+  var MOVE_DAMPING_RANGE = 6
   var MOVE_START_BASE = 2.6
   var MOVE_START_RANGE = 1.4
 
@@ -2151,8 +2151,8 @@ function mountWhaleBongoWidget() {
       var speed = Math.sqrt(springVX * springVX + springVY * springVY)
       var crossed = (errXBefore * errXAfter <= 0 && Math.abs(errXBefore) > 0.5) ||
         (errYBefore * errYAfter <= 0 && Math.abs(errYBefore) > 0.5)
-      var nearTarget = Math.abs(errXAfter) < 2 && Math.abs(errYAfter) < 2
-      if (moveSquashArmed && speed > 40 && (crossed || nearTarget)) {
+      var nearTarget = Math.abs(errXAfter) < 14 && Math.abs(errYAfter) < 14
+      if (moveSquashArmed && speed > 20 && (crossed || nearTarget)) {
         moveSquashArmed = false
         moveSquashV += clamp(speed / (300 - 100 * q), 0.25, 1.0 + 2.4 * q)
       }
@@ -2179,7 +2179,7 @@ function mountWhaleBongoWidget() {
     }
 
     var stretchTarget = springActive
-      ? clamp(Math.abs(springVY) / 9000, 0, 0.025) * (0.6 + 0.8 * q)
+      ? clamp(Math.abs(springVY) / 7000, 0, 0.04) * (0.6 + 0.8 * q)
       : 0
     bodyStretch += (stretchTarget - bodyStretch) * (1 - Math.exp(-dt * 10))
 
@@ -3431,8 +3431,8 @@ function mountWhaleBongoWidget() {
     }
     on(window, 'resize', schedulePlace)
     on(window, 'scroll', function () {
+      // 滚动只用于暂停位置探针；绝不因为滚动把挂件直接瞬移。
       scrollActiveUntil = nowMs() + 120
-      schedulePlace(false)
     }, true)
     if (window.MutationObserver) {
       try {
