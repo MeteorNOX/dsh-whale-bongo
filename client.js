@@ -761,7 +761,7 @@ window.__ModuleLoader__.load({
       '</div>' +
       '<div class="dsnw-fold">' +
         '<div class="dsnw-fold-row" data-fold-row="behavior" role="button" tabindex="0" aria-expanded="false">' +
-          '<span>行为</span><span class="dsnw-fold-sum" data-fold-summary="behavior"></span><span class="dsnw-fold-arrow" data-fold-arrow="behavior">▸</span>' +
+          '<span>行为与动效</span><span class="dsnw-fold-sum" data-fold-summary="behavior"></span><span class="dsnw-fold-arrow" data-fold-arrow="behavior">▸</span>' +
         '</div>' +
         '<div class="dsnw-fold-body" data-fold-body="behavior" data-open="0">' +
           '<div class="dsnw-behavior">' +
@@ -772,10 +772,8 @@ window.__ModuleLoader__.load({
               '<option value="none">手部不跟随</option>' +
             '</select>' +
           '</div>' +
+          '<div data-setting-list="motion"></div>' +
         '</div>' +
-      '</div>' +
-      '<div class="dsnw-direct" data-direct="motion">' +
-        '<div data-setting-list="motion"></div>' +
       '</div>' +
       '<div class="dsnw-direct" data-direct="size">' +
         '<div class="dsnw-setting dsnw-setting--inline"><label for="dsnw-size">大小</label>' +
