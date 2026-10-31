@@ -14,7 +14,8 @@ const PKG_ROOT = path.dirname(fileURLToPath(import.meta.url))
 const BASE = '/dsh-whale-bongo'
 const WIDGET_PATH = BASE + '/widget.js'
 const PORTRAIT_PATH = BASE + '/portrait.png'
-const VERSION = '0.1.0'
+const KEY_ANGLES_PATH = BASE + '/key-angles.json'
+const VERSION = '0.2.0'
 
 const diag = {
   startedAt: Date.now(),
@@ -49,6 +50,13 @@ try {
   portrait = fs.readFileSync(path.join(PKG_ROOT, 'assets', 'portrait.png'))
 } catch {
   portrait = null
+}
+
+let keyAngles = null
+try {
+  keyAngles = fs.readFileSync(path.join(PKG_ROOT, 'assets', 'key-angles.json'))
+} catch {
+  keyAngles = null
 }
 
 const DESKTOP_ROW_TEXT =
@@ -146,6 +154,24 @@ export default {
 
       route({
         kind: 'exact',
+        path: KEY_ANGLES_PATH,
+        handler(req, res) {
+          if (!keyAngles) {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+            res.end('key angles not found')
+            return
+          }
+          res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'Content-Length': String(keyAngles.length),
+          })
+          res.end(req.method === 'HEAD' ? undefined : keyAngles)
+        },
+      })
+
+      route({
+        kind: 'exact',
         path: BASE + '/health',
         handler(req, res) {
           json(res, {
@@ -154,6 +180,8 @@ export default {
             widget: WIDGET_PATH,
             portrait: PORTRAIT_PATH,
             portraitBytes: portrait ? portrait.length : 0,
+            keyAngles: KEY_ANGLES_PATH,
+            keyAnglesBytes: keyAngles ? keyAngles.length : 0,
             widgetBytes: Buffer.byteLength(loadWidgetJs()),
             diag,
           })
