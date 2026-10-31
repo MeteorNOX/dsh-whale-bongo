@@ -110,6 +110,7 @@ window.__ModuleLoader__.load({
     handCenterYPct: 77.5,
     handOutlinePct: 100,
     clickPressMode: 'squash',
+    flipMode: 'auto',
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
     volume: 15,
@@ -181,6 +182,7 @@ window.__ModuleLoader__.load({
     }
     out.clickPressMode = clickMode
     delete out.clickPressHands
+    out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
     out.volume = clamp(numberOr(out.volume, 15), 0, 100)
@@ -303,6 +305,10 @@ window.__ModuleLoader__.load({
       background: var(--dsnw-skin);
       border: 3px solid var(--dsnw-ink);
       border: clamp(2.4px, 1.62cqi, 5.2px) solid var(--dsnw-ink);
+    }
+    #dsh-whale-bongo.is-flipped .dsnw-art,
+    #dsh-whale-bongo.is-flipped .dsnw-hitbox {
+      transform: scaleX(-1);
     }
     #dsh-whale-bongo .dsnw-hitbox {
       position: absolute;
@@ -881,6 +887,20 @@ window.__ModuleLoader__.load({
               '</div>' +
             '</div>' +
           '</div>' +
+          '<div class="dsnw-behavior">' +
+            '<span class="dsnw-behavior-label">翻转</span>' +
+            '<div class="dsnw-select" data-select="flipMode">' +
+              '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
+                '<span class="dsnw-select-label" data-select-label>自动</span>' +
+                '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
+              '</button>' +
+              '<div class="dsnw-select-popover" role="listbox" aria-label="水平翻转">' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="auto"><span class="dsnw-select-check">✓</span><span>自动</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="never"><span class="dsnw-select-check">✓</span><span>始终不翻转</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="always"><span class="dsnw-select-check">✓</span><span>始终翻转</span></button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
           '<div data-setting-list="motion"></div>' +
         '</div>' +
       '</div>' +
@@ -904,6 +924,7 @@ window.__ModuleLoader__.load({
   var sizeLabel = root.querySelector('[data-size-label]')
   var sizeReset = root.querySelector('[data-reset-size]')
   var clickModeSelect = root.querySelector('[data-select="clickPressMode"]')
+  var flipModeSelect = root.querySelector('[data-select="flipMode"]')
   var menuScroll = root.querySelector('.dsnw-menu-scroll')
   var imageNameEl = root.querySelector('[data-image-name]')
 
@@ -1060,6 +1081,7 @@ window.__ModuleLoader__.load({
       colorInputs[c].value = cfg[key]
     }
     if (clickModeSelect) setSelectValue(clickModeSelect, cfg.clickPressMode)
+    if (flipModeSelect) setSelectValue(flipModeSelect, cfg.flipMode)
     updateFoldSummaries()
   }
 
@@ -1605,6 +1627,15 @@ window.__ModuleLoader__.load({
   }
 
   // ------------------------------------------------------------------ 定位
+
+  function applyFlip() {
+    var flipped = cfg.flipMode === 'always'
+    if (cfg.flipMode === 'auto') {
+      flipped = curX + cfg.size / 2 < window.innerWidth / 2
+    }
+    root.classList.toggle('is-flipped', flipped)
+  }
+
   function cardEl() {
     var card = document.querySelector('[data-composer-card]')
     if (card) return card
@@ -1688,6 +1719,7 @@ window.__ModuleLoader__.load({
     y = clamp(y, 4, Math.max(4, vh - imageBottom))
     curX = x
     curY = y
+    applyFlip()
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
     if (key !== lastPlaceKey || root.style.display === 'none') {
       lastPlaceKey = key
@@ -2059,6 +2091,15 @@ window.__ModuleLoader__.load({
     })
     setSelectValue(clickModeSelect, cfg.clickPressMode)
   }
+  if (flipModeSelect) {
+    initSelect(flipModeSelect, function (value) {
+      cfg.flipMode = value === 'never' || value === 'always' ? value : 'auto'
+      saveCfg()
+      applyFlip()
+      syncSettings()
+    })
+    setSelectValue(flipModeSelect, cfg.flipMode)
+  }
 
   document.addEventListener('pointerdown', function (event) {
     if (!activeSelect) return
@@ -2292,6 +2333,7 @@ window.__ModuleLoader__.load({
     var imageBottom = imageBottomNorm * size
     curX = clamp(drag.ox + dx, 4, window.innerWidth - size - 4)
     curY = clamp(drag.oy + dy, 4, window.innerHeight - imageBottom)
+    applyFlip()
     cfg.snap = { ref: 'viewport', x: curX, y: curY }
     root.style.display = ''
     root.style.transform = 'none'
