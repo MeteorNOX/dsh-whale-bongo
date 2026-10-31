@@ -1069,7 +1069,7 @@
         '<span class="dsnw-setting-value"><span data-size-label>140</span><button type="button" data-reset-size title="恢复默认大小">↺</button></span></div>' +
       '</div>' +
       '<button class="dsnw-reset" type="button" data-reset>恢复默认设置</button>' +
-      '<div class="dsnw-foot">v0.2.0</div>' +
+      '<div class="dsnw-foot">v0.2.1</div>' +
     '</div></div>'
 
   var stage = root.querySelector('.dsnw-stage')

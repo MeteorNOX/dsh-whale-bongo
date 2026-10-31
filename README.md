@@ -2,7 +2,7 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>v0.2.0</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
+  <p><code>v0.2.1</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
@@ -97,10 +97,11 @@
 | **图片 Q 弹** | 以图片底边为锚点压扁回弹，强度 0–10；回弹时不裁左右，投影完整。 |
 | **打字角度** | 随机角度和真实键位两套方向系统，真实键位支持左右手分管。 |
 | **透明穿透** | 按图片 alpha 生成 SVG `clip-path`，只有角色本体接收鼠标，透明区域直接穿透。 |
-| **自由磁吸** | 吸附输入框卡片的上/下边线段、上沿中心点，或页面视口边线；输入框左右侧暂不吸附。 |
+| **自由磁吸** | 吸附输入框上/下边线段、上沿中心点，或页面视口边线；中心点会记忆并在布局变化时跟随，拖动时显示吸附圆点。 |
 | **水平翻转** | 自动按输入框 45%/55% 迟滞判断、自定义分割线、始终不翻转、始终翻转；带弹性过渡。 |
 | **菜单安全区** | 菜单不会进入 DSH 标题栏，关闭按钮始终可点。 |
-| **面板同步吸附** | 提问、授权、计划确认面板出现时，按输入框的吸附方式贴到当前面板上。 |
+| **自定义音效** | 支持上传本地音频替换默认敲击音，可恢复默认；音效保存在浏览器本地。 |
+| **面板同步吸附** | 提问、授权、计划确认面板出现时，按输入框的吸附方式贴到当前面板上；面板关闭后回到输入框。 |
 | **无构建依赖** | 纯 DSH bundle，不需要 `npm install`，不需要前端 build。 |
 
 ---
@@ -110,7 +111,7 @@
 ### 从 GitHub Release 安装
 
 1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
-2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.0-package.zip` 或 `dsh-whale-bongo-0.2.0.tgz`；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.1-package.zip` 或 `dsh-whale-bongo-0.2.1.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
 4. **完全退出并重开 DSH**。
 
@@ -137,7 +138,7 @@ dsh-whale-bongo
 
 ```bash
 # 仅 npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.2.0
+dsh plugin --profile web add dsh-whale-bongo@0.2.1
 ```
 
 > [!TIP]
@@ -240,7 +241,7 @@ dsh plugin --profile web remove dsh-whale-bongo
 <details>
 <summary><strong>菜单关闭按钮点不到 / 菜单进入标题栏</strong></summary>
 
-v0.2.0 已给菜单增加 56px 顶部安全区，并把最大高度限制在安全区下方。  
+当前版本已给菜单增加 56px 顶部安全区，并把最大高度限制在安全区下方。  
 如果 DSH 标题栏比 56px 更高，需要按实际高度调整安全区。
 
 </details>
@@ -289,6 +290,7 @@ dsh-whale-bongo/
   LICENSE
   CHANGELOG-0.1.0.md
   CHANGELOG-0.2.0.md
+  CHANGELOG-0.2.1.md
   CONTRIBUTORS.md
   .gitignore
   README.md

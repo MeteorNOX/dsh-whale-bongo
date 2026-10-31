@@ -1,6 +1,6 @@
 {
   "name": "dsh-whale-bongo",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "QQ 弹弹的类 bongo 手手挂件",
   "type": "module",
   "exports": {
@@ -24,7 +24,8 @@
     "INSTALL-FOR-AI.md",
     "LICENSE",
     "CHANGELOG-0.1.0.md",
-    "CHANGELOG-0.2.0.md"
+    "CHANGELOG-0.2.0.md",
+    "CHANGELOG-0.2.1.md"
   ],
   "dsh": {
     "bundle": {
