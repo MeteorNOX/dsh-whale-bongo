@@ -827,7 +827,7 @@
     { key: 'imageScalePct', group: 'image', label: '图片大小', min: 50, max: 150, step: 1, def: 100 },
     { key: 'imageXPct', group: 'image', label: '水平位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
-    { key: 'imageQBouncePct', group: 'motion', label: '动效', min: 0, max: 500, step: 5, def: 250, inline: true },
+    { key: 'imageQBouncePct', group: 'motion', label: '动效', min: 0, max: 500, step: 5, def: 250 },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
     { key: 'handAspectPct', group: 'hand', label: '高度 / 宽度', min: 60, max: 120, step: 1, def: 81 },
