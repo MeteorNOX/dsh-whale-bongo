@@ -98,7 +98,7 @@
     handOutlinePct: 100,
     clickPressMode: 'squash',
     flipMode: 'auto',
-    typingAngleMode: 'random',
+    typingAngleMode: 'off',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
@@ -172,7 +172,7 @@
     out.clickPressMode = clickMode
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
-    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'random'
+    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'off'
     delete out.handTypingOffsetPx
     out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 30), 0, 60)
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
@@ -879,6 +879,7 @@
           '<span>行为与动效</span><span class="dsnw-fold-sum" data-fold-summary="behavior"></span><span class="dsnw-fold-arrow" data-fold-arrow="behavior">▸</span>' +
         '</div>' +
         '<div class="dsnw-fold-body" data-fold-body="behavior" data-open="0">' +
+          '<div data-setting-list="motion"></div>' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">鼠标按压时</span>' +
             '<div class="dsnw-select" data-select="clickPressMode">' +
@@ -907,13 +908,12 @@
               '</div>' +
             '</div>' +
           '</div>' +
-          '<div data-setting-list="motion"></div>' +
           '<div class="dsnw-subhead">打字时手手角度偏移</div>' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">偏移方式</span>' +
             '<div class="dsnw-select" data-select="typingAngleMode">' +
               '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
-                '<span class="dsnw-select-label" data-select-label>随机角度</span>' +
+                '<span class="dsnw-select-label" data-select-label>关闭</span>' +
                 '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
               '</button>' +
               '<div class="dsnw-select-popover" role="listbox" aria-label="打字时手手角度偏移方式">' +
@@ -2194,7 +2194,7 @@
   }
   if (typingAngleModeSelect) {
     initSelect(typingAngleModeSelect, function (value) {
-      cfg.typingAngleMode = value === 'off' || value === 'position' || value === 'position-split' ? value : 'random'
+      cfg.typingAngleMode = value === 'off' || value === 'position' || value === 'position-split' ? value : 'off'
       saveCfg()
       if (cfg.typingAngleMode === 'position') loadKeyPositions()
       syncSettings()

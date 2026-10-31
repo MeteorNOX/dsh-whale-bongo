@@ -176,7 +176,7 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 图片 Q 弹     5
 鼠标按压      手部变扁，不下压
 翻转          自动
-打字角度      随机角度
+打字角度      关闭
 角度偏移      30°
 音量          15
 挂件大小      140
