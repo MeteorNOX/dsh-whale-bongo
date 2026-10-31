@@ -189,7 +189,7 @@ window.__ModuleLoader__.load({
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
     out.filterShortcutKeys = out.filterShortcutKeys !== false
-    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'off'
+    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'off'
     delete out.handTypingOffsetPx
     out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 30), 0, 60)
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
@@ -2278,9 +2278,9 @@ window.__ModuleLoader__.load({
   }
   if (typingAngleModeSelect) {
     initSelect(typingAngleModeSelect, function (value) {
-      cfg.typingAngleMode = value === 'off' || value === 'position' || value === 'position-split' ? value : 'off'
+      cfg.typingAngleMode = value === 'off' || value === 'random' || value === 'position' || value === 'position-split' ? value : 'off'
       saveCfg()
-      if (cfg.typingAngleMode === 'position') loadKeyPositions()
+      if (cfg.typingAngleMode === 'position' || cfg.typingAngleMode === 'position-split') loadKeyPositions()
       syncSettings()
     })
     setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
