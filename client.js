@@ -109,6 +109,7 @@ window.__ModuleLoader__.load({
     handAxisPct: 41,
     handCenterYPct: 77.5,
     handOutlinePct: 100,
+    clickPressHands: true,
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
     volume: 60,
@@ -168,6 +169,7 @@ window.__ModuleLoader__.load({
     out.handAxisPct = clamp(numberOr(out.handAxisPct, 41), 30, 75)
     out.handCenterYPct = clamp(numberOr(out.handCenterYPct, 77.5), 0, 120)
     out.handOutlinePct = clamp(numberOr(out.handOutlinePct, 100), 0, 250)
+    out.clickPressHands = out.clickPressHands !== false
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
     out.volume = clamp(numberOr(out.volume, 60), 0, 100)
@@ -401,6 +403,59 @@ window.__ModuleLoader__.load({
       opacity: 0;
       padding-left: 10px;
       transition: max-height .24s ease, opacity .18s ease;
+    }
+
+    #dsh-whale-bongo .dsnw-switch {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 2px 0;
+      color: var(--dsw-alias-label-primary, #eee);
+      font-size: 12px;
+      line-height: 1.45;
+      cursor: pointer;
+      user-select: none;
+    }
+    #dsh-whale-bongo .dsnw-switch input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    #dsh-whale-bongo .dsnw-switch-track {
+      position: relative;
+      flex: none;
+      width: 34px;
+      height: 20px;
+      border: 1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.35));
+      border-radius: 999px;
+      background: var(--dsw-alias-bg-layer-2, rgba(127,127,127,.12));
+      transition: background .18s ease, border-color .18s ease;
+    }
+    #dsh-whale-bongo .dsnw-switch-track::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--dsw-alias-label-secondary, #aaa);
+      transition: transform .18s ease, background .18s ease;
+    }
+    #dsh-whale-bongo .dsnw-switch input:checked + .dsnw-switch-track {
+      background: var(--dsw-alias-brand-primary, #4d6bfe);
+      border-color: var(--dsw-alias-brand-primary, #4d6bfe);
+    }
+    #dsh-whale-bongo .dsnw-switch input:checked + .dsnw-switch-track::after {
+      transform: translateX(14px);
+      background: #fff;
+    }
+    #dsh-whale-bongo .dsnw-switch input:focus-visible + .dsnw-switch-track {
+      outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe);
+      outline-offset: 2px;
     }
     #dsh-whale-bongo .dsnw-fold-body[data-open="1"] {
       background: rgba(77,107,254,.045);
@@ -723,6 +778,18 @@ window.__ModuleLoader__.load({
           '<div data-setting-list="sound"></div>' +
         '</div>' +
       '</div>' +
+      '<div class="dsnw-fold">' +
+        '<div class="dsnw-fold-row" data-fold-row="behavior" role="button" tabindex="0" aria-expanded="false">' +
+          '<span>行为</span><span class="dsnw-fold-sum" data-fold-summary="behavior"></span><span class="dsnw-fold-arrow" data-fold-arrow="behavior">▸</span>' +
+        '</div>' +
+        '<div class="dsnw-fold-body" data-fold-body="behavior" data-open="0">' +
+          '<label class="dsnw-switch">' +
+            '<input type="checkbox" data-click-hands>' +
+            '<span class="dsnw-switch-track" aria-hidden="true"></span>' +
+            '<span class="dsnw-switch-label">鼠标按压时手部跟随</span>' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
       '<div class="dsnw-direct" data-direct="motion">' +
         '<div data-setting-list="motion"></div>' +
       '</div>' +
@@ -745,6 +812,7 @@ window.__ModuleLoader__.load({
   var sizeInput = root.querySelector('[data-size]')
   var sizeLabel = root.querySelector('[data-size-label]')
   var sizeReset = root.querySelector('[data-reset-size]')
+  var clickHandsInput = root.querySelector('[data-click-hands]')
   var imageNameEl = root.querySelector('[data-image-name]')
 
   var clipPath = root.querySelector('#dsnw-alpha-clip')
@@ -894,6 +962,7 @@ window.__ModuleLoader__.load({
       var key = colorInputs[c].getAttribute('data-color')
       colorInputs[c].value = cfg[key]
     }
+    if (clickHandsInput) clickHandsInput.checked = cfg.clickPressHands !== false
     updateFoldSummaries()
   }
 
@@ -1184,17 +1253,18 @@ window.__ModuleLoader__.load({
     if (pointerPress) return
     var now = nowMs()
     var pressed = []
-    for (var i = 0; i < hands.length; i++) {
-      var hand = hands[i]
-      if (hand.down || hand.seq || hand.keys.size > 0) continue
-      hand.downAt = now
-      setPressed(hand, true)
-      hand.tap = Math.min(1.25, hand.tap + 0.95)
-      hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4
-      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2
-      pressed.push(hand)
+    if (cfg.clickPressHands !== false) {
+      for (var i = 0; i < hands.length; i++) {
+        var hand = hands[i]
+        if (hand.down || hand.seq || hand.keys.size > 0) continue
+        hand.downAt = now
+        setPressed(hand, true)
+        hand.tap = Math.min(1.25, hand.tap + 0.95)
+        hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4
+        hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2
+        pressed.push(hand)
+      }
     }
-    if (!pressed.length) return
     pointerPress = { downAt: now, hands: pressed }
     imageSquash.target = clamp(0.03 * (cfg.imageQBouncePct / 100), 0, 0.14)
     playHit()
@@ -1685,6 +1755,7 @@ window.__ModuleLoader__.load({
       image: fmtSetting(cfg.imageScalePct) + '% · ' + fmtSetting(cfg.imageXPct) + ',' + fmtSetting(cfg.imageYPct),
       hand: '宽' + fmtSetting(cfg.handWidthPct) + ' 高' + fmtSetting(cfg.handAspectPct) + ' 距' + fmtSetting(cfg.handSpreadPct) + ' 轴' + fmtSetting(cfg.handAxisPct) + ' 纵' + fmtSetting(cfg.handCenterYPct),
       sound: '音量 ' + fmtSetting(cfg.volume),
+      behavior: cfg.clickPressHands === false ? '仅图片压缩' : '手部跟随按压',
     }
     for (var key in summaries) {
       if (!Object.prototype.hasOwnProperty.call(summaries, key)) continue
@@ -1707,6 +1778,14 @@ window.__ModuleLoader__.load({
     }
     updateFoldSummaries()
   }
+  if (clickHandsInput) {
+    clickHandsInput.addEventListener('change', function () {
+      cfg.clickPressHands = Boolean(this.checked)
+      saveCfg()
+      syncSettings()
+    })
+  }
+
   function syncMenu() {
     syncSettings()
     if (sizeInput) sizeInput.value = String(cfg.size)
