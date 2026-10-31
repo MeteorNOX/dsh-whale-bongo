@@ -2122,13 +2122,8 @@ function mountWhaleBongoWidget() {
     curX = x
     curY = y
     applyFlip()
-    var targetChanged = lastPlaceCard !== null && lastPlaceCard !== card
-    lastPlaceCard = card
-    var shouldAnimate = !drag && root.style.display !== 'none' &&
-      (animate === true || (animate !== false && targetChanged))
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
     if (key !== lastPlaceKey || root.style.display === 'none') {
-      if (shouldAnimate && root.style.display !== 'none') beginPlaceAnimation()
       lastPlaceKey = key
       root.style.display = ''
       root.style.transform = 'none'
@@ -2201,8 +2196,13 @@ function mountWhaleBongoWidget() {
     curX = x
     curY = y
     applyFlip()
+    var targetChanged = lastPlaceCard !== null && lastPlaceCard !== card
+    lastPlaceCard = card
+    var shouldAnimate = !drag && root.style.display !== 'none' &&
+      (animate === true || (animate !== false && targetChanged))
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
     if (key !== lastPlaceKey || root.style.display === 'none') {
+      if (shouldAnimate && root.style.display !== 'none') beginPlaceAnimation()
       lastPlaceKey = key
       root.style.display = ''
       root.style.transform = 'none'
