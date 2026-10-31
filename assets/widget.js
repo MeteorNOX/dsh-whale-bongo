@@ -321,36 +321,32 @@
     }
     #dsh-whale-bongo.is-drag .dsnw-hitbox { cursor: grabbing; }
     #dsh-whale-bongo.is-anim { transition: left .30s cubic-bezier(.22, .61, .36, 1), top .30s cubic-bezier(.22, .61, .36, 1); }
-    #dsh-whale-bongo .dsnw-snap-guide {
+    #dsh-whale-bongo .dsnw-snap-dots {
       position: fixed;
+      inset: 0;
       z-index: 7;
-      width: 0;
-      border-left: 1px dashed rgba(77,107,254,.45);
-      border-left-color: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 45%, transparent);
       pointer-events: none;
-      opacity: 0;
-      transition: opacity .12s ease;
     }
-    #dsh-whale-bongo .dsnw-snap-guide.is-visible { opacity: 1; }
-    #dsh-whale-bongo .dsnw-snap-guide.is-near {
-      border-left-color: var(--dsw-alias-brand-primary, #4d6bfe);
-    }
-    #dsh-whale-bongo .dsnw-snap-guide::after {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 50%;
+    #dsh-whale-bongo .dsnw-snap-dot {
+      position: fixed;
       width: 8px;
       height: 8px;
       border-radius: 50%;
       transform: translate(-50%, -50%);
       background: var(--dsw-alias-brand-primary, #4d6bfe);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 18%, transparent);
-      transition: width .12s ease, height .12s ease;
+      box-shadow: 0 0 0 3px rgba(77, 107, 254, .18);
+      opacity: .72;
+      transition: width .12s ease, height .12s ease, opacity .12s ease, box-shadow .12s ease;
     }
-    #dsh-whale-bongo .dsnw-snap-guide.is-near::after {
-      width: 12px;
-      height: 12px;
+    #dsh-whale-bongo .dsnw-snap-dot.is-near {
+      width: 14px;
+      height: 14px;
+      opacity: 1;
+      box-shadow: 0 0 0 5px rgba(77, 107, 254, .2);
+    }
+    #dsh-whale-bongo .dsnw-snap-dot.is-locked {
+      opacity: .28;
+      box-shadow: none;
     }
     #dsh-whale-bongo .dsnw-menu-btn {
       position: absolute;
@@ -925,7 +921,7 @@
       '</div>' +
     '</div></div>' +
     '<div class="dsnw-hitbox" title="拖动移动位置；靠近边缘自动吸附"></div>' +
-    '<div class="dsnw-snap-guide" aria-hidden="true"></div>' +
+    '<div class="dsnw-snap-dots" aria-hidden="true"></div>' +
     '<button class="dsnw-menu-btn" type="button" aria-label="打开设置">☰</button>' +
     '<div class="dsnw-menu">' +
       '<div class="dsnw-menu-head"><span>Whale Bongo 手手挂件</span><button class="dsnw-close" type="button" data-close aria-label="关闭">×</button></div>' +
@@ -1037,7 +1033,7 @@
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
-  var snapGuide = root.querySelector('.dsnw-snap-guide')
+  var snapDots = root.querySelector('.dsnw-snap-dots')
   var menuBtn = root.querySelector('.dsnw-menu-btn')
   var menu = root.querySelector('.dsnw-menu')
   var fileInput = root.querySelector('[data-file]')
@@ -1708,7 +1704,7 @@
   }
   function releaseAll() {
     pointerPress = null
-    hideSnapGuide()
+    hideSnapDots()
     imageSquash.target = 0
     activeInputs.clear()
     for (var i = 0; i < hands.length; i++) {
@@ -1829,6 +1825,49 @@
 
   // ------------------------------------------------------------------ 定位
 
+  // 可扩展的吸附点注册表。新增吸附点时，只需要往这里加一个定义：
+  // id 用于持久化，resolve 根据输入框实时矩形返回锚点和挂件目标位置。
+  var SNAP_POINT_DEFS = [
+    {
+      id: 'composer-center',
+      resolve: function (rect, size, imageBottom) {
+        var anchorX = rect.left + rect.width / 2
+        var anchorY = rect.top
+        return {
+          id: 'composer-center',
+          anchorX: anchorX,
+          anchorY: anchorY,
+          x: anchorX - size / 2,
+          y: anchorY - imageBottom,
+        }
+      },
+    },
+  ]
+
+  function resolveSnapPoints(rect, size, imageBottom) {
+    var points = []
+    for (var i = 0; i < SNAP_POINT_DEFS.length; i++) {
+      try {
+        var point = SNAP_POINT_DEFS[i].resolve(rect, size, imageBottom)
+        if (point) points.push(point)
+      } catch (e) {}
+    }
+    return points
+  }
+
+  function findSnapPoint(id, rect, size, imageBottom) {
+    var points = resolveSnapPoints(rect, size, imageBottom)
+    for (var i = 0; i < points.length; i++) {
+      if (points[i].id === id) return points[i]
+    }
+    return null
+  }
+
+  function isPointNear(point, x, y, size, imageBottom, range) {
+    return Math.abs((x + size / 2) - point.anchorX) <= range &&
+      Math.abs((y + imageBottom) - point.anchorY) <= range
+  }
+
   function applyFlip() {
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
@@ -1910,14 +1949,20 @@
     var imageBottom = imageBottomNorm * size
     var snap = cfg.snap
     var x, y
-    if (snap && snap.ref === 'viewport') {
+    if (snap && snap.ref === 'point') {
+      var point = findSnapPoint(snap.id, r, size, imageBottom)
+      if (point) {
+        x = point.x
+        y = point.y
+      } else {
+        x = r.right - size - 8
+        y = r.top - imageBottom
+      }
+    } else if (snap && snap.ref === 'viewport') {
       x = numberOr(snap.x, 24)
       y = numberOr(snap.y, 120)
     } else if (snap && snap.ref === 'card') {
-      if (snap.edge === 'center') {
-        x = snap.x === null || snap.x === undefined ? r.left + r.width / 2 - size / 2 : snap.x
-        y = snap.y === null || snap.y === undefined ? r.top - imageBottom : snap.y
-      } else if (snap.edge === 'bottom') {
+      if (snap.edge === 'bottom') {
         x = snap.x === null || snap.x === undefined ? r.left + 8 : snap.x
         y = r.bottom - imageBottom
       } else if (snap.edge === 'left') {
@@ -1961,7 +2006,7 @@
     }
   }
 
-  function magnetize(x, y) {
+  function magnetize(x, y, suppressPointId) {
     var card = cardEl()
     var size = cfg.size
     var vw = window.innerWidth
@@ -1969,27 +2014,52 @@
     var imageBottom = imageBottomNorm * size
     var SNAP_RANGE = 36
     var CARD_BIAS = 6
-    var candidates = []
+    var r = null
+    var points = []
     if (card) {
-      var r = card.getBoundingClientRect()
-      if (r.width && r.height) {
-        var centerX = r.left + r.width / 2
-        var centerY = r.top - imageBottom
-        var centerDx = (x + size / 2) - centerX
-        var centerDy = y - centerY
-        var centerCandidate = {
-          ref: 'card', edge: 'center',
-          d: Math.sqrt(centerDx * centerDx + centerDy * centerDy),
-          dx: centerDx,
-          dy: centerDy,
-          x: centerX - size / 2,
-          y: centerY,
+      r = card.getBoundingClientRect()
+      if (r.width && r.height) points = resolveSnapPoints(r, size, imageBottom)
+    }
+    function finish() {
+      saveCfg()
+      lastPlaceKey = ''
+      root.classList.add('is-anim')
+      void root.offsetWidth
+      setTimeout(function () { root.classList.remove('is-anim') }, 350)
+      place()
+    }
+    // 从吸附点开始拖动：本次手势不再吸附到点；拖回原点也不重新吸附。
+    if (suppressPointId) {
+      var nearPoint = false
+      for (var pi = 0; pi < points.length; pi++) {
+        if (isPointNear(points[pi], x, y, size, imageBottom, SNAP_RANGE)) {
+          nearPoint = true
+          break
         }
-        candidates.push(centerCandidate)
-        candidates.push({ ref: 'card', edge: 'top', d: Math.abs((y + imageBottom) - r.top), x: x })
-        candidates.push({ ref: 'card', edge: 'bottom', d: Math.abs((y + imageBottom) - r.bottom), x: x })
-        candidates.push({ ref: 'card', edge: 'left', d: Math.abs(x - (r.left - size)), y: y })
-        candidates.push({ ref: 'card', edge: 'right', d: Math.abs(x - r.right), y: y })
+      }
+      if (nearPoint) {
+        cfg.snap = { ref: 'viewport', x: x, y: y }
+        finish()
+        return
+      }
+    }
+    var candidates = []
+    if (r && r.width && r.height) {
+      candidates.push({ ref: 'card', edge: 'top', d: Math.abs((y + imageBottom) - r.top), x: x })
+      candidates.push({ ref: 'card', edge: 'bottom', d: Math.abs((y + imageBottom) - r.bottom), x: x })
+      candidates.push({ ref: 'card', edge: 'left', d: Math.abs(x - (r.left - size)), y: y })
+      candidates.push({ ref: 'card', edge: 'right', d: Math.abs(x - r.right), y: y })
+      if (!suppressPointId) {
+        for (var i = 0; i < points.length; i++) {
+          var p = points[i]
+          var dx = (x + size / 2) - p.anchorX
+          var dy = (y + imageBottom) - p.anchorY
+          candidates.push({
+            ref: 'point', id: p.id, edge: 'point',
+            d: Math.sqrt(dx * dx + dy * dy),
+            dx: dx, dy: dy, x: p.x, y: p.y,
+          })
+        }
       }
     }
     candidates.push({ ref: 'viewport', edge: 'left', d: Math.abs(x - 4), x: 4, y: y })
@@ -1998,15 +2068,20 @@
     candidates.push({ ref: 'viewport', edge: 'bottom', d: Math.abs((y + imageBottom) - vh), x: x, y: vh - imageBottom })
     var best = null
     var bestScore = Infinity
-    for (var i = 0; i < candidates.length; i++) {
-      var c = candidates[i]
+    var pointBest = null
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var c = candidates[ci]
+      if (c.ref === 'point' && Math.abs(c.dx) <= SNAP_RANGE && Math.abs(c.dy) <= SNAP_RANGE) {
+        if (!pointBest || c.d < pointBest.d) pointBest = c
+      }
       var score = c.d - (c.ref === 'card' ? CARD_BIAS : 0) - (c.ref === 'viewport' && c.edge === 'bottom' ? 10 : 0)
       if (score < bestScore) { bestScore = score; best = c }
     }
-    var centerNear = Boolean(centerCandidate && Math.abs(centerCandidate.dx) <= SNAP_RANGE && Math.abs(centerCandidate.dy) <= SNAP_RANGE)
-    if (centerNear) best = centerCandidate
-    if (best && (best.d <= SNAP_RANGE || centerNear)) {
-      if (best.ref === 'card') {
+    if (pointBest) best = pointBest
+    if (best && (best.d <= SNAP_RANGE || best === pointBest)) {
+      if (best.ref === 'point') {
+        cfg.snap = { ref: 'point', id: best.id }
+      } else if (best.ref === 'card') {
         cfg.snap = { ref: 'card', edge: best.edge, x: best.x === undefined ? null : best.x, y: best.y === undefined ? null : best.y }
       } else {
         cfg.snap = { ref: 'viewport', x: best.x, y: best.y }
@@ -2014,12 +2089,7 @@
     } else {
       cfg.snap = { ref: 'viewport', x: x, y: y }
     }
-    saveCfg()
-    lastPlaceKey = ''
-    root.classList.add('is-anim')
-    void root.offsetWidth
-    setTimeout(function () { root.classList.remove('is-anim') }, 350)
-    place()
+    finish()
   }
 
   function positionMenu() {
@@ -2562,41 +2632,46 @@
 
   // ------------------------------------------------------------------ 拖动 / 菜单入口
 
-  function hideSnapGuide() {
-    if (!snapGuide) return
-    snapGuide.classList.remove('is-visible', 'is-near')
+  function hideSnapDots() {
+    if (!snapDots) return
+    while (snapDots.firstChild) snapDots.removeChild(snapDots.firstChild)
   }
 
-  function updateSnapGuide() {
-    if (!snapGuide) return
+  function updateSnapDots() {
+    if (!snapDots) return
     if (!drag || !drag.moved) {
-      hideSnapGuide()
+      hideSnapDots()
       return
     }
     var card = cardEl()
     if (!card) {
-      hideSnapGuide()
+      hideSnapDots()
       return
     }
     var rect = card.getBoundingClientRect()
     if (!rect.width || !rect.height) {
-      hideSnapGuide()
+      hideSnapDots()
       return
     }
-    var centerX = rect.left + rect.width / 2
-    snapGuide.style.left = Math.round(centerX) + 'px'
-    snapGuide.style.top = Math.round(rect.top) + 'px'
-    snapGuide.style.height = Math.round(rect.height) + 'px'
-    snapGuide.classList.add('is-visible')
-    var imageBottom = imageBottomNorm * cfg.size
-    snapGuide.classList.toggle('is-near',
-      Math.abs((curX + cfg.size / 2) - centerX) <= 36 &&
-      Math.abs((curY + imageBottom) - rect.top) <= 36)
+    var size = cfg.size
+    var imageBottom = imageBottomNorm * size
+    var points = resolveSnapPoints(rect, size, imageBottom)
+    hideSnapDots()
+    for (var i = 0; i < points.length; i++) {
+      var point = points[i]
+      var dot = document.createElement('span')
+      dot.className = 'dsnw-snap-dot'
+      dot.style.left = Math.round(point.anchorX) + 'px'
+      dot.style.top = Math.round(point.anchorY) + 'px'
+      if (isPointNear(point, curX, curY, size, imageBottom, 36)) dot.classList.add('is-near')
+      if (drag.fromSnapPoint === point.id) dot.classList.add('is-locked')
+      snapDots.appendChild(dot)
+    }
   }
 
   function onHitPointerDown(event) {
     if (event.button !== 0) return
-    hideSnapGuide()
+    hideSnapDots()
     root.classList.remove('is-anim')
     drag = {
       id: event.pointerId,
@@ -2605,6 +2680,7 @@
       ox: curX,
       oy: curY,
       moved: false,
+      fromSnapPoint: cfg.snap && cfg.snap.ref === 'point' ? cfg.snap.id : null,
     }
     try { hitbox.setPointerCapture(event.pointerId) } catch (e) {}
     event.preventDefault()
@@ -2629,17 +2705,18 @@
     root.style.transform = 'none'
     root.style.left = curX.toFixed(2) + 'px'
     root.style.top = curY.toFixed(2) + 'px'
-    updateSnapGuide()
+    updateSnapDots()
   }
   function onHitPointerUp(event) {
     if (!drag || (event && event.pointerId !== drag.id)) return
     var moved = drag.moved
+    var fromSnapPoint = drag.fromSnapPoint
     drag = null
-    hideSnapGuide()
+    hideSnapDots()
     root.classList.remove('is-drag')
     try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
     if (moved) {
-      magnetize(curX, curY)
+      magnetize(curX, curY, fromSnapPoint)
       syncMenu()
     } else {
       endPointerPress()
