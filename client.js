@@ -384,7 +384,7 @@ function mountWhaleBongoWidget() {
       touch-action: none;
     }
     #dsh-whale-bongo.is-drag .dsnw-hitbox { cursor: grabbing; }
-    #dsh-whale-bongo.is-anim { transition: left .30s cubic-bezier(.22, .61, .36, 1), top .30s cubic-bezier(.22, .61, .36, 1); }
+    #dsh-whale-bongo.is-anim { transition: left .38s cubic-bezier(.2, .85, .3, 1.08), top .38s cubic-bezier(.2, .85, .3, 1.08); }
     #dsh-whale-bongo .dsnw-snap-dots {
       position: fixed;
       inset: 0;
@@ -1457,6 +1457,9 @@ function mountWhaleBongoWidget() {
   var curX = 0
   var curY = 0
   var lastPlaceKey = ''
+  var lastPlaceCard = null
+  var pendingPlaceAnimate = false
+  var placeAnimTimer = 0
   var lastDiagPlace = ''
   var drag = null
   var pointerPress = null
@@ -2060,16 +2063,35 @@ function mountWhaleBongoWidget() {
     if (!input) return null
     return input.closest('form') || input.parentElement
   }
-  function schedulePlace() {
+  function beginPlaceAnimation() {
+    if (!root || root.style.display === 'none') return
+    root.classList.add('is-anim')
+    void root.offsetWidth
+    if (placeAnimTimer) {
+      try { window.clearTimeout(placeAnimTimer) } catch (e) {}
+      placeAnimTimer = 0
+    }
+    placeAnimTimer = later(function () {
+      placeAnimTimer = 0
+      root.classList.remove('is-anim')
+    }, 380)
+  }
+
+  function schedulePlace(animate) {
     if (widgetDisposed) return
+    if (animate !== false) pendingPlaceAnimate = true
     if (document.visibilityState !== 'visible') {
-      place()
+      var immediateAnimate = pendingPlaceAnimate
+      pendingPlaceAnimate = false
+      place(immediateAnimate)
       return
     }
     if (!placeFrame) {
       placeFrame = window.requestAnimationFrame(function () {
         placeFrame = 0
-        place()
+        var nextAnimate = pendingPlaceAnimate
+        pendingPlaceAnimate = false
+        place(nextAnimate)
       })
     }
   }
@@ -2094,6 +2116,7 @@ function mountWhaleBongoWidget() {
     releaseAll()
   }
   function placeFallback() {
+    lastPlaceCard = null
     var size = cfg.size
     var vw = window.innerWidth
     var vh = window.innerHeight
@@ -2111,8 +2134,13 @@ function mountWhaleBongoWidget() {
     curX = x
     curY = y
     applyFlip()
+    var targetChanged = lastPlaceCard !== null && lastPlaceCard !== card
+    lastPlaceCard = card
+    var shouldAnimate = !drag && root.style.display !== 'none' &&
+      (animate === true || (animate !== false && targetChanged))
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
     if (key !== lastPlaceKey || root.style.display === 'none') {
+      if (shouldAnimate && root.style.display !== 'none') beginPlaceAnimation()
       lastPlaceKey = key
       root.style.display = ''
       root.style.transform = 'none'
@@ -2120,7 +2148,7 @@ function mountWhaleBongoWidget() {
       root.style.top = y.toFixed(2) + 'px'
     }
   }
-  function place() {
+  function place(animate) {
     if (widgetDisposed) return
     var card = cardEl()
     if (!card) {
@@ -2223,10 +2251,7 @@ function mountWhaleBongoWidget() {
     function finish() {
       saveCfg()
       lastPlaceKey = ''
-      root.classList.add('is-anim')
-      void root.offsetWidth
-      later(function () { root.classList.remove('is-anim') }, 350)
-      place()
+      place(true)
     }
     // 从吸附点开始拖动：本次手势不再吸附到点；拖回原点也不重新吸附。
     if (suppressPointId) {
@@ -3219,12 +3244,12 @@ function mountWhaleBongoWidget() {
             roCard = card
           } catch (e) {}
         }
-        place()
+        place(true)
       })
       try { ro.observe(document.documentElement) } catch (e) {}
     }
     on(window, 'resize', schedulePlace)
-    on(window, 'scroll', schedulePlace, true)
+    on(window, 'scroll', function () { schedulePlace(false) }, true)
     if (window.MutationObserver) {
       try {
         mo = new MutationObserver(schedulePlace)
