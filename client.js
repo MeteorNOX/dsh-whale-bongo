@@ -2218,6 +2218,38 @@ function mountWhaleBongoWidget() {
     }
   }
 
+  function rememberCardRect(card, rect) {
+    lastProbeCard = card
+    lastProbeLeft = rect.left
+    lastProbeTop = rect.top
+    lastProbeWidth = rect.width
+    lastProbeHeight = rect.height
+  }
+
+  function probeCardPosition(now) {
+    if (widgetDisposed || drag) return
+    if (now < scrollActiveUntil) return
+    if (now - lastProbeAt < 50) return
+    lastProbeAt = now
+    var card = cardEl()
+    if (!card) {
+      lastProbeCard = null
+      return
+    }
+    var rect = card.getBoundingClientRect()
+    if (!rect.width || !rect.height) {
+      lastProbeCard = null
+      return
+    }
+    var changed = card !== lastProbeCard ||
+      Math.abs(rect.left - lastProbeLeft) > 0.75 ||
+      Math.abs(rect.top - lastProbeTop) > 0.75 ||
+      Math.abs(rect.width - lastProbeWidth) > 0.75 ||
+      Math.abs(rect.height - lastProbeHeight) > 0.75
+    rememberCardRect(card, rect)
+    if (changed) schedulePlace(true)
+  }
+
   function schedulePlace(animate) {
     if (widgetDisposed) return
     if (animate !== false) pendingPlaceAnimate = true
