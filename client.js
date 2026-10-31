@@ -306,6 +306,20 @@ function mountWhaleBongoWidget() {
       pointer-events: none;
       filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .18));
     }
+    #dsh-whale-bongo .dsnw-reveal-shell {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 100%;
+      pointer-events: none;
+    }
+    #dsh-whale-bongo .dsnw-reveal-shell.is-revealing {
+      animation: dsnw-reveal .5s cubic-bezier(.2, .8, .3, 1.08) both;
+    }
+    @keyframes dsnw-reveal {
+      0% { opacity: 0; transform: translateY(8px) scale(.9); }
+      65% { opacity: 1; transform: translateY(-1.5px) scale(1.018); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
     #dsh-whale-bongo .dsnw-move-shell {
       position: absolute;
       inset: 0;
@@ -965,6 +979,7 @@ function mountWhaleBongoWidget() {
     }
     @media (prefers-reduced-motion: reduce) {
       #dsh-whale-bongo .dsnw-trail { display: none; }
+      #dsh-whale-bongo .dsnw-reveal-shell.is-revealing { animation: none; }
     }
   `
 
@@ -977,7 +992,7 @@ function mountWhaleBongoWidget() {
     '<svg class="dsnw-clip-defs" width="0" height="0" aria-hidden="true">' +
       '<defs><clipPath id="dsnw-alpha-clip" clipPathUnits="objectBoundingBox"></clipPath></defs>' +
     '</svg>' +
-    '<div class="dsnw-move-shell"><div class="dsnw-art"><div class="dsnw-stage">' +
+    '<div class="dsnw-reveal-shell"><div class="dsnw-move-shell"><div class="dsnw-art"><div class="dsnw-stage">' +
       '<div class="dsnw-image-motion"><img class="dsnw-portrait" alt="" draggable="false"></div>' +
       '<div class="dsnw-hand" data-side="left">' +
         '<div class="dsnw-trail dsnw-trail--far"></div>' +
@@ -989,7 +1004,7 @@ function mountWhaleBongoWidget() {
         '<div class="dsnw-trail dsnw-trail--near"></div>' +
         '<div class="dsnw-motion"><div class="dsnw-ball"></div></div>' +
       '</div>' +
-    '</div></div></div>' +
+    '</div></div></div></div>' +
     '<div class="dsnw-hitbox" title="拖动移动位置；靠近边缘自动吸附"></div>' +
     '<div class="dsnw-snap-dots" aria-hidden="true"></div>' +
     '<button class="dsnw-menu-btn" type="button" aria-label="打开设置">☰</button>' +
@@ -1109,6 +1124,7 @@ function mountWhaleBongoWidget() {
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
+  var revealShell = root.querySelector('.dsnw-reveal-shell')
   var moveShell = root.querySelector('.dsnw-move-shell')
   var snapDots = root.querySelector('.dsnw-snap-dots')
   var menuBtn = root.querySelector('.dsnw-menu-btn')
@@ -1466,6 +1482,8 @@ function mountWhaleBongoWidget() {
   var lastPlaceKey = ''
   var lastPlaceCard = null
   var pendingPlaceAnimate = false
+  var hasShownWidget = false
+  var initialRevealTimer = 0
   var springAnchorX = 0
   var springAnchorY = 0
   var springVX = 0
@@ -2295,6 +2313,8 @@ function mountWhaleBongoWidget() {
     releaseAll()
   }
   function placeFallback() {
+    // 首次定位前没有卡片时保持隐藏，避免先在右下角闪现。
+    if (!hasShownWidget) return
     lastPlaceCard = null
     var size = cfg.size
     var vw = window.innerWidth
@@ -2390,10 +2410,36 @@ function mountWhaleBongoWidget() {
     curY = y
     applyFlip()
     lastPlaceCard = card
-    var wasVisible = root.style.display !== 'none'
-    // 默认对所有可见位置变化走弹簧，只有拖动、滚动和首次挂载才立即定位。
-    var shouldAnimate = !drag && wasVisible && animate !== false
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
+    if (!hasShownWidget) {
+      // 等待布局稳定后再首次出现，避免：右下角 -> 输入框 -> 上次位置。
+      lastPlaceKey = key
+      if (initialRevealTimer) {
+        try { window.clearTimeout(initialRevealTimer) } catch (e) {}
+        initialRevealTimer = 0
+      }
+      initialRevealTimer = later(function () {
+        initialRevealTimer = 0
+        if (widgetDisposed) return
+        var readyCard = cardEl()
+        if (!readyCard) return
+        var readyRect = readyCard.getBoundingClientRect()
+        if (!readyRect.width || !readyRect.height) return
+        hasShownWidget = true
+        lastPlaceKey = ''
+        place(false)
+        if (revealShell) {
+          revealShell.classList.remove('is-revealing')
+          void revealShell.offsetWidth
+          revealShell.classList.add('is-revealing')
+          later(function () { revealShell.classList.remove('is-revealing') }, 650)
+        }
+      }, 140)
+      return
+    }
+    var wasVisible = root.style.display !== 'none'
+    // 默认对所有可见位置变化走弹簧。
+    var shouldAnimate = !drag && wasVisible && animate !== false
     if (key !== lastPlaceKey || !wasVisible) {
       lastPlaceKey = key
       root.style.display = ''
