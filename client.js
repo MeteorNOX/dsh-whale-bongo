@@ -1276,6 +1276,7 @@ window.__ModuleLoader__.load({
 
   var menuOpen = false
   var activeSelect = null
+  var MENU_SAFE_TOP = 56
   var menuLeft = null
   var menuTop = null
   var curX = 0
@@ -1899,11 +1900,14 @@ window.__ModuleLoader__.load({
     menu.style.bottom = 'auto'
     var vw = window.innerWidth
     var vh = window.innerHeight
+    var safeTop = MENU_SAFE_TOP
+    var maxH = Math.min(560, Math.max(160, vh - safeTop - 8))
+    menu.style.maxHeight = maxH + 'px'
     var mw = menu.offsetWidth
     var mh = menu.offsetHeight
     if (menuLeft !== null && menuTop !== null) {
       var ml = clamp(Math.round(menuLeft), 4, Math.max(4, vw - 4 - mw))
-      var mt = clamp(Math.round(menuTop), 4, Math.max(4, vh - 4 - mh))
+      var mt = clamp(Math.round(menuTop), safeTop, Math.max(safeTop, vh - 4 - mh))
       menuLeft = ml
       menuTop = mt
       menu.style.left = ml + 'px'
@@ -1914,7 +1918,7 @@ window.__ModuleLoader__.load({
     var left = curX + cfg.size + 6
     if (left + mw > vw - 8) left = curX - mw - 6
     left = clamp(Math.round(left), 8, Math.max(8, vw - 8 - mw))
-    var top = clamp(Math.round(curY + cfg.size - mh), 8, Math.max(8, vh - 8 - mh))
+    var top = clamp(Math.round(curY + cfg.size - mh), safeTop, Math.max(safeTop, vh - 8 - mh))
     menu.style.left = left + 'px'
     menu.style.top = top + 'px'
     menuLeft = left
@@ -2072,6 +2076,7 @@ window.__ModuleLoader__.load({
     var vw = window.innerWidth
     var vh = window.innerHeight
     var margin = 8
+    var safeTop = MENU_SAFE_TOP
     var gap = 6
     var width = Math.max(180, Math.round(rect.width))
     popover.style.width = width + 'px'
@@ -2079,11 +2084,12 @@ window.__ModuleLoader__.load({
     var left = clamp(rect.left, margin, Math.max(margin, vw - margin - width))
     var below = rect.bottom + gap
     var top = below
-    if (below + height > vh - margin && rect.top - gap - height >= margin) {
+    if (below + height > vh - margin && rect.top - gap - height >= safeTop) {
       top = rect.top - gap - height
     } else if (below + height > vh - margin) {
-      top = Math.max(margin, vh - margin - height)
+      top = Math.max(safeTop, vh - margin - height)
     }
+    top = Math.max(safeTop, top)
     popover.style.left = Math.round(left) + 'px'
     popover.style.top = Math.round(top) + 'px'
   }
@@ -2551,7 +2557,7 @@ window.__ModuleLoader__.load({
       var vw = window.innerWidth
       var vh = window.innerHeight
       var left = clamp(Math.round(menuDrag.left + dx), 4, Math.max(4, vw - 4 - mw))
-      var top = clamp(Math.round(menuDrag.top + dy), 4, Math.max(4, vh - 4 - mh))
+      var top = clamp(Math.round(menuDrag.top + dy), MENU_SAFE_TOP, Math.max(MENU_SAFE_TOP, vh - 4 - mh))
       menuLeft = left
       menuTop = top
       menu.style.left = left + 'px'
