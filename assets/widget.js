@@ -97,7 +97,7 @@
     clickPressMode: 'squash',
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
-    volume: 60,
+    volume: 15,
     imageName: DEFAULT_IMAGE_NAME,
   }
 
@@ -168,7 +168,7 @@
     delete out.clickPressHands
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
-    out.volume = clamp(numberOr(out.volume, 60), 0, 100)
+    out.volume = clamp(numberOr(out.volume, 15), 0, 100)
     out.imageName = typeof out.imageName === 'string' && out.imageName
       ? out.imageName.slice(0, 100)
       : DEFAULT_IMAGE_NAME
@@ -944,7 +944,7 @@
     { key: 'handSpreadPct', group: 'hand', label: '两手间距', min: 10, max: 40, step: 0.5, def: 35 },
     { key: 'handAxisPct', group: 'hand', label: '对称轴位置', min: 30, max: 75, step: 0.5, def: 41 },
     { key: 'handCenterYPct', group: 'hand', label: '垂直位置', min: 0, max: 120, step: 0.1, def: 77.5 },
-    { key: 'volume', group: 'sound', label: '音量', min: 0, max: 100, step: 1, def: 60 },
+    { key: 'volume', group: 'sound', label: '音量', min: 0, max: 100, step: 1, def: 15 },
   ]
   var settingInputs = {}
   var settingOutputs = {}
@@ -952,6 +952,11 @@
   function fmtSetting(value) {
     var n = Math.round(Number(value) * 10) / 10
     return Number.isInteger(n) ? String(n) : n.toFixed(1)
+  }
+
+  function formatSetting(item, value) {
+    if (item.key === 'volume' && Number(value) === 0) return '关'
+    return fmtSetting(value) + (item.unit || '')
   }
 
   function buildSettingRows(list, group) {
@@ -965,7 +970,7 @@
           '<div class="dsnw-setting dsnw-setting--inline">' +
             '<label for="dsnw-set-' + item.key + '">' + item.label + '</label>' +
             '<input id="dsnw-set-' + item.key + '" type="range" data-setting="' + item.key + '" min="' + item.min + '" max="' + item.max + '" step="' + item.step + '" value="' + cfg[item.key] + '">' +
-            '<span class="dsnw-setting-value"><output data-output="' + item.key + '">' + fmtSetting(cfg[item.key]) + (item.unit || '') + '</output>' +
+            '<span class="dsnw-setting-value"><output data-output="' + item.key + '">' + formatSetting(item, cfg[item.key]) + '</output>' +
             '<button type="button" data-reset-setting="' + item.key + '" title="恢复默认值">↺</button></span>' +
           '</div>'
       } else {
@@ -973,7 +978,7 @@
           '<div class="dsnw-setting">' +
             '<div class="dsnw-setting-top">' +
               '<label for="dsnw-set-' + item.key + '">' + item.label + '</label>' +
-              '<span class="dsnw-setting-value"><output data-output="' + item.key + '">' + fmtSetting(cfg[item.key]) + (item.unit || '') + '</output>' +
+              '<span class="dsnw-setting-value"><output data-output="' + item.key + '">' + formatSetting(item, cfg[item.key]) + '</output>' +
               '<button type="button" data-reset-setting="' + item.key + '" title="恢复默认值">↺</button></span>' +
             '</div>' +
             '<input id="dsnw-set-' + item.key + '" type="range" data-setting="' + item.key + '" min="' + item.min + '" max="' + item.max + '" step="' + item.step + '" value="' + cfg[item.key] + '">' +
@@ -1033,7 +1038,7 @@
       var input = settingInputs[item.key]
       var output = settingOutputs[item.key]
       if (input) input.value = String(cfg[item.key])
-      if (output) output.textContent = fmtSetting(cfg[item.key]) + (item.unit || '')
+      if (output) output.textContent = formatSetting(item, cfg[item.key])
     }
     for (var c = 0; c < colorInputs.length; c++) {
       var key = colorInputs[c].getAttribute('data-color')
@@ -1858,7 +1863,7 @@
     var summaries = {
       image: fmtSetting(cfg.imageScalePct) + '% · ' + fmtSetting(cfg.imageXPct) + ',' + fmtSetting(cfg.imageYPct),
       hand: '宽' + fmtSetting(cfg.handWidthPct) + ' 高' + fmtSetting(cfg.handAspectPct) + ' 距' + fmtSetting(cfg.handSpreadPct) + ' 轴' + fmtSetting(cfg.handAxisPct) + ' 纵' + fmtSetting(cfg.handCenterYPct),
-      sound: '音量 ' + fmtSetting(cfg.volume),
+      sound: '音量 ' + (Number(cfg.volume) === 0 ? '关' : fmtSetting(cfg.volume)),
       behavior: cfg.clickPressMode === 'none' ? '手部不跟随' : (cfg.clickPressMode === 'squash' ? '手部变扁' : '手部跟随下压'),
     }
     for (var key in summaries) {
