@@ -15,7 +15,7 @@ const BASE = '/dsh-whale-bongo'
 const WIDGET_PATH = BASE + '/widget.js'
 const PORTRAIT_PATH = BASE + '/portrait.png'
 const KEY_ANGLES_PATH = BASE + '/key-angles.json'
-const VERSION = '0.1.0'
+const VERSION = '0.2.0'
 
 const diag = {
   startedAt: Date.now(),

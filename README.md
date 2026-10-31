@@ -2,7 +2,7 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>dsh-bongo-fish</code> 的重置版本 · Q 弹手感的 DSH 打字挂件</p>
+  <p><code>v0.2.0</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
@@ -10,45 +10,7 @@
 > 不是官方分支，也不代表原作者发布。
 
 > [!WARNING]
-> **npm 包暂未发布。** 作者 npm 账号因安全问题暂时冻结，预计 **2026-11-03** 解封后上传。  
-> 在此之前，README 中“插件管理器输入 `dsh-whale-bongo`”和 `dsh plugin ... add dsh-whale-bongo@0.1.0` 都**不可用**；请使用 [GitHub Release](https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.1.0) 的 zip/tgz，或本地目录安装。
-
-## 版本选择
-
-两款挂件面向不同的使用偏好，可以按自己的习惯选择：
-
-<table>
-  <thead>
-    <tr>
-      <th align="left"></th>
-      <th align="left">原版 <a href="https://github.com/YUsaltyfish/dsh-bongo-fish"><code>dsh-bongo-fish</code></a></th>
-      <th align="left">本版 <code>dsh-whale-bongo</code></th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>适合的需求</td>
-      <td>正常手/萌圆手两套配置、图片和音效上传、提醒拍手</td>
-      <td>双手按键反馈、图片 Q 弹、手部几何/颜色/轮廓、折叠菜单</td>
-    </tr>
-    <tr>
-      <td>安装</td>
-      <td><a href="https://github.com/YUsaltyfish/dsh-bongo-fish">前往原版仓库</a></td>
-      <td><a href="#安装">安装本版</a></td>
-    </tr>
-    <tr>
-      <td>同时安装</td>
-      <td colspan="2">可以；两个挂件并存，拖开即可</td>
-    </tr>
-  </tbody>
-</table>
-
-主要区别：
-
-- **手部**：原版有正常手/萌圆手两套配置；本版为双手按键的手手，支持手部几何、颜色和轮廓粗细调节。
-- **按压手感**：原版正常手瞬切下沉、萌圆手下压回弹；本版手手按压后回弹。
-- **本版图片 Q 弹**：图片以底边为锚点做 Q 弹。
-- **原版敲击抖动**：原版敲击时有抖动反馈。
+> **npm 包暂未发布。** 作者 npm 账号目前仍处于冻结状态，解封时间未定；请先使用 GitHub Release 的 zip/tgz，或直接安装本地目录。
 
 ## 目录
 
@@ -67,22 +29,61 @@
 
 ---
 
+## 版本选择
+
+两款挂件面向不同的使用偏好，可以按自己的习惯选择：
+
+<table>
+  <thead>
+    <tr>
+      <th align="left"></th>
+      <th align="left">原版 <a href="https://github.com/YUsaltyfish/dsh-bongo-fish"><code>dsh-bongo-fish</code></a></th>
+      <th align="left">本版 <code>dsh-whale-bongo</code></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>适合的需求</td>
+      <td>正常手/萌圆手两套配置、图片和音效上传、提醒拍手</td>
+      <td>双手按键反馈、图片 Q 弹、打字角度、手部几何/颜色/轮廓</td>
+    </tr>
+    <tr>
+      <td>安装</td>
+      <td><a href="https://github.com/YUsaltyfish/dsh-bongo-fish">前往原版仓库</a></td>
+      <td><a href="#安装">安装本版</a></td>
+    </tr>
+    <tr>
+      <td>同时安装</td>
+      <td colspan="2">可以；两个挂件并存，拖开即可</td>
+    </tr>
+  </tbody>
+</table>
+
+主要区别：
+
+- **手部**：原版有正常手/萌圆手两套配置；本版为双手按键的手手，支持手部几何、颜色和轮廓粗细调节。
+- **按压手感**：原版正常手瞬切下沉、萌圆手下压回弹；本版手手按压后回弹，并提供鼠标按压行为选项。
+- **原版敲击抖动**：原版敲击键盘时插件有抖动反馈。
+
+---
+
 ## 这是什么
 
 `dsh-whale-bongo` 是一个 **QQ 弹弹的类 bongo 手手挂件**，是 [`dsh-bongo-fish`](https://github.com/YUsaltyfish/dsh-bongo-fish) 的重置版本。
 
-原版 [`dsh-bongo-fish`](https://github.com/YUsaltyfish/dsh-bongo-fish) 是一个 bongo cat 风格的 DSH 打字挂件，强调跟随敲击节奏互动的原味手感。本版参考它的注入方式与交互思路，重新实现了双手动作、图片回弹和设置系统，采用偏 Q 弹、手部按压表现明显的方向，并提供图片、手部、颜色、音效等设置。两款挂件侧重不同，按喜好选择即可。
+原版 [`dsh-bongo-fish`](https://github.com/YUsaltyfish/dsh-bongo-fish) 是一个 bongo cat 风格的 DSH 打字挂件，强调跟随敲击节奏互动的原味手感。本版参考它的注入方式与交互思路，重新实现了双手动作、图片回弹和设置系统，采用偏 Q 弹、手部按压表现明显的方向。
 
 它浮在 DSH 输入框旁：
 
 - 默认磁吸在输入框右上方；
 - 每敲一下键盘，手手随之按下；
-- 支持自定义图片、手手颜色、音效和挂件大小；
+- 支持自定义图片、手手颜色、音效、挂件大小；
+- 支持水平自动翻转；
 - 透明区域点击/拖动直接穿透到 DSH。
 
 本仓库不是原项目的官方分支，也不代表原作者发布。
 
-一句话：**原版偏原味节奏，本版偏 Q 弹与手部表现；按习惯选择，也可以两个都装。**
+一句话：**原版偏原味节奏，本版偏 Q 弹、手部表现和可调角度；按习惯选择，也可以两个都装。**
 
 ---
 
@@ -91,45 +92,24 @@
 | | |
 |:--|:--|
 | **双手按键反馈** | 两只手随敲键按下。 |
-| **鼠标点击按压** | 点击角色图片区域，双手同时按下，图片保持压扁；松开才回弹。开始拖动时会取消按压。 |
+| **鼠标点击按压** | 点击角色图片区域，双手按下、图片压扁；按住保持，松开回弹。 |
 | **同键同手** | 同一按键保持同一只手，不同按键交替左右手。 |
-| **图片 Q 弹** | 以图片底边为锚点压扁回弹，强度 0–10（默认 5，对应旧版的 250）；回弹时不裁左右，投影完整。 |
+| **图片 Q 弹** | 以图片底边为锚点压扁回弹，强度 0–10；回弹时不裁左右，投影完整。 |
+| **打字角度** | 随机角度和真实键位两套方向系统，真实键位支持左右手分管。 |
 | **透明穿透** | 按图片 alpha 生成 SVG `clip-path`，只有角色本体接收鼠标，透明区域直接穿透。 |
 | **自由磁吸** | 吸附输入框卡片边缘或客户端底边，靠近底部时优先贴底。 |
-| **完全可调** | 图片、图片缩放/位移、手部几何、颜色、轮廓粗细、音量、大小都能单独调。 |
-| **折叠 + 直显** | 图片、手部、音效默认收起；动效和大小直接显示为滑块。 |
-| **菜单可拖动** | 拖标题栏可临时移动；再次唤出回到挂件旁的固定位置；展开/收起不重新定位。 |
+| **水平翻转** | 自动、始终不翻转、始终翻转；带弹性过渡。 |
+| **菜单安全区** | 菜单不会进入 DSH 标题栏，关闭按钮始终可点。 |
 | **无构建依赖** | 纯 DSH bundle，不需要 `npm install`，不需要前端 build。 |
 
 ---
 
 ## 安装
 
-### 从插件管理器安装
-
-> [!IMPORTANT]
-> npm 尚未发布；当前在插件管理器里直接输入包名可能找不到。请先用下一节的 **GitHub Release** 安装，或使用本地目录安装。
-
-npm 解封后，在 DSH 桌面端「插件 → 添加插件」中输入：
-
-```text
-dsh-whale-bongo
-```
-
-安装或更新后 **完全退出并重开 DSH**。  
-Web / CLI 环境在 npm 发布后也可以：
-
-```bash
-# npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.1.0
-```
-
 ### 从 GitHub Release 安装
 
-在 npm 包发布前，请使用 GitHub Release：
-
-1. 打开 [v0.1.0 Release](https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.1.0)；
-2. 下载 `dsh-whale-bongo-0.1.0-package.zip` 或 `dsh-whale-bongo-0.1.0.tgz`；
+1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.0-package.zip` 或 `dsh-whale-bongo-0.2.0.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
 4. **完全退出并重开 DSH**。
 
@@ -146,6 +126,19 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 4. 安装完成后 **完全退出并重启一次 DSH**；
 5. 打开任意对话页，挂件会出现在输入框右上方。
 
+### npm（暂不可用）
+
+npm 账号仍未解封，以下内容仅作发布后参考：
+
+```text
+dsh-whale-bongo
+```
+
+```bash
+# 仅 npm 发布后可用；当前未发布，会 404
+dsh plugin --profile web add dsh-whale-bongo@0.2.0
+```
+
 > [!TIP]
 > 给其他 AI / 其他 DSH 的安装教程见 [`INSTALL-FOR-AI.md`](INSTALL-FOR-AI.md)，包含 `plugin_manager`、命令行兜底和 health 验证。
 
@@ -158,7 +151,7 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 | 主体图片 | 更换图片、恢复默认、图片大小、水平位置、垂直位置 |
 | 手部 | 内部色、轮廓色、轮廓粗细、宽度、高宽比、间距、对称轴、垂直位置 |
 | 音效 | 按键音量（0 显示「关」） |
-| 行为与动效 | 鼠标按压时：手部跟随下压 / 手部变扁不下压 / 手部不跟随；Q 弹程度；水平翻转（自动 / 始终不翻转 / 始终翻转）；过滤快捷键与修饰键（开关）；打字时角度偏移（关闭 / 随机角度 0–60° / 真实键位(交替按) / 真实键位(左右分管)） |
+| 行为与动效 | Q 弹程度；鼠标按压行为；水平翻转；过滤快捷键与修饰键；打字角度 |
 | 大小 | 挂件尺寸 |
 
 默认值：
@@ -176,6 +169,7 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 图片 Q 弹     5
 鼠标按压      手部变扁，不下压
 翻转          自动
+过滤快捷键    开启
 打字角度      关闭
 角度偏移      30°
 音量          15
@@ -205,13 +199,13 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 ## 卸载与数据清理
 
 优先在 DSH 插件管理器中移除 `dsh-whale-bongo`。  
-Web / CLI 环境：
+Web / CLI 环境在 npm 发布后可执行：
 
 ```bash
 dsh plugin --profile web remove dsh-whale-bongo
 ```
 
-卸载后挂件会停止加载。设置与自定义图片保存在当前浏览器的 localStorage 中；如需彻底清理，可在浏览器站点数据中删除本插件的存储。
+卸载后挂件会停止加载。设置与自定义图片保存在当前浏览器 localStorage 中；如需彻底清理，可在浏览器站点数据中删除本插件的存储。
 
 ---
 
@@ -232,6 +226,23 @@ dsh plugin --profile web remove dsh-whale-bongo
 </details>
 
 <details>
+<summary><strong>真实键位模式没有角度</strong></summary>
+
+1. 检查 `/dsh-whale-bongo/key-angles.json` 是否返回 200；
+2. 如果 404，说明 Host 还是旧版本，需要完全重启 DSH；
+3. 浏览器里只刷新页面不会加载新的 Host 路由。
+
+</details>
+
+<details>
+<summary><strong>菜单关闭按钮点不到 / 菜单进入标题栏</strong></summary>
+
+v0.2.0 已给菜单增加 56px 顶部安全区，并把最大高度限制在安全区下方。  
+如果 DSH 标题栏比 56px 更高，需要按实际高度调整安全区。
+
+</details>
+
+<details>
 <summary><strong>菜单按钮不见了</strong></summary>
 
 菜单按钮默认隐藏，只在鼠标悬浮到**图片**或按钮本身时显示；离开后延迟约 420ms 隐藏。
@@ -242,6 +253,13 @@ dsh plugin --profile web remove dsh-whale-bongo
 <summary><strong>没有声音</strong></summary>
 
 检查菜单「音效 → 音量」是否大于 0；系统音量/浏览器自动播放策略也可能影响首次播放。
+
+</details>
+
+<details>
+<summary><strong>npm 安装失败</strong></summary>
+
+当前 npm 包尚未发布。请使用 GitHub Release 的 zip/tgz，或本地目录安装。
 
 </details>
 
@@ -259,16 +277,16 @@ dsh-whale-bongo/
   index.js              # Host 半：路由、静态资源、注入
   client.js             # 客户端模块入口
   assets/widget.js      # 浏览器半
+  assets/key-angles.json # 真实键位模式的键位横向坐标表
   assets/dsh-whale-bongo-icon.png  # 图片素材（版权归原作者）
   assets/portrait.png   # 图片素材（版权归原作者）
   assets/sounds/        # 音效素材（版权归原作者）+ CC0 许可
-  assets/key-angles.json # 真实位置模式的键位横向坐标表
-
-「真实键位(左右分管)」按键盘横向位置分左右手；中间区域的键（约横向 30%–45%）按上一只手交替。
   icon.png              # 插件列表图标（版权归原作者）
   locale/               # 中英文标题
   LICENSE
   CHANGELOG-0.1.0.md
+  CHANGELOG-0.2.0.md
+  CONTRIBUTORS.md
   .gitignore
   README.md
   INSTALL-FOR-AI.md     # 给其他 AI 的安装教程
@@ -276,7 +294,7 @@ dsh-whale-bongo/
 
 </details>
 
-菜单里的下拉使用可复用的 `.dsnw-select` 组件：`dsnw-select-trigger` 触发器、浮层选项、选中态、键盘操作和点击外部关闭都在同一套样式/逻辑中，后续新增下拉设置时可以直接复用。
+菜单里的下拉使用可复用的 `.dsnw-select` 组件：触发器、浮层选项、选中态、键盘操作和点击外部关闭都在同一套样式/逻辑中，后续新增下拉设置时可以直接复用。
 
 ---
 
