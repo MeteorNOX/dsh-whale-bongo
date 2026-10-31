@@ -1466,6 +1466,8 @@ function mountWhaleBongoWidget() {
   var lastPlaceKey = ''
   var lastPlaceCard = null
   var pendingPlaceAnimate = false
+  var hasShownWidget = false
+  var initialRevealTimer = 0
   var springAnchorX = 0
   var springAnchorY = 0
   var springVX = 0
@@ -2295,6 +2297,8 @@ function mountWhaleBongoWidget() {
     releaseAll()
   }
   function placeFallback() {
+    // 首次定位前没有卡片时保持隐藏，避免先在右下角闪现。
+    if (!hasShownWidget) return
     lastPlaceCard = null
     var size = cfg.size
     var vw = window.innerWidth
@@ -2390,10 +2394,30 @@ function mountWhaleBongoWidget() {
     curY = y
     applyFlip()
     lastPlaceCard = card
-    var wasVisible = root.style.display !== 'none'
-    // 默认对所有可见位置变化走弹簧，只有拖动、滚动和首次挂载才立即定位。
-    var shouldAnimate = !drag && wasVisible && animate !== false
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
+    if (!hasShownWidget) {
+      // 等待布局稳定后再首次出现，避免：右下角 -> 输入框 -> 上次位置。
+      lastPlaceKey = key
+      if (initialRevealTimer) {
+        try { window.clearTimeout(initialRevealTimer) } catch (e) {}
+        initialRevealTimer = 0
+      }
+      initialRevealTimer = later(function () {
+        initialRevealTimer = 0
+        if (widgetDisposed) return
+        var readyCard = cardEl()
+        if (!readyCard) return
+        var readyRect = readyCard.getBoundingClientRect()
+        if (!readyRect.width || !readyRect.height) return
+        hasShownWidget = true
+        lastPlaceKey = ''
+        place(false)
+      }, 140)
+      return
+    }
+    var wasVisible = root.style.display !== 'none'
+    // 默认对所有可见位置变化走弹簧。
+    var shouldAnimate = !drag && wasVisible && animate !== false
     if (key !== lastPlaceKey || !wasVisible) {
       lastPlaceKey = key
       root.style.display = ''
