@@ -113,6 +113,7 @@ window.__ModuleLoader__.load({
     handOutlinePct: 100,
     clickPressMode: 'squash',
     flipMode: 'auto',
+    flipSplitPct: 50,
     filterShortcutKeys: true,
     typingAngleMode: 'off',
     handTypingAngleDeg: 30,
@@ -187,7 +188,8 @@ window.__ModuleLoader__.load({
     }
     out.clickPressMode = clickMode
     delete out.clickPressHands
-    out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
+    out.flipMode = out.flipMode === 'custom' || out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
+    out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'off'
     delete out.handTypingOffsetPx
@@ -974,11 +976,13 @@ window.__ModuleLoader__.load({
               '</button>' +
               '<div class="dsnw-select-popover" role="listbox" aria-label="水平翻转">' +
                 '<button class="dsnw-select-option" type="button" role="option" data-value="auto"><span class="dsnw-select-check">✓</span><span>自动</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="custom"><span class="dsnw-select-check">✓</span><span>自定义</span></button>' +
                 '<button class="dsnw-select-option" type="button" role="option" data-value="never"><span class="dsnw-select-check">✓</span><span>始终不翻转</span></button>' +
                 '<button class="dsnw-select-option" type="button" role="option" data-value="always"><span class="dsnw-select-check">✓</span><span>始终翻转</span></button>' +
               '</div>' +
             '</div>' +
           '</div>' +
+          '<div data-setting-list="flip"></div>' +
           '<label class="dsnw-toggle-row">' +
             '<span class="dsnw-toggle-label">过滤快捷键与修饰键</span>' +
             '<input type="checkbox" data-filter-shortcuts>' +
@@ -1026,6 +1030,7 @@ window.__ModuleLoader__.load({
   var flipModeSelect = root.querySelector('[data-select="flipMode"]')
   var typingAngleModeSelect = root.querySelector('[data-select="typingAngleMode"]')
   var filterShortcutsInput = root.querySelector('[data-filter-shortcuts]')
+  var flipSettingList = root.querySelector('[data-setting-list="flip"]')
   var menuScroll = root.querySelector('.dsnw-menu-scroll')
   var imageNameEl = root.querySelector('[data-image-name]')
 
@@ -1076,6 +1081,7 @@ window.__ModuleLoader__.load({
     { key: 'imageXPct', group: 'image', label: '水平位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageQBounceLevel', group: 'motion', label: 'Q 弹程度', min: 0, max: 10, step: 0.1, def: 5 },
+    { key: 'flipSplitPct', group: 'flip', label: '分割线位置', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 60, step: 0.5, def: 30, unit: '°' },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
@@ -1136,6 +1142,8 @@ window.__ModuleLoader__.load({
         saveCfg()
         if (key === 'volume') {
           applyVolume()
+        } else if (key === 'flipSplitPct') {
+          applyFlip()
         } else if (key !== 'imageQBounceLevel') {
           applyAll()
         }
@@ -1154,6 +1162,8 @@ window.__ModuleLoader__.load({
         saveCfg()
         if (key === 'volume') {
           applyVolume()
+        } else if (key === 'flipSplitPct') {
+          applyFlip()
         } else if (key !== 'imageQBounceLevel') {
           applyAll()
         }
@@ -1188,6 +1198,7 @@ window.__ModuleLoader__.load({
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
     if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
+    if (flipSettingList) flipSettingList.hidden = cfg.flipMode !== 'custom'
     updateFoldSummaries()
   }
 
@@ -1801,8 +1812,17 @@ window.__ModuleLoader__.load({
 
   function applyFlip() {
     var flipped = cfg.flipMode === 'always'
+    var center = curX + cfg.size / 2
     if (cfg.flipMode === 'auto') {
-      flipped = curX + cfg.size / 2 < window.innerWidth / 2
+      var split = window.innerWidth / 2
+      var card = cardEl()
+      if (card) {
+        var rect = card.getBoundingClientRect()
+        if (rect.width) split = rect.left + rect.width / 2
+      }
+      flipped = center < split
+    } else if (cfg.flipMode === 'custom') {
+      flipped = center < window.innerWidth * (clamp(numberOr(cfg.flipSplitPct, 50), 0, 100) / 100)
     }
     root.classList.toggle('is-flipped', flipped)
   }
@@ -2269,7 +2289,7 @@ window.__ModuleLoader__.load({
   }
   if (flipModeSelect) {
     initSelect(flipModeSelect, function (value) {
-      cfg.flipMode = value === 'never' || value === 'always' ? value : 'auto'
+      cfg.flipMode = value === 'custom' || value === 'never' || value === 'always' ? value : 'auto'
       saveCfg()
       applyFlip()
       syncSettings()
@@ -2723,6 +2743,7 @@ window.__ModuleLoader__.load({
     buildSettingRows(handSettingList, 'hand')
     buildSettingRows(motionSettingList, 'motion')
     buildSettingRows(typingSettingList, 'typing')
+    buildSettingRows(flipSettingList, 'flip')
     buildSettingRows(soundSettingList, 'sound')
     initFolds()
     loadKeyPositions()

@@ -169,6 +169,7 @@ dsh plugin --profile web add dsh-whale-bongo@0.2.0
 图片 Q 弹     5
 鼠标按压      手部变扁，不下压
 翻转          自动
+分割线        50%
 过滤快捷键    开启
 打字角度      关闭
 角度偏移      30°
