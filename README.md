@@ -2,7 +2,7 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>v0.2.1</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
+  <p><code>v0.2.2</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
@@ -114,7 +114,7 @@
 ### 从 GitHub Release 安装
 
 1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
-2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.1-package.zip` 或 `dsh-whale-bongo-0.2.1.tgz`；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.2-package.zip` 或 `dsh-whale-bongo-0.2.2.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
 4. 在插件列表启用；正常情况下挂件会即时出现。若 Host 路由尚未加载，刷新一次页面即可。
 
@@ -141,7 +141,7 @@ dsh-whale-bongo
 
 ```bash
 # 仅 npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.2.1
+dsh plugin --profile web add dsh-whale-bongo@0.2.2
 ```
 
 > [!TIP]
