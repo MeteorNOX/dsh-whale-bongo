@@ -1814,13 +1814,20 @@ window.__ModuleLoader__.load({
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
     if (cfg.flipMode === 'auto') {
-      var split = window.innerWidth / 2
+      var left = 0
+      var width = window.innerWidth
       var card = cardEl()
       if (card) {
         var rect = card.getBoundingClientRect()
-        if (rect.width) split = rect.left + rect.width / 2
+        if (rect.width) {
+          left = rect.left
+          width = rect.width
+        }
       }
-      flipped = center < split
+      var low = left + width * 0.45
+      var high = left + width * 0.55
+      var currentlyFlipped = root.classList.contains('is-flipped')
+      flipped = currentlyFlipped ? center < high : center <= low
     } else if (cfg.flipMode === 'custom') {
       flipped = center < window.innerWidth * (clamp(numberOr(cfg.flipSplitPct, 50), 0, 100) / 100)
     }
@@ -1888,7 +1895,10 @@ window.__ModuleLoader__.load({
       x = numberOr(snap.x, 24)
       y = numberOr(snap.y, 120)
     } else if (snap && snap.ref === 'card') {
-      if (snap.edge === 'bottom') {
+      if (snap.edge === 'center') {
+        x = snap.x === null || snap.x === undefined ? r.left + r.width / 2 - size / 2 : snap.x
+        y = snap.y === null || snap.y === undefined ? r.top - imageBottom : snap.y
+      } else if (snap.edge === 'bottom') {
         x = snap.x === null || snap.x === undefined ? r.left + 8 : snap.x
         y = r.bottom - imageBottom
       } else if (snap.edge === 'left') {
@@ -1944,6 +1954,16 @@ window.__ModuleLoader__.load({
     if (card) {
       var r = card.getBoundingClientRect()
       if (r.width && r.height) {
+        var centerX = r.left + r.width / 2
+        var centerY = r.top - imageBottom
+        var centerDx = (x + size / 2) - centerX
+        var centerDy = y - centerY
+        candidates.push({
+          ref: 'card', edge: 'center',
+          d: Math.sqrt(centerDx * centerDx + centerDy * centerDy),
+          x: centerX - size / 2,
+          y: centerY,
+        })
         candidates.push({ ref: 'card', edge: 'top', d: Math.abs((y + imageBottom) - r.top), x: x })
         candidates.push({ ref: 'card', edge: 'bottom', d: Math.abs((y + imageBottom) - r.bottom), x: x })
         candidates.push({ ref: 'card', edge: 'left', d: Math.abs(x - (r.left - size)), y: y })
