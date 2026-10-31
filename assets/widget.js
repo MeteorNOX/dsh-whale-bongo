@@ -99,7 +99,7 @@
     clickPressMode: 'squash',
     flipMode: 'auto',
     typingAngleMode: 'random',
-    handTypingAngleDeg: 5,
+    handTypingAngleDeg: 30,
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
     volume: 15,
@@ -172,9 +172,9 @@
     out.clickPressMode = clickMode
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
-    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'position' ? out.typingAngleMode : 'random'
+    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'random'
     delete out.handTypingOffsetPx
-    out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 5), 0, 60)
+    out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 30), 0, 60)
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
     out.volume = clamp(numberOr(out.volume, 15), 0, 100)
@@ -919,7 +919,8 @@
               '<div class="dsnw-select-popover" role="listbox" aria-label="打字时手手角度偏移方式">' +
                 '<button class="dsnw-select-option" type="button" role="option" data-value="off"><span class="dsnw-select-check">✓</span><span>关闭</span></button>' +
                 '<button class="dsnw-select-option" type="button" role="option" data-value="random"><span class="dsnw-select-check">✓</span><span>随机角度</span></button>' +
-                '<button class="dsnw-select-option" type="button" role="option" data-value="position"><span class="dsnw-select-check">✓</span><span>真实位置</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="position"><span class="dsnw-select-check">✓</span><span>真实键位(交替按)</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="position-split"><span class="dsnw-select-check">✓</span><span>真实键位(左右分管)</span></button>' +
               '</div>' +
             '</div>' +
           '</div>' +
@@ -998,7 +999,7 @@
     { key: 'imageXPct', group: 'image', label: '水平位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageQBounceLevel', group: 'motion', label: 'Q 弹程度', min: 0, max: 10, step: 0.1, def: 5 },
-    { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 60, step: 0.5, def: 5, unit: '°' },
+    { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 60, step: 0.5, def: 30, unit: '°' },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
     { key: 'handAspectPct', group: 'hand', label: '高度 / 宽度', min: 60, max: 120, step: 1, def: 81 },
@@ -1422,7 +1423,7 @@
   }
 
   function rollTypingAngle(hand) {
-    var maxAngle = clamp(numberOr(cfg.handTypingAngleDeg, 5), 0, 60) * Math.PI / 180
+    var maxAngle = clamp(numberOr(cfg.handTypingAngleDeg, 30), 0, 60) * Math.PI / 180
     hand.randomAngle = (Math.random() * 2 - 1) * maxAngle
     hand.randomActive = maxAngle > 0.0001
   }
@@ -1432,7 +1433,7 @@
       hand.randomActive = false
       return
     }
-    if (cfg.typingAngleMode === 'position') {
+    if (cfg.typingAngleMode === 'position' || cfg.typingAngleMode === 'position-split') {
       hand.randomAngle = realAngleFor(code, hand)
       hand.randomActive = true
       return
@@ -2193,7 +2194,7 @@
   }
   if (typingAngleModeSelect) {
     initSelect(typingAngleModeSelect, function (value) {
-      cfg.typingAngleMode = value === 'off' || value === 'position' ? value : 'random'
+      cfg.typingAngleMode = value === 'off' || value === 'position' || value === 'position-split' ? value : 'random'
       saveCfg()
       if (cfg.typingAngleMode === 'position') loadKeyPositions()
       syncSettings()
@@ -2558,6 +2559,19 @@
   function widgetVisible() {
     return root.style.display !== 'none' && document.visibilityState === 'visible'
   }
+
+  function splitHandForCode(code) {
+    if (!keyPositions) {
+      loadKeyPositions()
+      return lastKeyCode === null ? 0 : 1 - lastHandIndex
+    }
+    var x = keyPositions[code]
+    if (typeof x !== 'number') return lastKeyCode === null ? 0 : 1 - lastHandIndex
+    if (x < 0.30) return 0
+    if (x > 0.45) return 1
+    return lastKeyCode === null ? 0 : 1 - lastHandIndex
+  }
+
   function onKeyDown(event) {
     if (!event.isTrusted) return
     if (!widgetVisible()) return
@@ -2576,6 +2590,7 @@
     if (activeInputs.has(id)) return
     var sameKey = code === lastKeyCode
     var handIndex = lastKeyCode === null ? 0 : (sameKey ? lastHandIndex : 1 - lastHandIndex)
+    if (cfg.typingAngleMode === 'position-split') handIndex = splitHandForCode(code)
     lastKeyCode = code
     lastHandIndex = handIndex
     beginInput(id, hands[handIndex], sameKey, code)
