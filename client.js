@@ -111,6 +111,8 @@ window.__ModuleLoader__.load({
     handOutlinePct: 100,
     clickPressMode: 'squash',
     flipMode: 'auto',
+    handTypingOffsetPx: 4,
+    handTypingAngleDeg: 2,
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
     volume: 15,
@@ -183,6 +185,8 @@ window.__ModuleLoader__.load({
     out.clickPressMode = clickMode
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
+    out.handTypingOffsetPx = clamp(numberOr(out.handTypingOffsetPx, 4), 0, 24)
+    out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 2), 0, 15)
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
     out.volume = clamp(numberOr(out.volume, 15), 0, 100)
@@ -552,6 +556,14 @@ window.__ModuleLoader__.load({
       line-height: 1;
     }
     #dsh-whale-bongo .dsnw-select-option.is-selected .dsnw-select-check { opacity: 1; }
+    #dsh-whale-bongo .dsnw-subhead {
+      margin-top: 12px;
+      padding-top: 9px;
+      border-top: 1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.22));
+      color: var(--dsw-alias-label-secondary, #aaa);
+      font-size: 11px;
+      line-height: 16px;
+    }
     #dsh-whale-bongo .dsnw-fold-body[data-open="1"] {
       background: rgba(77,107,254,.045);
       background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 4.5%, transparent);
@@ -907,6 +919,8 @@ window.__ModuleLoader__.load({
             '</div>' +
           '</div>' +
           '<div data-setting-list="motion"></div>' +
+          '<div class="dsnw-subhead">打字时手手随机偏移量</div>' +
+          '<div data-setting-list="typing"></div>' +
         '</div>' +
       '</div>' +
       '<div class="dsnw-direct" data-direct="size">' +
@@ -937,6 +951,7 @@ window.__ModuleLoader__.load({
   var imageSettingList = root.querySelector('[data-setting-list="image"]')
   var handSettingList = root.querySelector('[data-setting-list="hand"]')
   var motionSettingList = root.querySelector('[data-setting-list="motion"]')
+  var typingSettingList = root.querySelector('[data-setting-list="typing"]')
   var soundSettingList = root.querySelector('[data-setting-list="sound"]')
   var colorInputs = root.querySelectorAll('[data-color]')
 
@@ -979,6 +994,8 @@ window.__ModuleLoader__.load({
     { key: 'imageXPct', group: 'image', label: '水平位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageQBounceLevel', group: 'motion', label: 'Q 弹程度', min: 0, max: 10, step: 0.1, def: 5 },
+    { key: 'handTypingOffsetPx', group: 'typing', label: '水平随机位移', min: 0, max: 24, step: 0.5, def: 4, unit: 'px' },
+    { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 15, step: 0.5, def: 2, unit: '°' },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
     { key: 'handAspectPct', group: 'hand', label: '高度 / 宽度', min: 60, max: 120, step: 1, def: 81 },
@@ -1293,6 +1310,9 @@ window.__ModuleLoader__.load({
       hit: false,
       manualSquash: false,
       manualSquashValue: 0,
+      randomX: 0,
+      randomAngle: 0,
+      randomActive: false,
       tap: 0,
       trailY: 0,
       trailY2: 0,
@@ -1364,6 +1384,15 @@ window.__ModuleLoader__.load({
       'scale(' + (1 + sq * 0.80).toFixed(4) + ',' + (1 - sq * 1.10).toFixed(4) + ')'
   }
 
+
+  function rollHandOffset(hand) {
+    var maxX = clamp(numberOr(cfg.handTypingOffsetPx, 4), 0, 24)
+    var maxAngle = clamp(numberOr(cfg.handTypingAngleDeg, 2), 0, 15) * Math.PI / 180
+    hand.randomX = (Math.random() * 2 - 1) * maxX
+    hand.randomAngle = (Math.random() * 2 - 1) * maxAngle
+    hand.randomActive = maxX > 0.001 || maxAngle > 0.0001
+  }
+
   function applyPress(hand) {
     if (!hand.down) {
       hand.downAt = nowMs()
@@ -1387,6 +1416,7 @@ window.__ModuleLoader__.load({
         var hand = hands[i]
         if (hand.down || hand.seq || hand.keys.size > 0) continue
         hand.manualSquash = false
+        hand.randomActive = false
         hand.tap = 0
         hand.y.target = 0
         if (mode === 'squash') {
@@ -1495,9 +1525,11 @@ window.__ModuleLoader__.load({
     }
   }
   function beginInput(id, hand) {
+    var newPress = hand.keys.size === 0
     activeInputs.set(id, hand)
     hand.keys.add(id)
     clearReleaseTimer(hand)
+    if (newPress) rollHandOffset(hand)
 
     // 只保留原 Demo 的逻辑 3。
     if (hand.seq) return
@@ -1559,6 +1591,14 @@ window.__ModuleLoader__.load({
       var scaleY = 1 - squash * 0.74
       var travel = (hand.y.value + tap * CONFIG.tapDepth) * handSize
       var translateY = Math.min(travel, handBottomLimit)
+      var xShift = 0
+      if (hand.randomActive) {
+        var progress = clamp(hand.y.value / CONFIG.pressDepth, 0, 1)
+        xShift = hand.randomX * progress + Math.tan(hand.randomAngle) * travel
+      }
+      if (hand.el) {
+        hand.el.style.transform = 'translate(-50%,-50%) translate3d(' + xShift.toFixed(2) + 'px,0,0)'
+      }
       if (hand.motion) {
         hand.motion.style.transform =
           'translate3d(0,' + translateY.toFixed(2) + 'px,0) scale(' +
@@ -2519,6 +2559,7 @@ window.__ModuleLoader__.load({
     buildSettingRows(imageSettingList, 'image')
     buildSettingRows(handSettingList, 'hand')
     buildSettingRows(motionSettingList, 'motion')
+    buildSettingRows(typingSettingList, 'typing')
     buildSettingRows(soundSettingList, 'sound')
     initFolds()
     initSound()
