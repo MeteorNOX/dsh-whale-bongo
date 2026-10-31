@@ -2080,11 +2080,16 @@ function mountWhaleBongoWidget() {
     if (!input) return null
     return input.closest('form') || input.parentElement
   }
-  var MOVE_STIFFNESS = 240
-  var MOVE_DAMPING = 22
-  var MOVE_START_VELOCITY = 3.8
-  var SQUASH_STIFFNESS = 260
-  var SQUASH_DAMPING = 17
+  var MOVE_STIFFNESS_BASE = 240
+  var MOVE_STIFFNESS_RANGE = 60
+  var MOVE_DAMPING_BASE = 24
+  var MOVE_DAMPING_RANGE = 16
+  var MOVE_START_BASE = 3.2
+  var MOVE_START_RANGE = 2.0
+
+  function moveBounceRatio() {
+    return clamp(numberOr(cfg.imageQBounceLevel, 5) / 10, 0, 1)
+  }
 
   function setMoveImmediate(x, y) {
     springX = x
@@ -2109,11 +2114,13 @@ function mountWhaleBongoWidget() {
     }
     var dx = x - springX
     var dy = y - springY
+    var q = moveBounceRatio()
+    var startVelocity = MOVE_START_BASE + MOVE_START_RANGE * q
     springTargetX = x
     springTargetY = y
     if (!springActive) {
-      springVX = clamp(dx * MOVE_START_VELOCITY, -1200, 1200)
-      springVY = clamp(dy * MOVE_START_VELOCITY, -1200, 1200)
+      springVX = clamp(dx * startVelocity, -1400, 1400)
+      springVY = clamp(dy * startVelocity, -1400, 1400)
       springActive = true
     }
     moveSquashArmed = true
@@ -2121,11 +2128,14 @@ function mountWhaleBongoWidget() {
 
   function stepMove(dt) {
     if (!dt) return
+    var q = moveBounceRatio()
+    var moveStiffness = MOVE_STIFFNESS_BASE + MOVE_STIFFNESS_RANGE * q
+    var moveDamping = MOVE_DAMPING_BASE - MOVE_DAMPING_RANGE * q
     if (springActive) {
       var errXBefore = springTargetX - springX
       var errYBefore = springTargetY - springY
-      var ax = errXBefore * MOVE_STIFFNESS - springVX * MOVE_DAMPING
-      var ay = errYBefore * MOVE_STIFFNESS - springVY * MOVE_DAMPING
+      var ax = errXBefore * moveStiffness - springVX * moveDamping
+      var ay = errYBefore * moveStiffness - springVY * moveDamping
       springVX += ax * dt
       springVY += ay * dt
       springX += springVX * dt
@@ -2139,7 +2149,7 @@ function mountWhaleBongoWidget() {
       var nearTarget = Math.abs(errXAfter) < 2 && Math.abs(errYAfter) < 2
       if (moveSquashArmed && speed > 40 && (crossed || nearTarget)) {
         moveSquashArmed = false
-        moveSquashV += clamp(speed / 250, 0.25, 1.4)
+        moveSquashV += clamp(speed / (300 - 100 * q), 0.25, 1.0 + 2.4 * q)
       }
 
       var vw = window.innerWidth
@@ -2164,7 +2174,9 @@ function mountWhaleBongoWidget() {
     }
 
     if (moveSquash !== 0 || moveSquashV !== 0) {
-      var sa = -moveSquash * SQUASH_STIFFNESS - moveSquashV * SQUASH_DAMPING
+      var squashStiffness = 240 + 90 * q
+      var squashDamping = 18 - 4 * q
+      var sa = -moveSquash * squashStiffness - moveSquashV * squashDamping
       moveSquashV += sa * dt
       moveSquash += moveSquashV * dt
       if (Math.abs(moveSquash) < 0.001 && Math.abs(moveSquashV) < 0.02) {
@@ -2173,7 +2185,7 @@ function mountWhaleBongoWidget() {
         if (moveShell) moveShell.style.transform = ''
       } else if (moveShell) {
         moveShell.style.transform =
-          'scale(' + (1 + moveSquash * 0.55).toFixed(4) + ',' + (1 - moveSquash).toFixed(4) + ')'
+          'scale(' + (1 + moveSquash * (0.55 + 0.30 * q)).toFixed(4) + ',' + (1 - moveSquash).toFixed(4) + ')'
       }
     }
   }
