@@ -294,6 +294,13 @@ function mountWhaleBongoWidget() {
       pointer-events: none;
       filter: drop-shadow(0 10px 16px rgba(0, 0, 0, .18));
     }
+    #dsh-whale-bongo .dsnw-move-shell {
+      position: absolute;
+      inset: 0;
+      transform-origin: 50% 100%;
+      pointer-events: none;
+      will-change: transform;
+    }
     #dsh-whale-bongo .dsnw-stage {
       position: absolute;
       inset: 0;
@@ -372,7 +379,6 @@ function mountWhaleBongoWidget() {
       touch-action: none;
     }
     #dsh-whale-bongo.is-drag .dsnw-hitbox { cursor: grabbing; }
-    #dsh-whale-bongo.is-anim { transition: left .38s cubic-bezier(.2, .85, .3, 1.08), top .38s cubic-bezier(.2, .85, .3, 1.08); }
     #dsh-whale-bongo .dsnw-snap-dots {
       position: fixed;
       inset: 0;
@@ -959,7 +965,7 @@ function mountWhaleBongoWidget() {
     '<svg class="dsnw-clip-defs" width="0" height="0" aria-hidden="true">' +
       '<defs><clipPath id="dsnw-alpha-clip" clipPathUnits="objectBoundingBox"></clipPath></defs>' +
     '</svg>' +
-    '<div class="dsnw-art"><div class="dsnw-stage">' +
+    '<div class="dsnw-move-shell"><div class="dsnw-art"><div class="dsnw-stage">' +
       '<div class="dsnw-image-motion"><img class="dsnw-portrait" alt="" draggable="false"></div>' +
       '<div class="dsnw-hand" data-side="left">' +
         '<div class="dsnw-trail dsnw-trail--far"></div>' +
@@ -971,7 +977,7 @@ function mountWhaleBongoWidget() {
         '<div class="dsnw-trail dsnw-trail--near"></div>' +
         '<div class="dsnw-motion"><div class="dsnw-ball"></div></div>' +
       '</div>' +
-    '</div></div>' +
+    '</div></div></div>' +
     '<div class="dsnw-hitbox" title="拖动移动位置；靠近边缘自动吸附"></div>' +
     '<div class="dsnw-snap-dots" aria-hidden="true"></div>' +
     '<button class="dsnw-menu-btn" type="button" aria-label="打开设置">☰</button>' +
@@ -1091,6 +1097,7 @@ function mountWhaleBongoWidget() {
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
+  var moveShell = root.querySelector('.dsnw-move-shell')
   var snapDots = root.querySelector('.dsnw-snap-dots')
   var menuBtn = root.querySelector('.dsnw-menu-btn')
   var menu = root.querySelector('.dsnw-menu')
@@ -1447,7 +1454,16 @@ function mountWhaleBongoWidget() {
   var lastPlaceKey = ''
   var lastPlaceCard = null
   var pendingPlaceAnimate = false
-  var placeAnimTimer = 0
+  var springX = 0
+  var springY = 0
+  var springVX = 0
+  var springVY = 0
+  var springTargetX = 0
+  var springTargetY = 0
+  var springActive = false
+  var moveSquash = 0
+  var moveSquashV = 0
+  var moveSquashArmed = false
   var lastDiagPlace = ''
   var drag = null
   var pointerPress = null
@@ -1891,6 +1907,7 @@ function mountWhaleBongoWidget() {
     var dt = Math.min((now - lastTime) / 1000, 1 / 30)
     lastTime = now
     if (dt > 0) {
+      stepMove(dt)
       var steps = Math.max(1, Math.ceil(dt / (1 / 240)))
       var sub = dt / steps
       for (var s = 0; s < steps; s++) {
@@ -2051,18 +2068,91 @@ function mountWhaleBongoWidget() {
     if (!input) return null
     return input.closest('form') || input.parentElement
   }
-  function beginPlaceAnimation() {
-    if (!root || root.style.display === 'none') return
-    root.classList.add('is-anim')
-    void root.offsetWidth
-    if (placeAnimTimer) {
-      try { window.clearTimeout(placeAnimTimer) } catch (e) {}
-      placeAnimTimer = 0
+  var MOVE_STIFFNESS = 165
+  var MOVE_DAMPING = 14.5
+  var SQUASH_STIFFNESS = 260
+  var SQUASH_DAMPING = 17
+
+  function setMoveImmediate(x, y) {
+    springX = x
+    springY = y
+    springVX = 0
+    springVY = 0
+    springTargetX = x
+    springTargetY = y
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    if (moveShell) moveShell.style.transform = ''
+    root.style.left = x.toFixed(2) + 'px'
+    root.style.top = y.toFixed(2) + 'px'
+  }
+
+  function retargetMove(x, y, animate) {
+    if (!animate || Math.abs(x - springX) < 0.4 && Math.abs(y - springY) < 0.4) {
+      setMoveImmediate(x, y)
+      return
     }
-    placeAnimTimer = later(function () {
-      placeAnimTimer = 0
-      root.classList.remove('is-anim')
-    }, 380)
+    springTargetX = x
+    springTargetY = y
+    if (!springActive) {
+      springVX = 0
+      springVY = 0
+      springActive = true
+    }
+    moveSquashArmed = true
+  }
+
+  function stepMove(dt) {
+    if (!dt) return
+    if (springActive) {
+      var ax = (springTargetX - springX) * MOVE_STIFFNESS - springVX * MOVE_DAMPING
+      var ay = (springTargetY - springY) * MOVE_STIFFNESS - springVY * MOVE_DAMPING
+      springVX += ax * dt
+      springVY += ay * dt
+      springX += springVX * dt
+      springY += springVY * dt
+
+      var vw = window.innerWidth
+      var vh = window.innerHeight
+      var maxX = Math.max(0, vw - cfg.size)
+      var maxY = Math.max(0, vh - imageBottomNorm * cfg.size)
+      root.style.left = clamp(springX, 0, maxX).toFixed(2) + 'px'
+      root.style.top = clamp(springY, 0, maxY).toFixed(2) + 'px'
+
+      var restX = Math.abs(springTargetX - springX)
+      var restY = Math.abs(springTargetY - springY)
+      var speed = Math.sqrt(springVX * springVX + springVY * springVY)
+      if (restX < 0.4 && restY < 0.4 && speed < 8) {
+        springX = springTargetX
+        springY = springTargetY
+        springVX = 0
+        springVY = 0
+        springActive = false
+        root.style.left = clamp(springX, 0, maxX).toFixed(2) + 'px'
+        root.style.top = clamp(springY, 0, maxY).toFixed(2) + 'px'
+        if (moveSquashArmed) {
+          moveSquashArmed = false
+          moveSquash = 0.11
+          moveSquashV = 0
+        }
+      }
+    }
+
+    if (moveSquash !== 0 || moveSquashV !== 0) {
+      var sa = -moveSquash * SQUASH_STIFFNESS - moveSquashV * SQUASH_DAMPING
+      moveSquashV += sa * dt
+      moveSquash += moveSquashV * dt
+      if (Math.abs(moveSquash) < 0.001 && Math.abs(moveSquashV) < 0.02) {
+        moveSquash = 0
+        moveSquashV = 0
+        if (moveShell) moveShell.style.transform = ''
+      } else if (moveShell) {
+        moveShell.style.transform =
+          'scale(' + (1 + moveSquash * 0.55).toFixed(4) + ',' + (1 - moveSquash).toFixed(4) + ')'
+      }
+    }
   }
 
   function schedulePlace(animate) {
@@ -2098,6 +2188,11 @@ function mountWhaleBongoWidget() {
     } catch (e) {}
   }
   function hideWidget() {
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    if (moveShell) moveShell.style.transform = ''
     root.style.display = 'none'
     lastPlaceKey = ''
     closeMenu()
@@ -2127,8 +2222,7 @@ function mountWhaleBongoWidget() {
       lastPlaceKey = key
       root.style.display = ''
       root.style.transform = 'none'
-      root.style.left = x.toFixed(2) + 'px'
-      root.style.top = y.toFixed(2) + 'px'
+      setMoveImmediate(x, y)
     }
   }
   function place(animate) {
@@ -2198,16 +2292,15 @@ function mountWhaleBongoWidget() {
     applyFlip()
     var targetChanged = lastPlaceCard !== null && lastPlaceCard !== card
     lastPlaceCard = card
-    var shouldAnimate = !drag && root.style.display !== 'none' &&
+    var wasVisible = root.style.display !== 'none'
+    var shouldAnimate = !drag && wasVisible &&
       (animate === true || (animate !== false && targetChanged))
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
-    if (key !== lastPlaceKey || root.style.display === 'none') {
-      if (shouldAnimate && root.style.display !== 'none') beginPlaceAnimation()
+    if (key !== lastPlaceKey || !wasVisible) {
       lastPlaceKey = key
       root.style.display = ''
       root.style.transform = 'none'
-      root.style.left = x.toFixed(2) + 'px'
-      root.style.top = y.toFixed(2) + 'px'
+      retargetMove(x, y, shouldAnimate)
     }
     var diagKey = Math.round(curX) + ',' + Math.round(curY) + ',' + cfg.size + ',' + root.style.display
     if (diagKey !== lastDiagPlace) {
@@ -2976,7 +3069,11 @@ function mountWhaleBongoWidget() {
   function onHitPointerDown(event) {
     if (event.button !== 0) return
     hideSnapDots()
-    root.classList.remove('is-anim')
+    if (springActive) {
+      curX = springX
+      curY = springY
+      setMoveImmediate(curX, curY)
+    }
     drag = {
       id: event.pointerId,
       x: event.clientX,
@@ -3009,6 +3106,15 @@ function mountWhaleBongoWidget() {
     root.style.transform = 'none'
     root.style.left = curX.toFixed(2) + 'px'
     root.style.top = curY.toFixed(2) + 'px'
+    springX = curX
+    springY = curY
+    springVX = 0
+    springVY = 0
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    if (moveShell) moveShell.style.transform = ''
     updateSnapDots()
   }
   function onHitPointerUp(event) {
