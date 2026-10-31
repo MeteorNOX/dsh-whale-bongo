@@ -1868,6 +1868,28 @@
       Math.abs((y + imageBottom) - point.anchorY) <= range
   }
 
+  // 元素吸附的横向锚定：
+  // 中间 70%（15%–85%）记录比例；左侧 15% 记录距左边距离；
+  // 右侧 15% 记录距右边距离。距离按挂件中心计算。
+  function makeHorizontalAnchor(x, rect, size) {
+    if (!rect || !rect.width) return { mode: 'ratio', value: 0.5 }
+    var centerX = x + size / 2
+    var p = (centerX - rect.left) / rect.width
+    if (p < 0.15) return { mode: 'left', value: centerX - rect.left }
+    if (p > 0.85) return { mode: 'right', value: rect.right - centerX }
+    return { mode: 'ratio', value: p }
+  }
+
+  function anchorCenterX(anchor, rect) {
+    if (!rect || !rect.width) return 0
+    if (!anchor || anchor.mode === 'ratio') {
+      return rect.left + rect.width * clamp(numberOr(anchor && anchor.value, 0.5), 0, 1)
+    }
+    if (anchor.mode === 'left') return rect.left + numberOr(anchor.value, 0)
+    if (anchor.mode === 'right') return rect.right - numberOr(anchor.value, 0)
+    return rect.left + rect.width * 0.5
+  }
+
   function applyFlip() {
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
@@ -1989,17 +2011,23 @@
       x = numberOr(snap.x, 24)
       y = numberOr(snap.y, 120)
     } else if (snap && snap.ref === 'card') {
+      var anchorX = snap.anchorX
+      if (!anchorX) {
+        var legacyX
+        if (snap.edge === 'left') legacyX = r.left - size
+        else if (snap.edge === 'right') legacyX = r.right
+        else if (snap.edge === 'bottom') legacyX = snap.x === null || snap.x === undefined ? r.left + 8 : snap.x
+        else legacyX = snap.x === null || snap.x === undefined ? r.right - size - 8 : snap.x
+        anchorX = makeHorizontalAnchor(legacyX, r, size)
+        snap.anchorX = anchorX
+        saveCfg()
+      }
+      x = anchorCenterX(anchorX, r) - size / 2
       if (snap.edge === 'bottom') {
-        x = snap.x === null || snap.x === undefined ? r.left + 8 : snap.x
         y = r.bottom - imageBottom
-      } else if (snap.edge === 'left') {
-        x = r.left - size
-        y = snap.y === null || snap.y === undefined ? r.top - imageBottom : snap.y
-      } else if (snap.edge === 'right') {
-        x = r.right
+      } else if (snap.edge === 'left' || snap.edge === 'right') {
         y = snap.y === null || snap.y === undefined ? r.top - imageBottom : snap.y
       } else {
-        x = snap.x === null || snap.x === undefined ? r.right - size - 8 : snap.x
         y = r.top - imageBottom
       }
     } else {
@@ -2109,7 +2137,13 @@
       if (best.ref === 'point') {
         cfg.snap = { ref: 'point', id: best.id }
       } else if (best.ref === 'card') {
-        cfg.snap = { ref: 'card', edge: best.edge, x: best.x === undefined ? null : best.x, y: best.y === undefined ? null : best.y }
+        var targetX = best.edge === 'left' ? r.left - size : (best.edge === 'right' ? r.right : best.x)
+        cfg.snap = {
+          ref: 'card',
+          edge: best.edge,
+          anchorX: makeHorizontalAnchor(targetX, r, size),
+          y: best.y === undefined ? null : best.y,
+        }
       } else {
         cfg.snap = { ref: 'viewport', x: best.x, y: best.y }
       }
