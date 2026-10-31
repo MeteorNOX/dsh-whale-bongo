@@ -171,7 +171,7 @@
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
     out.handTypingOffsetPx = clamp(numberOr(out.handTypingOffsetPx, 4), 0, 24)
-    out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 2), 0, 15)
+    out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 2), 0, 30)
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
     out.skinColor = /^#[0-9a-f]{6}$/i.test(String(out.skinColor)) ? out.skinColor : DEFAULTS.skinColor
     out.volume = clamp(numberOr(out.volume, 15), 0, 100)
@@ -980,7 +980,7 @@
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageQBounceLevel', group: 'motion', label: 'Q 弹程度', min: 0, max: 10, step: 0.1, def: 5 },
     { key: 'handTypingOffsetPx', group: 'typing', label: '水平随机位移', min: 0, max: 24, step: 0.5, def: 4, unit: 'px' },
-    { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 15, step: 0.5, def: 2, unit: '°' },
+    { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 30, step: 0.5, def: 2, unit: '°' },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
     { key: 'handAspectPct', group: 'hand', label: '高度 / 宽度', min: 60, max: 120, step: 1, def: 81 },
@@ -1372,7 +1372,7 @@
 
   function rollHandOffset(hand) {
     var maxX = clamp(numberOr(cfg.handTypingOffsetPx, 4), 0, 24)
-    var maxAngle = clamp(numberOr(cfg.handTypingAngleDeg, 2), 0, 15) * Math.PI / 180
+    var maxAngle = clamp(numberOr(cfg.handTypingAngleDeg, 2), 0, 30) * Math.PI / 180
     hand.randomX = (Math.random() * 2 - 1) * maxX
     hand.randomAngle = (Math.random() * 2 - 1) * maxAngle
     hand.randomActive = maxX > 0.001 || maxAngle > 0.0001
@@ -1509,12 +1509,12 @@
       if (tapOnly) releaseHand(hand, 80)
     }
   }
-  function beginInput(id, hand) {
+  function beginInput(id, hand, reuseOffset) {
     var newPress = hand.keys.size === 0
     activeInputs.set(id, hand)
     hand.keys.add(id)
     clearReleaseTimer(hand)
-    if (newPress) rollHandOffset(hand)
+    if (newPress && (!reuseOffset || !hand.randomActive)) rollHandOffset(hand)
 
     // 只保留原 Demo 的逻辑 3。
     if (hand.seq) return
@@ -1578,8 +1578,7 @@
       var translateY = Math.min(travel, handBottomLimit)
       var xShift = 0
       if (hand.randomActive) {
-        var progress = clamp(hand.y.value / CONFIG.pressDepth, 0, 1)
-        xShift = hand.randomX * progress + Math.tan(hand.randomAngle) * travel
+        xShift = hand.randomX + Math.tan(hand.randomAngle) * travel
       }
       if (hand.el) {
         hand.el.style.transform = 'translate(-50%,-50%) translate3d(' + xShift.toFixed(2) + 'px,0,0)'
@@ -2508,7 +2507,7 @@
     var handIndex = lastKeyCode === null ? 0 : (sameKey ? lastHandIndex : 1 - lastHandIndex)
     lastKeyCode = code
     lastHandIndex = handIndex
-    beginInput(id, hands[handIndex])
+    beginInput(id, hands[handIndex], sameKey)
   }
   function onKeyUp(event) {
     var code = event.code || event.key
