@@ -102,7 +102,7 @@ window.__ModuleLoader__.load({
     imageScalePct: 100,
     imageXPct: 0,
     imageYPct: 0,
-    imageQBouncePct: 250,
+    imageQBounceLevel: 5,
     handWidthPct: 14,
     handAspectPct: 81,
     handSpreadPct: 35,
@@ -135,10 +135,12 @@ window.__ModuleLoader__.load({
 
   function readCfg() {
     var out = JSON.parse(JSON.stringify(DEFAULTS))
+    var savedCfg = null
     try {
       var raw = localStorage.getItem(STORE)
       if (raw) {
         var saved = JSON.parse(raw)
+        savedCfg = saved
         for (var key in saved) {
           if (Object.prototype.hasOwnProperty.call(saved, key)) out[key] = saved[key]
         }
@@ -162,7 +164,11 @@ window.__ModuleLoader__.load({
     out.imageScalePct = clamp(numberOr(out.imageScalePct, 100), 50, 150)
     out.imageXPct = clamp(numberOr(out.imageXPct, 0), -30, 30)
     out.imageYPct = clamp(numberOr(out.imageYPct, 0), -30, 30)
-    out.imageQBouncePct = clamp(numberOr(out.imageQBouncePct, 250), 0, 500)
+    if (savedCfg && savedCfg.imageQBounceLevel === undefined && savedCfg.imageQBouncePct !== undefined) {
+      out.imageQBounceLevel = numberOr(savedCfg.imageQBouncePct, 250) / 50
+    }
+    delete out.imageQBouncePct
+    out.imageQBounceLevel = clamp(numberOr(out.imageQBounceLevel, 5), 0, 10)
     out.handWidthPct = clamp(numberOr(out.handWidthPct, 14), 8, 25)
     out.handAspectPct = clamp(numberOr(out.handAspectPct, 81), 60, 120)
     out.handSpreadPct = clamp(numberOr(out.handSpreadPct, 35), 10, 40)
@@ -842,7 +848,7 @@ window.__ModuleLoader__.load({
     { key: 'imageScalePct', group: 'image', label: '图片大小', min: 50, max: 150, step: 1, def: 100 },
     { key: 'imageXPct', group: 'image', label: '水平位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
-    { key: 'imageQBouncePct', group: 'motion', label: '动效', min: 0, max: 500, step: 5, def: 250 },
+    { key: 'imageQBounceLevel', group: 'motion', label: '动效', min: 0, max: 10, step: 0.1, def: 5 },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
     { key: 'handAspectPct', group: 'hand', label: '高度 / 宽度', min: 60, max: 120, step: 1, def: 81 },
@@ -897,7 +903,7 @@ window.__ModuleLoader__.load({
         saveCfg()
         if (key === 'volume') {
           applyVolume()
-        } else if (key !== 'imageQBouncePct') {
+        } else if (key !== 'imageQBounceLevel') {
           applyAll()
         }
         syncSettings()
@@ -915,7 +921,7 @@ window.__ModuleLoader__.load({
         saveCfg()
         if (key === 'volume') {
           applyVolume()
-        } else if (key !== 'imageQBouncePct') {
+        } else if (key !== 'imageQBounceLevel') {
           applyAll()
         }
         syncSettings()
@@ -1207,7 +1213,7 @@ window.__ModuleLoader__.load({
       Math.abs(hand.y.velocity) < 0.5
   }
   function kickImage() {
-    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * (cfg.imageQBouncePct / 100)
+    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * (cfg.imageQBounceLevel / 2)
   }
 
   function renderImageMotion() {
@@ -1267,7 +1273,7 @@ window.__ModuleLoader__.load({
       }
     }
     pointerPress = { downAt: now, hands: pressed, mode: mode }
-    imageSquash.target = clamp(0.03 * (cfg.imageQBouncePct / 100), 0, 0.14)
+    imageSquash.target = clamp(0.03 * (cfg.imageQBounceLevel / 2), 0, 0.14)
     playHit()
     render()
   }
