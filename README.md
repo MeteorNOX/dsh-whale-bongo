@@ -174,6 +174,7 @@ dsh plugin --profile web add dsh-whale-bongo@0.1.0
 对称轴        41
 垂直位置      77.5
 图片 Q 弹     5
+鼠标按压      手部变扁，不下压
 音量          60
 挂件大小      140
 ```

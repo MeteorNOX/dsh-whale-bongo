@@ -94,7 +94,7 @@
     handAxisPct: 41,
     handCenterYPct: 77.5,
     handOutlinePct: 100,
-    clickPressMode: 'press',
+    clickPressMode: 'squash',
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
     volume: 60,
@@ -162,7 +162,7 @@
     out.handOutlinePct = clamp(numberOr(out.handOutlinePct, 100), 0, 250)
     var clickMode = out.clickPressMode
     if (clickMode !== 'press' && clickMode !== 'squash' && clickMode !== 'none') {
-      clickMode = out.clickPressHands === false ? 'none' : 'press'
+      clickMode = out.clickPressHands === false ? 'none' : 'squash'
     }
     out.clickPressMode = clickMode
     delete out.clickPressHands
