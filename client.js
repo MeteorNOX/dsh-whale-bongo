@@ -336,6 +336,37 @@ window.__ModuleLoader__.load({
     }
     #dsh-whale-bongo.is-drag .dsnw-hitbox { cursor: grabbing; }
     #dsh-whale-bongo.is-anim { transition: left .30s cubic-bezier(.22, .61, .36, 1), top .30s cubic-bezier(.22, .61, .36, 1); }
+    #dsh-whale-bongo .dsnw-snap-guide {
+      position: fixed;
+      z-index: 7;
+      width: 0;
+      border-left: 1px dashed rgba(77,107,254,.45);
+      border-left-color: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 45%, transparent);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .12s ease;
+    }
+    #dsh-whale-bongo .dsnw-snap-guide.is-visible { opacity: 1; }
+    #dsh-whale-bongo .dsnw-snap-guide.is-near {
+      border-left-color: var(--dsw-alias-brand-primary, #4d6bfe);
+    }
+    #dsh-whale-bongo .dsnw-snap-guide::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--dsw-alias-brand-primary, #4d6bfe);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 18%, transparent);
+      transition: width .12s ease, height .12s ease;
+    }
+    #dsh-whale-bongo .dsnw-snap-guide.is-near::after {
+      width: 12px;
+      height: 12px;
+    }
     #dsh-whale-bongo .dsnw-menu-btn {
       position: absolute;
       z-index: 8;
@@ -909,6 +940,7 @@ window.__ModuleLoader__.load({
       '</div>' +
     '</div></div>' +
     '<div class="dsnw-hitbox" title="拖动移动位置；靠近边缘自动吸附"></div>' +
+    '<div class="dsnw-snap-guide" aria-hidden="true"></div>' +
     '<button class="dsnw-menu-btn" type="button" aria-label="打开设置">☰</button>' +
     '<div class="dsnw-menu">' +
       '<div class="dsnw-menu-head"><span>Whale Bongo 手手挂件</span><button class="dsnw-close" type="button" data-close aria-label="关闭">×</button></div>' +
@@ -1020,6 +1052,7 @@ window.__ModuleLoader__.load({
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
+  var snapGuide = root.querySelector('.dsnw-snap-guide')
   var menuBtn = root.querySelector('.dsnw-menu-btn')
   var menu = root.querySelector('.dsnw-menu')
   var fileInput = root.querySelector('[data-file]')
@@ -1690,6 +1723,7 @@ window.__ModuleLoader__.load({
   }
   function releaseAll() {
     pointerPress = null
+    hideSnapGuide()
     imageSquash.target = 0
     activeInputs.clear()
     for (var i = 0; i < hands.length; i++) {
@@ -1958,12 +1992,15 @@ window.__ModuleLoader__.load({
         var centerY = r.top - imageBottom
         var centerDx = (x + size / 2) - centerX
         var centerDy = y - centerY
-        candidates.push({
+        var centerCandidate = {
           ref: 'card', edge: 'center',
           d: Math.sqrt(centerDx * centerDx + centerDy * centerDy),
+          dx: centerDx,
+          dy: centerDy,
           x: centerX - size / 2,
           y: centerY,
-        })
+        }
+        candidates.push(centerCandidate)
         candidates.push({ ref: 'card', edge: 'top', d: Math.abs((y + imageBottom) - r.top), x: x })
         candidates.push({ ref: 'card', edge: 'bottom', d: Math.abs((y + imageBottom) - r.bottom), x: x })
         candidates.push({ ref: 'card', edge: 'left', d: Math.abs(x - (r.left - size)), y: y })
@@ -1981,7 +2018,9 @@ window.__ModuleLoader__.load({
       var score = c.d - (c.ref === 'card' ? CARD_BIAS : 0) - (c.ref === 'viewport' && c.edge === 'bottom' ? 10 : 0)
       if (score < bestScore) { bestScore = score; best = c }
     }
-    if (best && best.d <= SNAP_RANGE) {
+    var centerNear = Boolean(centerCandidate && Math.abs(centerCandidate.dx) <= SNAP_RANGE && Math.abs(centerCandidate.dy) <= SNAP_RANGE)
+    if (centerNear) best = centerCandidate
+    if (best && (best.d <= SNAP_RANGE || centerNear)) {
       if (best.ref === 'card') {
         cfg.snap = { ref: 'card', edge: best.edge, x: best.x === undefined ? null : best.x, y: best.y === undefined ? null : best.y }
       } else {
@@ -2537,8 +2576,42 @@ window.__ModuleLoader__.load({
   }
 
   // ------------------------------------------------------------------ 拖动 / 菜单入口
+
+  function hideSnapGuide() {
+    if (!snapGuide) return
+    snapGuide.classList.remove('is-visible', 'is-near')
+  }
+
+  function updateSnapGuide() {
+    if (!snapGuide) return
+    if (!drag || !drag.moved) {
+      hideSnapGuide()
+      return
+    }
+    var card = cardEl()
+    if (!card) {
+      hideSnapGuide()
+      return
+    }
+    var rect = card.getBoundingClientRect()
+    if (!rect.width || !rect.height) {
+      hideSnapGuide()
+      return
+    }
+    var centerX = rect.left + rect.width / 2
+    snapGuide.style.left = Math.round(centerX) + 'px'
+    snapGuide.style.top = Math.round(rect.top) + 'px'
+    snapGuide.style.height = Math.round(rect.height) + 'px'
+    snapGuide.classList.add('is-visible')
+    var imageBottom = imageBottomNorm * cfg.size
+    snapGuide.classList.toggle('is-near',
+      Math.abs((curX + cfg.size / 2) - centerX) <= 36 &&
+      Math.abs((curY + imageBottom) - rect.top) <= 36)
+  }
+
   function onHitPointerDown(event) {
     if (event.button !== 0) return
+    hideSnapGuide()
     root.classList.remove('is-anim')
     drag = {
       id: event.pointerId,
@@ -2571,11 +2644,13 @@ window.__ModuleLoader__.load({
     root.style.transform = 'none'
     root.style.left = curX.toFixed(2) + 'px'
     root.style.top = curY.toFixed(2) + 'px'
+    updateSnapGuide()
   }
   function onHitPointerUp(event) {
     if (!drag || (event && event.pointerId !== drag.id)) return
     var moved = drag.moved
     drag = null
+    hideSnapGuide()
     root.classList.remove('is-drag')
     try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
     if (moved) {
