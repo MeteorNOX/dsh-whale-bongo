@@ -9,6 +9,10 @@
 > 是 `dsh-bongo-fish` 的独立重置版本；参考其注入方式与交互思路。  
 > 不是官方分支，也不代表原作者发布。
 
+> [!WARNING]
+> **npm 包暂未发布。** 作者 npm 账号因安全问题暂时冻结，预计 **2026-11-03** 解封后上传。  
+> 在此之前，README 中“插件管理器输入 `dsh-whale-bongo`”和 `dsh plugin ... add dsh-whale-bongo@0.1.0` 都**不可用**；请使用 [GitHub Release](https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.1.0) 的 zip/tgz，或本地目录安装。
+
 ## 版本选择
 
 两款挂件面向不同的使用偏好，可以按自己的习惯选择：
@@ -102,18 +106,31 @@
 
 ### 从插件管理器安装
 
-在 DSH 桌面端「插件 → 添加插件」中输入：
+> [!IMPORTANT]
+> npm 尚未发布；当前在插件管理器里直接输入包名可能找不到。请先用下一节的 **GitHub Release** 安装，或使用本地目录安装。
+
+npm 解封后，在 DSH 桌面端「插件 → 添加插件」中输入：
 
 ```text
 dsh-whale-bongo
 ```
 
 安装或更新后 **完全退出并重开 DSH**。  
-Web / CLI 环境也可以：
+Web / CLI 环境在 npm 发布后也可以：
 
 ```bash
+# npm 发布后可用；当前未发布，会 404
 dsh plugin --profile web add dsh-whale-bongo@0.1.0
 ```
+
+### 从 GitHub Release 安装
+
+在 npm 包发布前，请使用 GitHub Release：
+
+1. 打开 [v0.1.0 Release](https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.1.0)；
+2. 下载 `dsh-whale-bongo-0.1.0-package.zip` 或 `dsh-whale-bongo-0.1.0.tgz`；
+3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
+4. **完全退出并重开 DSH**。
 
 ### 本地开发安装
 
@@ -237,11 +254,11 @@ dsh-whale-bongo/
   index.js              # Host 半：路由、静态资源、注入
   client.js             # 客户端模块入口
   assets/widget.js      # 浏览器半
-  assets/dsh-whale-bongo-icon.png  # README 顶部图标
+  assets/dsh-whale-bongo-icon.png  # 图片素材（版权归原作者）
   assets/portrait.png   # 图片素材（版权归原作者）
-  assets/sounds/        # hit.wav（版权归原作者）+ CC0 许可
+  assets/sounds/        # 音效素材（版权归原作者）+ CC0 许可
+  icon.png              # 插件列表图标（版权归原作者）
   locale/               # 中英文标题
-  icon.png              # 插件列表图标
   LICENSE
   CHANGELOG-0.1.0.md
   .gitignore
@@ -262,7 +279,7 @@ dsh-whale-bongo/
 - 本仓库是 [`dsh-bongo-fish`](https://github.com/YUsaltyfish/dsh-bongo-fish) 的重置版本，参考其注入方式和交互思路，**独立重写**；两个仓库分开维护。
 - 经双方友好协商，双方互为对方仓库的协作者。
 - **本仓库的代码与重写逻辑**版权归本仓库作者，按 MIT 许可。
-- **图片素材 `assets/portrait.png`** 与 **音效素材 `assets/sounds/hit.wav`** 版权归 **[YUsaltyfish](https://github.com/YUsaltyfish)**；本仓库按双方约定使用，不随代码 MIT 许可重新授权。
+- **当前所有图片与音效素材**（`assets/portrait.png`、`assets/dsh-whale-bongo-icon.png`、`icon.png`、`assets/sounds/hit.wav`）版权归 **[YUsaltyfish](https://github.com/YUsaltyfish)**；本仓库按双方约定使用，不随代码 MIT 许可重新授权。
 - 音效的原始素材来源为 Kenney CC0；具体许可见 `assets/sounds/LICENSE-kenney-CC0.txt`。
 - 如需二次使用或商用图片/音效，请联系原作者确认；不要仅依据代码的 MIT 许可使用素材。
 - 本仓库不是 `dsh-bongo-fish` 的官方分支，也不会把原项目说成自己的原创项目。
@@ -277,6 +294,8 @@ dsh-whale-bongo/
 |:--|:--|
 | 本仓库代码与重写逻辑 | MIT |
 | `assets/portrait.png` | 版权归 [YUsaltyfish](https://github.com/YUsaltyfish)；按双方约定使用 |
+| `assets/dsh-whale-bongo-icon.png` | 版权归 [YUsaltyfish](https://github.com/YUsaltyfish)；按双方约定使用 |
+| `icon.png` | 版权归 [YUsaltyfish](https://github.com/YUsaltyfish)；按双方约定使用 |
 | `assets/sounds/hit.wav` | 版权归 [YUsaltyfish](https://github.com/YUsaltyfish)；原始素材为 Kenney CC0 |
 | `dsh-bongo-fish` 原项目 | 版权归原作者，遵循原项目许可 |
 

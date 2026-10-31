@@ -7,13 +7,18 @@
 - 当前版本：`0.1.0`
 - 形态：输入框旁的打字挂件，没有侧边栏页面
 - 默认：逻辑 3、`本体.png`、手部 14/81/35/41/77.5、音量 60
-- 不依赖 npm 包、不需要构建、不需要 iframe
+- bundle 本身不需要构建，也没有 npm 运行时依赖
+
+> [!WARNING]
+> **npm 包暂未发布。** 作者 npm 账号因安全问题暂时冻结，预计 **2026-11-03** 解封后上传。  
+> 当前不要执行 `dsh plugin add dsh-whale-bongo@0.1.0`；请使用 GitHub Release 的 `dsh-whale-bongo-0.1.0-package.zip` / `.tgz`，或本地目录安装。  
+> Release：https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.1.0
 
 ---
 
 ## 1. 准备
 
-1. 解压 `dsh-whale-bongo-0.1.0.zip`，得到：
+1. 解压 `dsh-whale-bongo-0.1.0-package.zip`，得到：
 
    ```text
    dsh-whale-bongo/
