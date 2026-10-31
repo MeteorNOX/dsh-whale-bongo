@@ -1931,15 +1931,42 @@
     closeMenu()
     releaseAll()
   }
+  function placeFallback() {
+    var size = cfg.size
+    var vw = window.innerWidth
+    var vh = window.innerHeight
+    var imageBottom = imageBottomNorm * size
+    var x = numberOr(curX, 0)
+    var y = numberOr(curY, 0)
+    // 输入框在提问/授权等场景被移除时，保留挂件在原位；
+    // 首次启动就没有输入框时，放到右下角，避免直接消失。
+    if (!isFinite(x) || !isFinite(y) || (x === 0 && y === 0)) {
+      x = vw - size - 24
+      y = vh - imageBottom - 24
+    }
+    x = clamp(x, 4, Math.max(4, vw - size - 4))
+    y = clamp(y, 4, Math.max(4, vh - imageBottom))
+    curX = x
+    curY = y
+    applyFlip()
+    var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
+    if (key !== lastPlaceKey || root.style.display === 'none') {
+      lastPlaceKey = key
+      root.style.display = ''
+      root.style.transform = 'none'
+      root.style.left = x.toFixed(2) + 'px'
+      root.style.top = y.toFixed(2) + 'px'
+    }
+  }
   function place() {
     var card = cardEl()
     if (!card) {
-      hideWidget()
+      placeFallback()
       return
     }
     var r = card.getBoundingClientRect()
     if (!r.width || !r.height) {
-      hideWidget()
+      placeFallback()
       return
     }
     syncCardObserver(card)
