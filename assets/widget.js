@@ -3899,6 +3899,8 @@ function mountWhaleBongoWidget(options) {
     applySize()
     applyAll()
     syncMenu()
+    var enterTransition = pageReturnTransition || desktopEnterTransition
+    if (enterTransition) root.style.visibility = 'hidden'
     if (pageReturnTransition && revealShell) {
       root.classList.add('is-mode-entering')
       later(function () { root.classList.remove('is-mode-entering') }, 700)
@@ -3910,6 +3912,9 @@ function mountWhaleBongoWidget(options) {
       delete window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION
     }
     place()
+    if (enterTransition) {
+      later(function () { root.style.visibility = '' }, 80)
+    }
     rebuildHitMask()
     lastTime = nowMs()
     rafId = window.requestAnimationFrame(tick)
