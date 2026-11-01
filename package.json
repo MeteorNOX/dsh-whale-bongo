@@ -26,7 +26,8 @@
     "CHANGELOG.md",
     "desktop.js",
     "runtime/electron-helper",
-    "scripts/ensure-electron.mjs"
+    "scripts/ensure-electron.mjs",
+    "global-keys-host.js"
   ],
   "dsh": {
     "bundle": {

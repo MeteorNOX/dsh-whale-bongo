@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDesktopSupervisor } from './desktop.js'
+import { createGlobalKeyMonitor } from './global-keys-host.js'
 
 const PKG_ROOT = path.dirname(fileURLToPath(import.meta.url))
 const BASE = '/dsh-whale-bongo'
@@ -112,10 +113,56 @@ export default {
     })
 
     root.inject(['webServer'], (ctx) => {
+      const keyClients = new Set()
+      const nl = String.fromCharCode(10, 10)
+      const broadcastKey = (payload) => {
+        const line = 'data: ' + JSON.stringify(payload) + nl
+        for (const client of Array.from(keyClients)) {
+          try { client.write(line) } catch { keyClients.delete(client) }
+        }
+      }
+      const keyMonitor = createGlobalKeyMonitor({
+        pkgRoot: PKG_ROOT,
+        onKey: broadcastKey,
+        log: (message) => console.warn('[dsh-whale-bongo] ' + message),
+      })
+      const heartbeat = setInterval(() => {
+        for (const client of Array.from(keyClients)) {
+          try { client.write(': ping' + nl) } catch { keyClients.delete(client) }
+        }
+      }, 15000)
+      heartbeat.unref?.()
+      disposers.push(() => {
+        clearInterval(heartbeat)
+        keyMonitor.stop()
+        for (const client of Array.from(keyClients)) {
+          try { client.end() } catch {}
+        }
+        keyClients.clear()
+      })
       const route = (options) => {
         const off = ctx.webServer.register(options)
         if (typeof off === 'function') disposers.push(off)
       }
+
+      route({
+        kind: 'exact',
+        path: BASE + '/key-stream',
+        handler(req, res) {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          })
+          res.write(': connected' + nl)
+          keyClients.add(res)
+          const remove = () => keyClients.delete(res)
+          req.on('close', remove)
+          res.on('close', remove)
+        },
+      })
+      keyMonitor.start()
 
       route({
         kind: 'exact',

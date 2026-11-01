@@ -24,6 +24,7 @@ function mountWhaleBongoWidget(options) {
   var desktopKeyFlushTimer = 0
   var desktopKeyReleaseTimers = {}
   var desktopWindows = []
+  var globalKeySource = null
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -3699,6 +3700,7 @@ function mountWhaleBongoWidget(options) {
     if (desktopMode && Array.isArray(window.__DSH_WHALE_DESKTOP_WINDOWS)) {
       setDesktopWindows(window.__DSH_WHALE_DESKTOP_WINDOWS)
     }
+    if (!desktopMode) startGlobalKeyStream()
     if (desktopPageActive) startDesktopMode()
     dsnDiag('mount', { hasCard: Boolean(cardEl()), desktop: desktopPageActive })
   }
@@ -3738,6 +3740,43 @@ function mountWhaleBongoWidget(options) {
       // run it through the client's position spring.
       place(false)
     }
+  }
+
+  function handleGlobalKeyPayload(payload) {
+    if (!payload || desktopMode || desktopPageActive || cfg.displayMode === 'desktop') return
+    if (!document.hasFocus()) return
+    var event = {
+      isTrusted: true,
+      __whaleGlobal: true,
+      key: payload.key ? String(payload.key) : '',
+      code: payload.code ? String(payload.code) : '',
+      ctrlKey: Boolean(payload.ctrlKey),
+      altKey: Boolean(payload.altKey),
+      shiftKey: Boolean(payload.shiftKey),
+      metaKey: Boolean(payload.metaKey),
+      repeat: false,
+      target: document.body,
+    }
+    if (payload.action === 'down') onKeyDown(event)
+    else onKeyUp(event)
+  }
+
+  function startGlobalKeyStream() {
+    if (desktopMode || globalKeySource || typeof window.EventSource !== 'function') return
+    try {
+      globalKeySource = new window.EventSource(BASE + '/key-stream')
+      globalKeySource.onmessage = function (message) {
+        try { handleGlobalKeyPayload(JSON.parse(message.data)) } catch (e) {}
+      }
+    } catch (e) {
+      globalKeySource = null
+    }
+  }
+
+  function stopGlobalKeyStream() {
+    if (!globalKeySource) return
+    try { globalKeySource.close() } catch (e) {}
+    globalKeySource = null
   }
 
   function desktopEventPayload(info) {
@@ -3980,6 +4019,7 @@ function mountWhaleBongoWidget(options) {
     if (widgetDisposed) return
     widgetDisposed = true
     stopDesktopPoll()
+    stopGlobalKeyStream()
     if (desktopKeyFlushTimer) {
       try { window.clearTimeout(desktopKeyFlushTimer) } catch (e) {}
       desktopKeyFlushTimer = 0
