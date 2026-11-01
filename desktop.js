@@ -43,6 +43,9 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
   let stdoutBuffer = ''
   let bridgePort = 0
   let pending = []
+  let keyEvents = 0
+  let lastKeyAt = 0
+  let lastKeyAction = ''
 
   function state() {
     return {
@@ -52,6 +55,9 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
       width: WINDOW_WIDTH,
       height: WINDOW_HEIGHT,
       error: lastError,
+      keyEvents,
+      lastKeyAt,
+      lastKeyAction,
     }
   }
 
@@ -220,13 +226,22 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
     return state()
   }
 
+  function noteKey(payload) {
+    if (!payload) return
+    keyEvents += 1
+    lastKeyAt = Date.now()
+    lastKeyAction = payload.action || ''
+  }
+
   function key(payload) {
     if (!desired || !child || !payload) return false
+    noteKey(payload)
     return post('/key', payload)
   }
 
   function keys(list) {
     if (!desired || !child || !Array.isArray(list) || !list.length) return false
+    for (const item of list) noteKey(item)
     return post('/keys', { keys: list })
   }
 

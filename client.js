@@ -133,6 +133,7 @@ function mountWhaleBongoWidget(options) {
     imageQBounceLevel: 5,
     handWidthPct: 14,
     handAspectPct: 81,
+    desktopHandRadius: 18,
     handSpreadPct: 35,
     handAxisPct: 41,
     handCenterYPct: 77.5,
@@ -220,6 +221,7 @@ function mountWhaleBongoWidget(options) {
     out.imageQBounceLevel = clamp(numberOr(out.imageQBounceLevel, 5), 0, 10)
     out.handWidthPct = clamp(numberOr(out.handWidthPct, 14), 8, 25)
     out.handAspectPct = clamp(numberOr(out.handAspectPct, 81), 60, 120)
+    out.desktopHandRadius = clamp(numberOr(out.desktopHandRadius, 18), 0, 60)
     out.handSpreadPct = clamp(numberOr(out.handSpreadPct, 35), 10, 40)
     out.handAxisPct = clamp(numberOr(out.handAxisPct, 41), 30, 75)
     out.handCenterYPct = clamp(numberOr(out.handCenterYPct, 77.5), 0, 120)
@@ -419,7 +421,7 @@ function mountWhaleBongoWidget(options) {
        宿主样式，显式使用同样的圆角比例，避免变成纯椭圆。 */
     #dsh-whale-bongo[data-desktop] .dsnw-ball,
     #dsh-whale-bongo[data-desktop] .dsnw-trail {
-      border-radius: 18px;
+      border-radius: var(--dsnw-desktop-hand-radius, 18px);
     }
     #dsh-whale-bongo .dsnw-art,
     #dsh-whale-bongo .dsnw-hitbox {
@@ -1257,6 +1259,7 @@ function mountWhaleBongoWidget(options) {
     { key: 'flipSplitPct', group: 'flip', label: '分割线位置', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 60, step: 0.5, def: 30, unit: '°' },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
+    { key: 'desktopHandRadius', group: 'hand', label: '桌面手形圆角', min: 0, max: 50, step: 1, def: 18, unit: 'px' },
     { key: 'handWidthPct', group: 'hand', label: '手部宽度', min: 8, max: 25, step: 0.5, def: 14 },
     { key: 'handAspectPct', group: 'hand', label: '高度 / 宽度', min: 60, max: 120, step: 1, def: 81 },
     { key: 'handSpreadPct', group: 'hand', label: '两手间距', min: 10, max: 40, step: 0.5, def: 35 },
@@ -1283,6 +1286,7 @@ function mountWhaleBongoWidget(options) {
     for (var i = 0; i < SETTINGS.length; i++) {
       var item = SETTINGS[i]
       if (item.group !== group) continue
+      if (item.key === 'desktopHandRadius' && !desktopMode) continue
       if (item.inline) {
         html +=
           '<div class="dsnw-setting dsnw-setting--inline">' +
@@ -3030,6 +3034,7 @@ function mountWhaleBongoWidget(options) {
   // ------------------------------------------------------------------ 尺寸
   function applySize() {
     var size = cfg.size
+    if (desktopMode) root.style.setProperty('--dsnw-desktop-hand-radius', cfg.desktopHandRadius + 'px')
     root.style.width = size + 'px'
     root.style.height = size + 'px'
     var btn = Math.max(20, Math.round(size * 0.12))
@@ -3514,7 +3519,12 @@ function mountWhaleBongoWidget(options) {
 
   function onKeyDown(event) {
     if (!event.isTrusted) return
-    if (desktopPageActive) postDesktopKey('down', event)
+    if (desktopPageActive || cfg.displayMode === 'desktop') {
+      postDesktopKey('down', event)
+      window.setTimeout(function () {
+        postDesktopKey('up', event)
+      }, 120)
+    }
     if (!widgetVisible()) return
     if (event.key === 'Escape' && menuOpen) {
       if (activeSelect) closeAllSelects(true)
@@ -3539,7 +3549,7 @@ function mountWhaleBongoWidget(options) {
     beginInput(id, hands[handIndex], sameKey, code)
   }
   function onKeyUp(event) {
-    if (desktopPageActive && event.isTrusted) postDesktopKey('up', event)
+    if ((desktopPageActive || cfg.displayMode === 'desktop') && event.isTrusted) postDesktopKey('up', event)
     var code = event.code || event.key
     if (!code) return
     endInput('key:' + code)
@@ -3715,7 +3725,7 @@ function mountWhaleBongoWidget(options) {
   }
 
   function postDesktopKey(action, event) {
-    if (!desktopPageActive) return
+    if (!desktopPageActive && cfg.displayMode !== 'desktop') return
     desktopKeyQueue.push({
       action: action,
       key: event.key,
