@@ -2143,7 +2143,7 @@ function mountWhaleBongoWidget(options) {
     if (widgetDisposed) return
     // Do not flip while the user is still holding the widget (or during the
     // client-to-desktop mouse handoff). Resolve the direction on release.
-    if (drag || mouseFollowing) return
+    if (desktopMode && (drag || mouseFollowing)) return
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
     if (cfg.flipMode === 'auto') {
