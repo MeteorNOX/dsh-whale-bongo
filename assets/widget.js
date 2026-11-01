@@ -2102,12 +2102,14 @@ function mountWhaleBongoWidget(options) {
     if (cfg.flipMode === 'auto') {
       var left = 0
       var width = window.innerWidth
-      var card = cardEl()
-      if (card) {
-        var rect = card.getBoundingClientRect()
-        if (rect.width) {
-          left = rect.left
-          width = rect.width
+      if (!desktopMode) {
+        var card = cardEl()
+        if (card) {
+          var rect = card.getBoundingClientRect()
+          if (rect.width) {
+            left = rect.left
+            width = rect.width
+          }
         }
       }
       var low = left + width * 0.45
