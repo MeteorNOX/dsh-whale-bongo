@@ -475,6 +475,9 @@ app.whenReady().then(() => {
     pendingConfig = snapshot || null
     writeLine({ type: 'config', snapshot: pendingConfig })
   })
+  ipcMain.on('whale:request-anchor', () => {
+    writeLine({ type: 'request-anchor' })
+  })
   ipcMain.on('whale:stop', (_event, snapshot) => {
     if (snapshot && snapshot.cfg) pendingConfig = snapshot
     writeLine({ type: 'stop', snapshot: pendingConfig })

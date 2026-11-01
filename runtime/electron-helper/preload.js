@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onInputAnchor(callback) {
     ipcRenderer.on('whale:input-anchor', (_event, anchor) => callback(anchor))
   },
+  requestInputAnchor() {
+    ipcRenderer.send('whale:request-anchor')
+  },
   onMouseFollow(callback) {
     ipcRenderer.on('whale:mouse-follow', (_event, payload) => callback(payload))
   },

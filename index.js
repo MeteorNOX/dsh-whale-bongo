@@ -100,9 +100,11 @@ export default {
 
   apply(root) {
     const disposers = []
+    let requestAnchorHook = () => {}
     const desktop = createDesktopSupervisor({
       pkgRoot: PKG_ROOT,
       log: (message) => console.warn('[dsh-whale-bongo] ' + message),
+      onRequestAnchor: () => requestAnchorHook(),
     })
     root.effect(() => () => desktop.dispose())
     root.effect(() => () => {
@@ -114,7 +116,13 @@ export default {
 
     root.inject(['webServer'], (ctx) => {
       const keyClients = new Set()
+      const anchorClients = new Set()
       const nl = String.fromCharCode(10, 10)
+      requestAnchorHook = () => {
+        for (const client of Array.from(anchorClients)) {
+          try { client.write('data: request' + nl) } catch { anchorClients.delete(client) }
+        }
+      }
       const broadcastKey = (payload) => {
         const line = 'data: ' + JSON.stringify(payload) + nl
         for (const client of Array.from(keyClients)) {
@@ -162,6 +170,24 @@ export default {
           res.on('close', remove)
         },
       })
+      route({
+        kind: 'exact',
+        path: BASE + '/anchor-stream',
+        handler(req, res) {
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          })
+          res.write(': connected' + nl)
+          anchorClients.add(res)
+          const remove = () => anchorClients.delete(res)
+          req.on('close', remove)
+          res.on('close', remove)
+        },
+      })
+
       keyMonitor.start()
 
       route({

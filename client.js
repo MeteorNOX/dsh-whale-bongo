@@ -37,7 +37,7 @@ function mountWhaleBongoWidget(options) {
   var desktopPageActive = false
   var desktopStarted = false
   var desktopPollTimer = 0
-  var desktopAnchorTimer = 0
+  var desktopAnchorSource = null
   var desktopDownTicks = 0
   var desktopKeyQueue = []
   var desktopKeyFlushTimer = 0
@@ -3599,6 +3599,9 @@ function mountWhaleBongoWidget(options) {
 
   function onHitPointerDown(event) {
     if (event.button !== 0) return
+    if (desktopMode && window.whaleDesktop && typeof window.whaleDesktop.requestInputAnchor === 'function') {
+      try { window.whaleDesktop.requestInputAnchor() } catch (e) {}
+    }
     clearModeHold()
     root.style.transition = ''
     hideSnapDots()
@@ -4172,16 +4175,23 @@ function mountWhaleBongoWidget(options) {
     } catch (e) {}
   }
 
-  function startDesktopAnchorUpdates() {
-    stopDesktopAnchorUpdates()
-    postDesktopInputAnchor()
-    desktopAnchorTimer = window.setInterval(postDesktopInputAnchor, 400)
+  function startDesktopAnchorStream() {
+    stopDesktopAnchorStream()
+    if (desktopMode || desktopAnchorSource || typeof window.EventSource !== 'function') return
+    try {
+      desktopAnchorSource = new window.EventSource(BASE + '/anchor-stream')
+      desktopAnchorSource.onmessage = function () {
+        if (desktopPageActive) postDesktopInputAnchor()
+      }
+    } catch (e) {
+      desktopAnchorSource = null
+    }
   }
 
-  function stopDesktopAnchorUpdates() {
-    if (!desktopAnchorTimer) return
-    try { window.clearInterval(desktopAnchorTimer) } catch (e) {}
-    desktopAnchorTimer = 0
+  function stopDesktopAnchorStream() {
+    if (!desktopAnchorSource) return
+    try { desktopAnchorSource.close() } catch (e) {}
+    desktopAnchorSource = null
   }
 
   function desktopSnapshot() {
@@ -4262,7 +4272,7 @@ function mountWhaleBongoWidget(options) {
     desktopPageActive = false
     desktopStarted = false
     desktopDownTicks = 0
-    stopDesktopAnchorUpdates()
+    stopDesktopAnchorStream()
     stopDesktopPoll()
     try { fetch(BASE + '/desktop/stop', { method: 'POST' }).catch(function () {}) } catch (e) {}
     root.style.display = ''
@@ -4353,7 +4363,7 @@ function mountWhaleBongoWidget(options) {
     if (desktopMode || desktopStarted) return
     desktopStarted = true
     desktopPageActive = true
-    startDesktopAnchorUpdates()
+    startDesktopAnchorStream()
     desktopDownTicks = 0
     root.style.display = 'none'
     try { closeMenu() } catch (e) {}
@@ -4390,7 +4400,7 @@ function mountWhaleBongoWidget(options) {
     desktopPageActive = false
     desktopStarted = false
     desktopDownTicks = 0
-    stopDesktopAnchorUpdates()
+    stopDesktopAnchorStream()
     stopDesktopPoll()
     try { fetch(BASE + '/desktop/stop', { method: 'POST' }).catch(function () {}) } catch (e) {}
     root.style.display = ''
@@ -4403,7 +4413,7 @@ function mountWhaleBongoWidget(options) {
     if (widgetDisposed) return
     widgetDisposed = true
     stopDesktopPoll()
-    stopDesktopAnchorUpdates()
+    stopDesktopAnchorStream()
     stopGlobalKeyStream()
     clearModeHold()
     if (desktopKeyFlushTimer) {

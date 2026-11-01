@@ -31,7 +31,7 @@ function electronExecutable() {
   return null
 }
 
-export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
+export function createDesktopSupervisor({ pkgRoot, log = () => {}, onRequestAnchor = () => {} }) {
   let child = null
   let desired = false
   let mode = 'web'
@@ -105,6 +105,8 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
         mode = 'web'
         stop()
       }
+    } else if (message.type === 'request-anchor') {
+      try { onRequestAnchor() } catch (e) {}
     } else if (message.type === 'stop') {
       if (message.snapshot && message.snapshot.cfg) snapshot = message.snapshot
       mode = 'web'
