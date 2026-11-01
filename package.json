@@ -1,6 +1,6 @@
 {
   "name": "dsh-whale-bongo",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "QQ 弹弹的类 bongo 手手挂件",
   "type": "module",
   "exports": {
@@ -23,7 +23,10 @@
     "README.md",
     "INSTALL-FOR-AI.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "desktop.js",
+    "runtime/electron-helper",
+    "scripts/ensure-electron.mjs"
   ],
   "dsh": {
     "bundle": {
@@ -63,6 +66,11 @@
     "dsh": ">=0.1.0-rc.1"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check assets/widget.js"
+    "check": "node --check index.js && node --check client.js && node --check assets/widget.js",
+    "ensure:electron": "node scripts/ensure-electron.mjs"
+  },
+  "dependencies": {
+    "@electron/get": "^5.1.0",
+    "@electron-internal/extract-zip": "^1.0.5"
   }
 }

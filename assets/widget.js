@@ -12,8 +12,15 @@
  *   ③ 默认参数严格沿用 bongo-demo/index.html 的当前配置（reset 模式、
  *      手宽 16%、高宽比 88%、间距 20%、轴 56%、垂直 87.2% 等）。
  * ==========================================================================*/
-function mountWhaleBongoWidget() {
+function mountWhaleBongoWidget(options) {
   'use strict'
+
+  var desktopMode = Boolean(options && options.desktop)
+  var desktopPageActive = false
+  var desktopStarted = false
+  var desktopPollTimer = 0
+  var desktopDownTicks = 0
+  var desktopWindowDrag = false
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -72,6 +79,7 @@ function mountWhaleBongoWidget() {
 
 
   var BASE = '/dsh-whale-bongo'
+  var KEY_ANGLES_URL = window.__DSH_WHALE_KEY_ANGLES_URL || (BASE + '/key-angles.json')
   var keyPositions = null
   var keyPositionsRequested = false
   var STORE = 'dsh-dsniang-bongo:widget:v3'
@@ -120,6 +128,7 @@ function mountWhaleBongoWidget() {
     flipSplitPct: 50,
     filterShortcutKeys: true,
     typingAngleMode: 'off',
+    displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
     skinColor: '#FFEDE6',
@@ -211,6 +220,7 @@ function mountWhaleBongoWidget() {
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'off'
+    out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
     out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 30), 0, 60)
     out.inkColor = /^#[0-9a-f]{6}$/i.test(String(out.inkColor)) ? out.inkColor : DEFAULTS.inkColor
@@ -242,14 +252,25 @@ function mountWhaleBongoWidget() {
   var cfg = readCfg()
   var imageData = readImage()
   var soundData = readSound()
+  if (!desktopMode && cfg.displayMode === 'desktop') desktopPageActive = true
+
+  function notifyDesktopChanged() {
+    try {
+      if (typeof window.__dshWhaleBongoDesktopChanged === 'function') {
+        window.__dshWhaleBongoDesktopChanged()
+      }
+    } catch (e) {}
+  }
 
   function saveCfg() {
     try { localStorage.setItem(STORE, JSON.stringify(cfg)) } catch (e) {}
+    notifyDesktopChanged()
   }
   function saveImage() {
     try {
       if (imageData) localStorage.setItem(IMAGE_STORE, imageData)
       else localStorage.removeItem(IMAGE_STORE)
+      notifyDesktopChanged()
       return true
     } catch (e) { return false }
   }
@@ -257,6 +278,7 @@ function mountWhaleBongoWidget() {
     try {
       if (soundData) localStorage.setItem(SOUND_STORE, soundData)
       else localStorage.removeItem(SOUND_STORE)
+      notifyDesktopChanged()
       return true
     } catch (e) { return false }
   }
@@ -1075,6 +1097,19 @@ function mountWhaleBongoWidget() {
             '</div>' +
           '</div>' +
           '<div data-setting-list="flip"></div>' +
+          '<div class="dsnw-behavior">' +
+            '<span class="dsnw-behavior-label">显示位置</span>' +
+            '<div class="dsnw-select" data-select="displayMode">' +
+              '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
+                '<span class="dsnw-select-label" data-select-label>网页</span>' +
+                '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
+              '</button>' +
+              '<div class="dsnw-select-popover" role="listbox" aria-label="显示位置">' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="web"><span class="dsnw-select-check">✓</span><span>网页</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="desktop"><span class="dsnw-select-check">✓</span><span>桌面</span></button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
           '<label class="dsnw-toggle-row">' +
             '<span class="dsnw-toggle-label">过滤快捷键与修饰键</span>' +
             '<input type="checkbox" data-filter-shortcuts>' +
@@ -1105,7 +1140,7 @@ function mountWhaleBongoWidget() {
         '<span class="dsnw-setting-value"><span data-size-label>140</span><button type="button" data-reset-size title="恢复默认大小">↺</button></span></div>' +
       '</div>' +
       '<button class="dsnw-reset" type="button" data-reset>恢复默认设置</button>' +
-      '<div class="dsnw-foot">v0.2.3</div>' +
+      '<div class="dsnw-foot">v0.3.0</div>' +
     '</div></div>'
 
   var stage = root.querySelector('.dsnw-stage')
@@ -1125,6 +1160,7 @@ function mountWhaleBongoWidget() {
   var flipModeSelect = root.querySelector('[data-select="flipMode"]')
   var typingAngleModeSelect = root.querySelector('[data-select="typingAngleMode"]')
   var filterShortcutsInput = root.querySelector('[data-filter-shortcuts]')
+  var displayModeSelect = root.querySelector('[data-select="displayMode"]')
   var flipSettingList = root.querySelector('[data-setting-list="flip"]')
   var menuScroll = root.querySelector('.dsnw-menu-scroll')
   var imageNameEl = root.querySelector('[data-image-name]')
@@ -1177,7 +1213,7 @@ function mountWhaleBongoWidget() {
   }
 
   function playHit() {
-    if (!soundPool.length || cfg.volume <= 0) return
+    if (desktopPageActive || !soundPool.length || cfg.volume <= 0) return
     var audio = soundPool[soundCursor % soundPool.length]
     soundCursor += 1
     try {
@@ -1309,6 +1345,7 @@ function mountWhaleBongoWidget() {
     if (flipModeSelect) setSelectValue(flipModeSelect, cfg.flipMode)
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
     if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
+    if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
     if (flipSettingList) flipSettingList.hidden = cfg.flipMode !== 'custom'
     updateFoldSummaries()
@@ -1470,7 +1507,7 @@ function mountWhaleBongoWidget() {
   var lastPlaceKey = ''
   var lastPlaceCard = null
   var pendingPlaceAnimate = false
-  var hasShownWidget = false
+  var hasShownWidget = Boolean(desktopMode)
   var initialRevealTimer = 0
   var springAnchorX = 0
   var springAnchorY = 0
@@ -1619,7 +1656,7 @@ function mountWhaleBongoWidget() {
     if (keyPositions || keyPositionsRequested) return
     keyPositionsRequested = true
     try {
-      window.fetch(BASE + '/key-angles.json', { cache: 'no-store' })
+      window.fetch(KEY_ANGLES_URL, { cache: 'no-store' })
         .then(function (response) {
           if (!response || !response.ok) throw new Error('key map unavailable')
           return response.json()
@@ -2269,7 +2306,7 @@ function mountWhaleBongoWidget() {
   }
 
   function probeCardPosition(now) {
-    if (widgetDisposed || drag) return
+    if (widgetDisposed || drag || desktopPageActive) return
     if (now < scrollActiveUntil) return
     if (now - lastProbeAt < 50) return
     lastProbeAt = now
@@ -2369,6 +2406,7 @@ function mountWhaleBongoWidget() {
   }
   function place(animate) {
     if (widgetDisposed) return
+    if (desktopPageActive) { root.style.display = 'none'; return }
     var card = cardEl()
     if (!card) {
       placeFallback()
@@ -2913,6 +2951,21 @@ function mountWhaleBongoWidget() {
     })
   }
 
+  if (displayModeSelect) {
+    initSelect(displayModeSelect, function (value) {
+      var next = value === 'desktop' ? 'desktop' : 'web'
+      if (cfg.displayMode === next) return
+      cfg.displayMode = next
+      saveCfg()
+      syncSettings()
+      if (!desktopMode) {
+        if (next === 'desktop') startDesktopMode()
+        else stopDesktopMode()
+      }
+    })
+    setSelectValue(displayModeSelect, cfg.displayMode)
+  }
+
   on(document, 'pointerdown', function (event) {
     if (!activeSelect) return
     if (activeSelect.contains(event.target) || activeSelect._popover.contains(event.target)) return
@@ -3237,6 +3290,13 @@ function mountWhaleBongoWidget() {
   function onHitPointerDown(event) {
     if (event.button !== 0) return
     hideSnapDots()
+    if (desktopMode && window.whaleDesktop) {
+      desktopWindowDrag = true
+      try { window.whaleDesktop.beginDrag(event.screenX, event.screenY) } catch (e) {}
+      try { hitbox.setPointerCapture(event.pointerId) } catch (e) {}
+      event.preventDefault()
+      return
+    }
     if (springActive) {
       curX = springAnchorX - cfg.size / 2
       curY = springAnchorY - cfg.size
@@ -3256,6 +3316,10 @@ function mountWhaleBongoWidget() {
     startPointerPress()
   }
   function onHitPointerMove(event) {
+    if (desktopWindowDrag) {
+      try { window.whaleDesktop.moveDrag(event.screenX, event.screenY) } catch (e) {}
+      return
+    }
     if (!drag || event.pointerId !== drag.id) return
     var dx = event.clientX - drag.x
     var dy = event.clientY - drag.y
@@ -3287,6 +3351,12 @@ function mountWhaleBongoWidget() {
     updateSnapDots()
   }
   function onHitPointerUp(event) {
+    if (desktopWindowDrag) {
+      desktopWindowDrag = false
+      try { window.whaleDesktop.endDrag() } catch (e) {}
+      try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
+      return
+    }
     if (!drag || (event && event.pointerId !== drag.id)) return
     var moved = drag.moved
     var fromSnapPoint = drag.fromSnapPoint
@@ -3421,6 +3491,7 @@ function mountWhaleBongoWidget() {
 
   function onKeyDown(event) {
     if (!event.isTrusted) return
+    if (desktopPageActive) postDesktopKey('down', event)
     if (!widgetVisible()) return
     if (event.key === 'Escape' && menuOpen) {
       if (activeSelect) closeAllSelects(true)
@@ -3445,6 +3516,7 @@ function mountWhaleBongoWidget() {
     beginInput(id, hands[handIndex], sameKey, code)
   }
   function onKeyUp(event) {
+    if (desktopPageActive && event.isTrusted) postDesktopKey('up', event)
     var code = event.code || event.key
     if (!code) return
     endInput('key:' + code)
@@ -3526,12 +3598,184 @@ function mountWhaleBongoWidget() {
       } catch (e) {}
     }
     schedulePlace()
-    dsnDiag('mount', { hasCard: Boolean(cardEl()) })
+    if (desktopPageActive) startDesktopMode()
+    dsnDiag('mount', { hasCard: Boolean(cardEl()), desktop: desktopPageActive })
+  }
+
+  function desktopEventPayload(info) {
+    return {
+      isTrusted: true,
+      key: info && info.key ? String(info.key) : '',
+      code: info && info.code ? String(info.code) : '',
+      ctrlKey: Boolean(info && info.ctrlKey),
+      metaKey: Boolean(info && info.metaKey),
+      altKey: Boolean(info && info.altKey),
+      shiftKey: Boolean(info && info.shiftKey),
+      repeat: false,
+      target: document.body,
+    }
+  }
+
+  if (desktopMode) {
+    var desktopInputApi = {
+      keydown: function (info) { onKeyDown(desktopEventPayload(info)) },
+      keyup: function (info) { onKeyUp(desktopEventPayload(info)) },
+    }
+    window.__dshWhaleBongoDesktopInput = desktopInputApi
+  }
+
+  function desktopSnapshot() {
+    return { cfg: cfg, image: imageData, sound: soundData }
+  }
+
+  function postDesktopKey(action, event) {
+    try {
+      fetch(BASE + '/desktop/key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: action,
+          key: event.key,
+          code: event.code,
+          ctrlKey: !!event.ctrlKey,
+          metaKey: !!event.metaKey,
+          altKey: !!event.altKey,
+          shiftKey: !!event.shiftKey,
+        }),
+        keepalive: true,
+      }).catch(function () {})
+    } catch (e) {}
+  }
+
+  function stopDesktopPoll() {
+    if (!desktopPollTimer) return
+    try { window.clearInterval(desktopPollTimer) } catch (e) {}
+    desktopPollTimer = 0
+  }
+
+  function showWebWidget() {
+    desktopPageActive = false
+    desktopStarted = false
+    desktopDownTicks = 0
+    stopDesktopPoll()
+    try { fetch(BASE + '/desktop/stop', { method: 'POST' }).catch(function () {}) } catch (e) {}
+    root.style.display = ''
+    lastPlaceKey = ''
+    schedulePlace(false)
+    syncMenu()
+    if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
+  }
+
+  function reloadWithDesktopConfig() {
+    fetch(BASE + '/desktop/config', { cache: 'no-store' })
+      .then(function (response) { return response.json() })
+      .then(function (data) {
+        var snapshot = data && data.snapshot
+        if (!snapshot || !snapshot.cfg) throw new Error('no desktop config')
+        var nextCfg = snapshot.cfg
+        nextCfg.displayMode = 'web'
+        localStorage.setItem(STORE, JSON.stringify(nextCfg))
+        if (snapshot.image) localStorage.setItem(IMAGE_STORE, snapshot.image)
+        else localStorage.removeItem(IMAGE_STORE)
+        if (snapshot.sound) localStorage.setItem(SOUND_STORE, snapshot.sound)
+        else localStorage.removeItem(SOUND_STORE)
+        window.location.reload()
+      })
+      .catch(function () {
+        cfg.displayMode = 'web'
+        saveCfg()
+        showWebWidget()
+      })
+  }
+
+  function startDesktopPoll() {
+    stopDesktopPoll()
+    desktopPollTimer = window.setInterval(function () {
+      if (!desktopPageActive) { stopDesktopPoll(); return }
+      fetch(BASE + '/desktop/status', { cache: 'no-store' })
+        .then(function (response) { return response.json() })
+        .then(function (state) {
+          if (!desktopPageActive) return
+          if (state && state.mode === 'web') {
+            desktopPageActive = false
+            stopDesktopPoll()
+            reloadWithDesktopConfig()
+            return
+          }
+          if (!state || !state.running) {
+            desktopDownTicks += 1
+            if (desktopDownTicks >= 3) {
+              cfg.displayMode = 'web'
+              saveCfg()
+              showWebWidget()
+            }
+          } else {
+            desktopDownTicks = 0
+          }
+        })
+        .catch(function () {
+          if (!desktopPageActive) return
+          desktopDownTicks += 1
+          if (desktopDownTicks >= 3) {
+            cfg.displayMode = 'web'
+            saveCfg()
+            showWebWidget()
+          }
+        })
+    }, 1000)
+  }
+
+  function startDesktopMode() {
+    if (desktopMode || desktopStarted) return
+    desktopStarted = true
+    desktopPageActive = true
+    desktopDownTicks = 0
+    root.style.display = 'none'
+    try { closeMenu() } catch (e) {}
+    try {
+      fetch(BASE + '/desktop/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(desktopSnapshot()),
+      }).then(function (response) { return response.json() })
+        .then(function (state) {
+          if (!state || !state.running) {
+            cfg.displayMode = 'web'
+            desktopStarted = false
+            saveCfg()
+            showWebWidget()
+            return
+          }
+          startDesktopPoll()
+        })
+        .catch(function () {
+          cfg.displayMode = 'web'
+          saveCfg()
+          showWebWidget()
+        })
+    } catch (e) {
+      cfg.displayMode = 'web'
+      saveCfg()
+      showWebWidget()
+    }
+  }
+
+  function stopDesktopMode() {
+    desktopPageActive = false
+    desktopStarted = false
+    desktopDownTicks = 0
+    stopDesktopPoll()
+    try { fetch(BASE + '/desktop/stop', { method: 'POST' }).catch(function () {}) } catch (e) {}
+    root.style.display = ''
+    lastPlaceKey = ''
+    schedulePlace(false)
   }
 
   function disposeWidget() {
     if (widgetDisposed) return
     widgetDisposed = true
+    stopDesktopPoll()
+    if (desktopMode && window.__dshWhaleBongoDesktopInput === desktopInputApi) delete window.__dshWhaleBongoDesktopInput
     mounted = false
 
     if (rafId) {

@@ -5,13 +5,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createDesktopSupervisor } from './desktop.js'
 
 const PKG_ROOT = path.dirname(fileURLToPath(import.meta.url))
 const BASE = '/dsh-whale-bongo'
 const WIDGET_PATH = BASE + '/widget.js'
 const PORTRAIT_PATH = BASE + '/portrait.png'
 const KEY_ANGLES_PATH = BASE + '/key-angles.json'
-const VERSION = '0.2.3'
+const VERSION = '0.3.0'
 
 const diag = {
   startedAt: Date.now(),
@@ -58,11 +59,51 @@ function json(res, value) {
   res.end(body)
 }
 
+function readJsonBody(req, limit = 32 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0
+    const chunks = []
+    req.on('data', (chunk) => {
+      size += chunk.length
+      if (size > limit) {
+        reject(new Error('request body too large'))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      try {
+        const text = Buffer.concat(chunks).toString('utf8')
+        resolve(text ? JSON.parse(text) : {})
+      } catch (error) {
+        reject(error)
+      }
+    })
+    req.on('error', reject)
+  })
+}
+
+function text(res, status, body) {
+  const value = Buffer.from(String(body), 'utf8')
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'Content-Length': String(value.length),
+  })
+  res.end(value)
+}
+
 export default {
   name: 'dsh-whale-bongo',
 
   apply(root) {
     const disposers = []
+    const desktop = createDesktopSupervisor({
+      pkgRoot: PKG_ROOT,
+      log: (message) => console.warn('[dsh-whale-bongo] ' + message),
+    })
+    root.effect(() => () => desktop.dispose())
     root.effect(() => () => {
       for (const dispose of disposers) {
         try { dispose() } catch {}
@@ -131,6 +172,58 @@ export default {
 
       route({
         kind: 'exact',
+        path: BASE + '/desktop/status',
+        handler(req, res) {
+          json(res, { ok: true, ...desktop.state() })
+        },
+      })
+
+      route({
+        kind: 'exact',
+        path: BASE + '/desktop/start',
+        handler(req, res) {
+          readJsonBody(req).then((body) => {
+            json(res, { ok: true, ...desktop.start(body && body.cfg ? body : null) })
+          }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
+        },
+      })
+
+      route({
+        kind: 'exact',
+        path: BASE + '/desktop/stop',
+        handler(req, res) {
+          desktop.stop()
+          json(res, { ok: true, ...desktop.state() })
+        },
+      })
+
+      route({
+        kind: 'exact',
+        path: BASE + '/desktop/config',
+        handler(req, res) {
+          if (req.method === 'GET') {
+            json(res, { ok: true, snapshot: desktop.getSnapshot() })
+            return
+          }
+          readJsonBody(req).then((body) => {
+            json(res, { ok: true, ...desktop.updateConfig(body && body.cfg ? body : null) })
+          }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
+        },
+      })
+
+      route({
+        kind: 'exact',
+        path: BASE + '/desktop/key',
+        handler(req, res) {
+          readJsonBody(req, 64 * 1024).then((body) => {
+            const accepted = desktop.key(body)
+            json(res, { ok: accepted })
+          }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
+        },
+      })
+
+      route({
+        kind: 'exact',
         path: BASE + '/health',
         handler(req, res) {
           json(res, {
@@ -142,6 +235,7 @@ export default {
             keyAngles: KEY_ANGLES_PATH,
             keyAnglesBytes: keyAngles ? keyAngles.length : 0,
             widgetBytes: Buffer.byteLength(loadWidgetJs()),
+            desktop: desktop.state(),
             diag,
           })
         },

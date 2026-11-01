@@ -4,21 +4,21 @@
 请安装**整个 `dsh-whale-bongo` 目录**（或 `.tgz` 包），然后确认当前 DSH profile 已启用该插件。
 
 - 插件名：`dsh-whale-bongo`
-- 当前版本：`0.2.3`
+- 当前版本：`0.3.0`
 - 形态：输入框旁的打字挂件，没有侧边栏页面
 - 默认：逻辑 3、`本体.png`、手部 14/81/35/41/77.5、音量 60
 - bundle 本身不需要构建，也没有 npm 运行时依赖
 
 > [!WARNING]
 > **npm 包暂未发布。** 作者 npm 账号因安全问题暂时冻结，预计 **2026-11-03** 解封后上传。  
-> 当前不要执行 `dsh plugin add dsh-whale-bongo@0.2.3`；请使用 GitHub Release 的 `dsh-whale-bongo-0.2.3-package.zip` / `.tgz`，或本地目录安装。  
-> Release：https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.2.3
+> 当前不要执行 `dsh plugin add dsh-whale-bongo@0.3.0`；请使用 GitHub Release 的 `dsh-whale-bongo-0.3.0-package.zip` / `.tgz`，或本地目录安装。  
+> Release：https://github.com/MeteorNOX/dsh-whale-bongo/releases/tag/v0.3.0
 
 ---
 
 ## 1. 准备
 
-1. 解压 `dsh-whale-bongo-0.2.3-package.zip`，得到：
+1. 解压 `dsh-whale-bongo-0.3.0-package.zip`，得到：
 
    ```text
    dsh-whale-bongo/
@@ -64,7 +64,7 @@ profile = desktop
 如果工具支持 tarball，也可以直接安装：
 
 ```text
-dsh-whale-bongo-0.2.3.tgz
+dsh-whale-bongo-0.3.0.tgz
 ```
 
 ### 没有工具、用桌面 UI 时
@@ -160,7 +160,7 @@ curl http://127.0.0.1:<DSH端口>/dsh-whale-bongo/health
 ```json
 {
   "ok": true,
-  "version": "0.2.3",
+  "version": "0.3.0",
   "widget": "/dsh-whale-bongo/widget.js",
   "portrait": "/dsh-whale-bongo/portrait.png"
 }
@@ -222,6 +222,6 @@ profile = 当前 profile（桌面端通常是 desktop）
 - 完全重启 DSH
 安装后确认：
 curl http://127.0.0.1:<端口>/dsh-whale-bongo/health
-应返回 ok:true / version:0.2.3。
+应返回 ok:true / version:0.3.0。
 不要修改插件源码，不要手工改 profile 的 cordis.patch.yml。
 ```

@@ -2,7 +2,7 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>v0.2.3</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
+  <p><code>v0.3.0</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
@@ -19,6 +19,7 @@
 - [亮点](#亮点)
 - [安装](#安装)
 - [设置](#设置)
+- [桌面模式](#桌面模式)
 - [与 dsh-bongo-fish 共存](#与-dsh-bongo-fish-共存)
 - [卸载与数据清理](#卸载与数据清理)
 - [常见问题](#常见问题)
@@ -117,7 +118,7 @@
 ### 从 GitHub Release 安装
 
 1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
-2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.3-package.zip` 或 `dsh-whale-bongo-0.2.3.tgz`；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.3.0-package.zip` 或 `dsh-whale-bongo-0.3.0.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
 4. 在插件列表启用；正常情况下挂件会即时出现。若 Host 路由尚未加载，刷新一次页面即可。
 
@@ -144,7 +145,7 @@ dsh-whale-bongo
 
 ```bash
 # 仅 npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.2.3
+dsh plugin --profile web add dsh-whale-bongo@0.3.0
 ```
 
 > [!TIP]
@@ -187,6 +188,50 @@ dsh plugin --profile web add dsh-whale-bongo@0.2.3
 ```
 
 ---
+
+## 桌面模式
+
+v0.3.0 新增：挂件可以从 DSH 页面里“跳出来”，作为一个透明、无边框、置顶的桌面窗口显示。
+
+开启方式：
+
+1. 右键挂件或点左上角 `☰`；
+2. 打开「行为与动效」；
+3. 把「显示位置」改为「桌面」。
+
+开启后：
+
+- 网页挂件隐藏，桌面窗口出现在屏幕右下角；
+- 桌面窗口默认点击穿透，鼠标移到角色或菜单上才可交互；
+- 拖动角色可移动整个桌面窗口；
+- 桌面菜单和网页菜单使用同一套设置；
+- 设置、图片、音效和当前打字节奏会同步；
+- 在 DSH 里打字时，桌面挂件仍然按实际按键动作；
+- 想回到网页模式，在桌面挂件菜单里把「显示位置」改回「网页」。
+
+桌面模式需要 Electron。优先使用：
+
+```text
+~/.dsh/electron-whale/43.3.0/electron.exe
+```
+
+缺失时，安装依赖后运行：
+
+```bash
+node scripts/ensure-electron.mjs
+```
+
+也可以设置环境变量指向已有 Electron：
+
+```bash
+DSH_WHALE_ELECTRON=/path/to/electron
+```
+
+说明：
+
+- 桌面模式不参与 DSH 输入框、任务栏、排队框等页面吸附；这些吸附只在网页模式生效。
+- 桌面窗口是局部透明窗（约 620×780），不做全屏透明画布。
+- 桌面进程会跟随 DSH 宿主退出，不会留下独立僵尸进程。
 
 ## 与 dsh-bongo-fish 共存
 

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:;"
+    />
+    <title>Whale Bongo</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+      }
+      #desktop-root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      /* Invisible composer-shaped anchor. The widget keeps its normal snap and
+         reveal logic, but there is no DSH input box in this window. */
+      #desktop-composer {
+        position: absolute;
+        left: 50%;
+        top: 638px;
+        width: 560px;
+        height: 72px;
+        transform: translateX(-50%);
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="desktop-root">
+      <div id="desktop-composer" data-composer-card></div>
+    </div>
+    <script src="../../assets/widget.js"></script>
+    <script src="./desktop-renderer.js"></script>
+  </body>
+</html>

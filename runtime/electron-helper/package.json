@@ -1,0 +1,7 @@
+{
+  "name": "dsh-whale-bongo-electron-helper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dsh-whale-bongo desktop widget helper",
+  "main": "main.js"
+}
