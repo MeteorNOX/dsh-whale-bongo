@@ -106,6 +106,7 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
         stop()
       }
     } else if (message.type === 'stop') {
+      if (message.snapshot && message.snapshot.cfg) snapshot = message.snapshot
       mode = 'web'
       stop()
     } else if (message.type === 'error' && typeof message.message === 'string') {

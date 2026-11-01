@@ -44,6 +44,11 @@ function mountWhaleBongoWidget(options) {
   var desktopWindows = []
   var globalKeySource = null
   var initialSnapshot = desktopMode && window.__DSH_WHALE_INITIAL_SNAPSHOT ? window.__DSH_WHALE_INITIAL_SNAPSHOT : null
+  var desktopInputAnchor = desktopMode && window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR ? window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR : null
+  var modeHoldTimer = 0
+  var modeHoldKind = ''
+  var holdHint = null
+  var holdHintBar = null
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -3408,8 +3413,134 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
+  function showModeHoldHint(text) {
+    if (!holdHint) return
+    var label = holdHint.querySelector('[data-hold-label]')
+    if (label) label.textContent = text
+    holdHint.style.display = 'flex'
+    if (holdHintBar) {
+      holdHintBar.style.transition = 'none'
+      holdHintBar.style.width = '0%'
+      void holdHintBar.offsetWidth
+      holdHintBar.style.transition = 'width .5s linear'
+      holdHintBar.style.width = '100%'
+    }
+  }
+
+  function hideModeHoldHint() {
+    if (!holdHint) return
+    holdHint.style.display = 'none'
+    if (holdHintBar) {
+      holdHintBar.style.transition = 'none'
+      holdHintBar.style.width = '0%'
+    }
+  }
+
+  function clearModeHold() {
+    if (modeHoldTimer) {
+      try { window.clearTimeout(modeHoldTimer) } catch (e) {}
+      modeHoldTimer = 0
+    }
+    modeHoldKind = ''
+    hideModeHoldHint()
+  }
+
+  function beginModeHold(kind, text, trigger) {
+    if (modeHoldTimer && modeHoldKind === kind) return
+    clearModeHold()
+    modeHoldKind = kind
+    showModeHoldHint(text)
+    modeHoldTimer = window.setTimeout(function () {
+      modeHoldTimer = 0
+      modeHoldKind = ''
+      hideModeHoldHint()
+      try { trigger() } catch (e) {}
+    }, 500)
+  }
+
+  function windowFrameOffset() {
+    return {
+      x: Math.max(0, (window.outerWidth - window.innerWidth) / 2),
+      y: Math.max(0, window.outerHeight - window.innerHeight),
+    }
+  }
+
+  function switchPageToDesktop(event) {
+    if (desktopMode || desktopPageActive) return
+    clearModeHold()
+    drag = null
+    cancelPointerPress()
+    hideSnapDots()
+    try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
+    var size = cfg.size
+    var frame = windowFrameOffset()
+    var centerX = (window.screenX || 0) + frame.x + curX + size / 2
+    var bottomY = (window.screenY || 0) + frame.y + curY + size
+    cfg.snap = { ref: 'viewport', x: centerX - size / 2, y: bottomY - size }
+    cfg.displayMode = 'desktop'
+    saveCfg()
+    startDesktopMode()
+  }
+
+  function switchDesktopToPage(event) {
+    if (!desktopMode) return
+    clearModeHold()
+    drag = null
+    cancelPointerPress()
+    try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
+    cfg.displayMode = 'web'
+    cfg.returnToComposerCenter = true
+    saveCfg()
+    try {
+      window.whaleDesktop.stopDesktop({ cfg: cfg, image: imageData, sound: soundData })
+    } catch (e) {}
+  }
+
+  function evaluateModeHold(event) {
+    if (!drag || !drag.moved) {
+      if (modeHoldTimer) clearModeHold()
+      return
+    }
+    if (desktopMode) {
+      if (!desktopInputAnchor) {
+        if (modeHoldKind === 'desktop-return') clearModeHold()
+        return
+      }
+      var size = cfg.size
+      var petX = (window.screenX || 0) + curX + size / 2
+      var petY = (window.screenY || 0) + curY + imageBottomNorm * size
+      var dx = petX - numberOr(desktopInputAnchor.x, petX)
+      var dy = petY - numberOr(desktopInputAnchor.y, petY)
+      if (Math.sqrt(dx * dx + dy * dy) <= 90) {
+        beginModeHold('desktop-return', '保持 0.5 秒回到客户端', function () {
+          switchDesktopToPage(event)
+        })
+      } else if (modeHoldKind === 'desktop-return') {
+        clearModeHold()
+      }
+      return
+    }
+    if (desktopPageActive) {
+      if (modeHoldTimer) clearModeHold()
+      return
+    }
+    var frame = windowFrameOffset()
+    var right = (window.screenX || 0) + frame.x + window.innerWidth
+    var bottom = (window.screenY || 0) + frame.y + window.innerHeight
+    var nearRight = (event.screenX || 0) >= right - 14
+    var nearBottom = (event.screenY || 0) >= bottom - 14
+    if (nearRight && nearBottom) {
+      beginModeHold('page-desktop', '保持 0.5 秒进入桌面', function () {
+        switchPageToDesktop(event)
+      })
+    } else if (modeHoldKind === 'page-desktop') {
+      clearModeHold()
+    }
+  }
+
   function onHitPointerDown(event) {
     if (event.button !== 0) return
+    clearModeHold()
     root.style.transition = ''
     hideSnapDots()
     if (springActive) {
@@ -3461,8 +3592,10 @@ function mountWhaleBongoWidget(options) {
     bodyStretch = 0
     if (moveShell) moveShell.style.transform = ''
     updateSnapDots()
+    evaluateModeHold(event)
   }
   function onHitPointerUp(event) {
+    clearModeHold()
     if (desktopMode) window.__dshWhaleBongoDesktopDragging = false
     if (!drag || (event && event.pointerId !== drag.id)) return
     var moved = drag.moved
@@ -3643,6 +3776,7 @@ function mountWhaleBongoWidget(options) {
     endInput('key:' + code)
   }
   function onWindowBlur() {
+    clearModeHold()
     releaseAll()
   }
   on(document, 'keydown', onKeyDown, true)
@@ -3667,6 +3801,16 @@ function mountWhaleBongoWidget(options) {
       return
     }
     host.appendChild(root)
+    holdHint = document.createElement('div')
+    holdHint.style.cssText = 'position:fixed;left:50%;bottom:48px;transform:translateX(-50%);z-index:2147483647;display:none;flex-direction:column;gap:6px;min-width:190px;padding:9px 13px;border-radius:10px;background:rgba(18,20,28,.88);color:#fff;font:12px/1.4 system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.28);pointer-events:none;'
+    holdHint.innerHTML = '<span data-hold-label>保持 0.5 秒</span><span style="height:3px;border-radius:2px;background:rgba(255,255,255,.16);overflow:hidden"><i data-hold-bar style="display:block;width:0;height:100%;background:#6d8cff"></i></span>'
+    document.body.appendChild(holdHint)
+    holdHintBar = holdHint.querySelector('[data-hold-bar]')
+    widgetCleanups.push(function () {
+      try { holdHint.remove() } catch (e) {}
+      holdHint = null
+      holdHintBar = null
+    })
     dsnDiag('appended')
     buildSettingRows(imageSettingList, 'image')
     buildSettingRows(handSettingList, 'hand')
@@ -3754,7 +3898,20 @@ function mountWhaleBongoWidget(options) {
       }
     }
     desktopWindows = next
-    if (!desktopMode || drag) return
+    if (!desktopMode) return
+    if (!desktopInputAnchor) {
+      for (var di = 0; di < desktopWindows.length; di++) {
+        var dw = desktopWindows[di]
+        if (dw.title && dw.title.indexOf('DeepSeek Harness') !== -1) {
+          desktopInputAnchor = {
+            x: (dw.left + dw.right) / 2,
+            y: dw.bottom - 150,
+          }
+          break
+        }
+      }
+    }
+    if (drag) return
     if (cfg.snap && cfg.snap.ref === 'desktop-window') {
       if (!findDesktopWindow(cfg.snap.hwnd)) {
         cfg.snap = { ref: 'viewport', x: curX, y: curY }
@@ -3861,7 +4018,22 @@ function mountWhaleBongoWidget(options) {
   }
 
   function desktopSnapshot() {
-    return { cfg: cfg, image: imageData, sound: soundData }
+    var snapshot = { cfg: cfg, image: imageData, sound: soundData }
+    if (!desktopMode) {
+      try {
+        var card = document.querySelector('[data-composer-card]') || document.querySelector('[data-composer-input]')
+        var rect = card && card.getBoundingClientRect()
+        if (rect && rect.width && rect.height) {
+          var frameX = (window.outerWidth - window.innerWidth) / 2
+          var frameY = window.outerHeight - window.innerHeight
+          snapshot.inputAnchor = {
+            x: (window.screenX || 0) + frameX + rect.left + rect.width / 2,
+            y: (window.screenY || 0) + frameY + rect.top,
+          }
+        }
+      } catch (e) {}
+    }
+    return snapshot
   }
 
   function flushDesktopKeys() {
@@ -3947,8 +4119,14 @@ function mountWhaleBongoWidget(options) {
         nextCfg.displayMode = 'web'
         // Keep the page widget's previous placement; the desktop snap belongs
         // to the desktop overlay and must not move the client widget.
-        if (previous && previous.snap && previous.snap.ref !== 'desktop-window') nextCfg.snap = previous.snap
-        else nextCfg.snap = { ref: 'card', edge: 'top', x: null }
+        if (nextCfg.returnToComposerCenter) {
+          nextCfg.snap = { ref: 'point', id: 'composer-center' }
+          delete nextCfg.returnToComposerCenter
+        } else if (previous && previous.snap && previous.snap.ref !== 'desktop-window') {
+          nextCfg.snap = previous.snap
+        } else {
+          nextCfg.snap = { ref: 'card', edge: 'top', x: null }
+        }
         localStorage.setItem(STORE, JSON.stringify(nextCfg))
         if (snapshot.image) localStorage.setItem(IMAGE_STORE, snapshot.image)
         else localStorage.removeItem(IMAGE_STORE)
@@ -4057,6 +4235,7 @@ function mountWhaleBongoWidget(options) {
     widgetDisposed = true
     stopDesktopPoll()
     stopGlobalKeyStream()
+    clearModeHold()
     if (desktopKeyFlushTimer) {
       try { window.clearTimeout(desktopKeyFlushTimer) } catch (e) {}
       desktopKeyFlushTimer = 0
