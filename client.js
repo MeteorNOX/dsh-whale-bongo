@@ -3917,6 +3917,16 @@ function mountWhaleBongoWidget(options) {
     applySize()
     applyAll()
     syncMenu()
+    if (pageReturnTransition && revealShell) {
+      root.classList.add('is-mode-entering')
+      later(function () { root.classList.remove('is-mode-entering') }, 700)
+      delete window.__dshWhaleBongoReturningFromDesktop
+    }
+    if (desktopEnterTransition && revealShell) {
+      root.classList.add('is-mode-entering')
+      later(function () { root.classList.remove('is-mode-entering') }, 700)
+      delete window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION
+    }
     place()
     rebuildHitMask()
     lastTime = nowMs()
@@ -3958,16 +3968,6 @@ function mountWhaleBongoWidget(options) {
       } catch (e) {}
     }
     schedulePlace()
-    if (pageReturnTransition && revealShell) {
-      root.classList.add('is-mode-entering')
-      later(function () { root.classList.remove('is-mode-entering') }, 700)
-      delete window.__dshWhaleBongoReturningFromDesktop
-    }
-    if (desktopEnterTransition && revealShell) {
-      root.classList.add('is-mode-entering')
-      later(function () { root.classList.remove('is-mode-entering') }, 700)
-      delete window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION
-    }
     if (desktopMode && Array.isArray(window.__DSH_WHALE_DESKTOP_WINDOWS)) {
       setDesktopWindows(window.__DSH_WHALE_DESKTOP_WINDOWS)
     }
