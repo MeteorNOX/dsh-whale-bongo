@@ -34,6 +34,10 @@ let globalKeysActive = false
 let windowsChild = null
 let windowsBuffer = ''
 let latestWindows = []
+let mouseChild = null
+let mouseBuffer = ''
+let rendererReady = false
+let mouseFollowStarted = false
 
 if (process.env.DSH_WHALE_SOFTWARE_RENDER === '1') {
   app.disableHardwareAcceleration()
@@ -151,12 +155,14 @@ function sendConfig(snapshot) {
   if (win && !win.isDestroyed()) {
     win.webContents.send('whale:config', pendingConfig)
   }
+  if (pendingConfig && pendingConfig.followMouse && rendererReady) startMouseFollow()
 }
 
 function stop() {
   hostGone = true
   stopGlobalKeys()
   stopDesktopWindows()
+  stopMouseFollow()
   try { if (bridgeServer) bridgeServer.close() } catch {}
   try { if (win && !win.isDestroyed()) win.destroy() } catch {}
   app.quit()
@@ -208,6 +214,13 @@ function startBridge() {
     if (req.method === 'POST' && req.url === '/config') {
       readBody(req).then((body) => {
         sendConfig(body && body.snapshot ? body.snapshot : null)
+        sendJson(res, 200, { ok: true })
+      }).catch((error) => sendJson(res, 400, { ok: false, error: String(error) }))
+      return
+    }
+    if (req.method === 'POST' && req.url === '/input-anchor') {
+      readBody(req).then((body) => {
+        if (win && !win.isDestroyed()) win.webContents.send('whale:input-anchor', body || null)
         sendJson(res, 200, { ok: true })
       }).catch((error) => sendJson(res, 400, { ok: false, error: String(error) }))
       return
@@ -284,6 +297,65 @@ function handleGlobalKeyLine(line) {
     metaKey: parts[5] === '1',
   }
   if (win && !win.isDestroyed()) win.webContents.send('whale:key', payload)
+}
+
+function startMouseFollow() {
+  if (process.platform !== 'win32' || mouseChild || mouseFollowStarted) return
+  mouseFollowStarted = true
+  try {
+    mouseChild = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(__dirname, 'mouse-follow.ps1'),
+    ], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    mouseChild = null
+    process.stderr.write('[whale helper] mouse follow failed: ' + String(error) + String.fromCharCode(10))
+    return
+  }
+  mouseChild.stdout.setEncoding('utf8')
+  mouseChild.stdout.on('data', (chunk) => {
+    mouseBuffer += chunk
+    let index
+    while ((index = mouseBuffer.indexOf(String.fromCharCode(10))) !== -1) {
+      const line = mouseBuffer.slice(0, index).trim()
+      mouseBuffer = mouseBuffer.slice(index + 1)
+      const parts = line.split('|')
+      if (parts.length !== 3) continue
+      const left = parts[0] === '1'
+      const screenX = Number(parts[1])
+      const screenY = Number(parts[2])
+      if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) continue
+      const bounds = win && !win.isDestroyed() ? win.getBounds() : { x: 0, y: 0 }
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('whale:mouse-follow', {
+          left: left,
+          x: screenX - bounds.x,
+          y: screenY - bounds.y,
+        })
+      }
+      if (!left) stopMouseFollow()
+    }
+  })
+  mouseChild.stderr.setEncoding('utf8')
+  mouseChild.stderr.on('data', (chunk) => {
+    const text = String(chunk).trim()
+    if (text) process.stderr.write('[whale helper] mouse error: ' + text.slice(0, 500) + String.fromCharCode(10))
+  })
+  mouseChild.once('exit', () => {
+    mouseChild = null
+    mouseBuffer = ''
+  })
+}
+
+function stopMouseFollow() {
+  if (!mouseChild) return
+  try { mouseChild.kill() } catch {}
+  mouseChild = null
+  mouseBuffer = ''
 }
 
 function startDesktopWindows() {
@@ -388,7 +460,9 @@ app.whenReady().then(() => {
   startDesktopWindows()
 
   ipcMain.on('whale:ready', () => {
+    rendererReady = true
     if (pendingConfig) sendConfig(pendingConfig)
+    if (pendingConfig && pendingConfig.followMouse) startMouseFollow()
     if (globalKeysActive && win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
     if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
     writeLine({ type: 'ready' })
@@ -408,9 +482,9 @@ app.whenReady().then(() => {
 
 })
 
-app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows() })
-app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows() })
-process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows() })
+app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow() })
+app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow() })
+process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow() })
 
 app.on('window-all-closed', () => {
   app.quit()

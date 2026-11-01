@@ -234,6 +234,11 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
     lastKeyAction = payload.action || ''
   }
 
+  function inputAnchor(anchor) {
+    if (!desired || !child || !anchor) return false
+    return post('/input-anchor', anchor)
+  }
+
   function key(payload) {
     if (!desired || !child || !payload) return false
     noteKey(payload)
@@ -267,6 +272,7 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
     start,
     stop,
     updateConfig,
+    inputAnchor,
     key,
     keys,
     dispose,

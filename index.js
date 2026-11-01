@@ -260,6 +260,16 @@ export default {
 
       route({
         kind: 'exact',
+        path: BASE + '/desktop/input-anchor',
+        handler(req, res) {
+          readJsonBody(req, 64 * 1024).then((body) => {
+            json(res, { ok: desktop.inputAnchor(body) })
+          }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
+        },
+      })
+
+      route({
+        kind: 'exact',
         path: BASE + '/desktop/keys',
         handler(req, res) {
           readJsonBody(req, 256 * 1024).then((body) => {
