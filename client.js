@@ -3746,7 +3746,9 @@ function mountWhaleBongoWidget(options) {
         saveCfg()
       }
       lastPlaceKey = ''
-      schedulePlace()
+      // Window following is a live attachment, not a snap transition. Do not
+      // run it through the client's position spring.
+      place(false)
     }
   }
 

@@ -102,12 +102,12 @@ if ($env:DSH_WHALE_HELPER_PID) {
 
 $last = ''
 while ($true) {
-  $list = @([DshWhaleWindows]::Snapshot([uint32]$excludedPid))
+  $list = @([DshWhaleWindows]::Snapshot([uint32]$excludedPid) | Sort-Object { [long]$_.hwnd })
   $json = ConvertTo-Json -InputObject $list -Compress -Depth 4
   if ($json -ne $last) {
     [Console]::Out.WriteLine($json)
     [Console]::Out.Flush()
     $last = $json
   }
-  Start-Sleep -Milliseconds 250
+  Start-Sleep -Milliseconds 33
 }
