@@ -2113,12 +2113,12 @@ function mountWhaleBongoWidget() {
     // 优先把当前面板当作吸附元素；面板关闭后再回到输入框。
     var panel = activePanelCard()
     if (panel) return panel
-    // 排队消息框和授权/问题框一样，是输入框上方的临时交互面板。
-    var queue = queueDockCard()
-    if (queue) return queue
     // 输入框上方有任务清单时，优先吸附到任务条，而不是隔着它吸输入框。
     var todo = todoPanelCard()
     if (todo) return todo
+    // 排队消息框也是输入框上方的临时面板，但优先级低于任务栏。
+    var queue = queueDockCard()
+    if (queue) return queue
     var card = document.querySelector('[data-composer-card]')
     if (card) return card
     var input = document.querySelector('[data-composer-input]')
