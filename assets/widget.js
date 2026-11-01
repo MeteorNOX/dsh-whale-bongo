@@ -2123,6 +2123,9 @@ function mountWhaleBongoWidget(options) {
 
   function applyFlip() {
     if (widgetDisposed) return
+    // Do not flip while the user is still holding the widget (or during the
+    // client-to-desktop mouse handoff). Resolve the direction on release.
+    if (drag || mouseFollowing) return
     var flipped = cfg.flipMode === 'always'
     var center = curX + cfg.size / 2
     if (cfg.flipMode === 'auto') {
@@ -4055,6 +4058,7 @@ function mountWhaleBongoWidget(options) {
       mouseFollowing = false
       cfg.snap = { ref: 'viewport', x: curX, y: curY }
       saveCfg()
+      applyFlip()
       lastPlaceKey = ''
     }
   }
