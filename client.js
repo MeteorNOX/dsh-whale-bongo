@@ -42,6 +42,7 @@ function mountWhaleBongoWidget(options) {
   var desktopKeyQueue = []
   var desktopKeyFlushTimer = 0
   var desktopKeyReleaseTimers = {}
+  var mouseFollowing = false
   var desktopWindows = []
   var globalKeySource = null
   var initialSnapshot = desktopMode && window.__DSH_WHALE_INITIAL_SNAPSHOT ? window.__DSH_WHALE_INITIAL_SNAPSHOT : null
@@ -2390,7 +2391,7 @@ function mountWhaleBongoWidget(options) {
   }
 
   function probeCardPosition(now) {
-    if (widgetDisposed || drag || desktopPageActive || (desktopMode && menuOpen)) return
+    if (widgetDisposed || drag || desktopPageActive || mouseFollowing || (desktopMode && menuOpen)) return
     if (now < scrollActiveUntil) return
     if (now - lastProbeAt < 50) return
     lastProbeAt = now
@@ -2498,6 +2499,7 @@ function mountWhaleBongoWidget(options) {
 
   function place(animate) {
     if (widgetDisposed) return
+    if (mouseFollowing) return
     if (desktopPageActive) { root.style.display = 'none'; return }
     var card = cardEl()
     if (!card) {
@@ -3977,7 +3979,7 @@ function mountWhaleBongoWidget(options) {
       }
     }
     desktopWindows = next
-    if (!desktopMode) return
+    if (!desktopMode || mouseFollowing) return
     if (!desktopInputAnchor) {
       for (var di = 0; di < desktopWindows.length; di++) {
         var dw = desktopWindows[di]
@@ -4055,18 +4057,23 @@ function mountWhaleBongoWidget(options) {
       var x = clamp(Number(payload.x) - size / 2, 4, Math.max(4, window.innerWidth - size - 4))
       var y = clamp(Number(payload.y) - size / 2, 4, Math.max(4, window.innerHeight - size - 4))
       if (!isFinite(x) || !isFinite(y)) return
+      mouseFollowing = true
       drag = null
       clearModeHold()
       hideClientSnapIndicator()
+      root.style.transition = ''
       curX = x
       curY = y
+      cfg.snap = { ref: 'viewport', x: x, y: y }
       lastPlaceKey = ''
       root.style.display = ''
       applyFlip()
       setMoveImmediate(x, y)
-      syncMenu()
     } else {
-      magnetize(curX, curY)
+      mouseFollowing = false
+      cfg.snap = { ref: 'viewport', x: curX, y: curY }
+      saveCfg()
+      lastPlaceKey = ''
     }
   }
 
