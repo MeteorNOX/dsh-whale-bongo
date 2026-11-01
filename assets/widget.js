@@ -24,6 +24,8 @@ function mountWhaleBongoWidget(options) {
   var desktopKeyQueue = []
   var desktopKeyFlushTimer = 0
   var desktopKeyReleaseTimers = {}
+  var desktopLastWinX = window.screenX || 0
+  var desktopLastWinY = window.screenY || 0
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -2309,7 +2311,7 @@ function mountWhaleBongoWidget(options) {
   }
 
   function probeCardPosition(now) {
-    if (widgetDisposed || drag || desktopPageActive) return
+    if (widgetDisposed || drag || desktopPageActive || (desktopMode && menuOpen)) return
     if (now < scrollActiveUntil) return
     if (now - lastProbeAt < 50) return
     lastProbeAt = now
@@ -2650,6 +2652,10 @@ function mountWhaleBongoWidget(options) {
   }
   function openMenu() {
     if (menuOpen) return
+    if (desktopMode) {
+      desktopLastWinX = window.screenX || 0
+      desktopLastWinY = window.screenY || 0
+    }
     menuOpen = true
     if (desktopMode && window.whaleDesktop) {
       try { window.whaleDesktop.setMenuOpen(true) } catch (e) {}
@@ -3610,14 +3616,39 @@ function mountWhaleBongoWidget(options) {
             roCard = card
           } catch (e) {}
         }
-        place(true)
+        place(desktopMode && menuOpen ? false : true)
       })
       try { ro.observe(document.documentElement) } catch (e) {}
     }
     on(window, 'resize', function () {
-    if (menuOpen) positionMenu()
-    schedulePlace()
-  })
+      if (desktopMode) {
+        var nextWinX = window.screenX || 0
+        var nextWinY = window.screenY || 0
+        var winDX = nextWinX - desktopLastWinX
+        var winDY = nextWinY - desktopLastWinY
+        desktopLastWinX = nextWinX
+        desktopLastWinY = nextWinY
+        if (winDX || winDY) {
+          if (cfg.snap && cfg.snap.ref === 'viewport') {
+            cfg.snap.x = numberOr(cfg.snap.x, 0) - winDX
+            cfg.snap.y = numberOr(cfg.snap.y, 0) - winDY
+          }
+          if (menuOpen) {
+            if (menuLeft !== null) menuLeft -= winDX
+            if (menuTop !== null) menuTop -= winDY
+          }
+          lastPlaceKey = ''
+        }
+        if (menuOpen) positionMenu()
+        // Preserve the pet's screen position during the temporary
+        // full-work-area menu window, instead of letting the position spring
+        // run from the old local coordinates.
+        place(false)
+        return
+      }
+      if (menuOpen) positionMenu()
+      schedulePlace()
+    })
     on(window, 'scroll', function () {
       // 滚动只用于暂停位置探针；绝不因为滚动把挂件直接瞬移。
       scrollActiveUntil = nowMs() + 120
