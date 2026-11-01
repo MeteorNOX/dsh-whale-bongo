@@ -26,8 +26,12 @@
      cordis.patch.yml
      index.js
      client.js
+     desktop.js
+     global-keys-host.js
      assets/
      locale/
+     runtime/electron-helper/
+     scripts/ensure-electron.mjs
      icon.png
      README.md
    ```
