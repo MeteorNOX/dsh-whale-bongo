@@ -35,7 +35,7 @@ let windowsChild = null
 let windowsBuffer = ''
 let latestWindows = []
 
-if (process.platform === 'win32') {
+if (process.env.DSH_WHALE_SOFTWARE_RENDER === '1') {
   app.disableHardwareAcceleration()
 }
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -116,6 +116,7 @@ function createWindow() {
   win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.webContents.setBackgroundThrottling(false)
+  try { win.webContents.setFrameRate(60) } catch {}
   win.setIgnoreMouseEvents(true, { forward: true })
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
     process.stderr.write('[whale helper] did-fail-load ' + code + ' ' + desc + ' ' + url + String.fromCharCode(10))

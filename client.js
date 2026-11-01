@@ -3398,6 +3398,7 @@ function mountWhaleBongoWidget(options) {
 
   function onHitPointerDown(event) {
     if (event.button !== 0) return
+    root.style.transition = ''
     hideSnapDots()
     if (springActive) {
       curX = springAnchorX - cfg.size / 2
@@ -3748,8 +3749,10 @@ function mountWhaleBongoWidget(options) {
         saveCfg()
       }
       lastPlaceKey = ''
-      // Window following is a live attachment, not a snap transition. Do not
-      // run it through the client's position spring.
+      // Window following is a live attachment, not a snap transition. A very
+      // short CSS interpolation bridges the 30–60Hz window samples without
+      // the lag of the client position spring.
+      root.style.transition = 'left 45ms linear, top 45ms linear'
       place(false)
     }
   }

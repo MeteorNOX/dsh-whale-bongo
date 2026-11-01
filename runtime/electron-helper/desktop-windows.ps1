@@ -101,6 +101,7 @@ if ($env:DSH_WHALE_HELPER_PID) {
 }
 
 $last = ''
+$hotUntil = [DateTime]::MinValue
 while ($true) {
   $list = @([DshWhaleWindows]::Snapshot([uint32]$excludedPid) | Sort-Object { [long]$_.hwnd })
   $json = ConvertTo-Json -InputObject $list -Compress -Depth 4
@@ -108,6 +109,11 @@ while ($true) {
     [Console]::Out.WriteLine($json)
     [Console]::Out.Flush()
     $last = $json
+    $hotUntil = [DateTime]::UtcNow.AddMilliseconds(500)
   }
-  Start-Sleep -Milliseconds 33
+  if ([DateTime]::UtcNow -lt $hotUntil) {
+    Start-Sleep -Milliseconds 12
+  } else {
+    Start-Sleep -Milliseconds 33
+  }
 }
