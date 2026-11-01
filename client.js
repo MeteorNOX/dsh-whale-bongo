@@ -37,6 +37,7 @@ function mountWhaleBongoWidget(options) {
   var desktopKeyReleaseTimers = {}
   var desktopWindows = []
   var globalKeySource = null
+  var initialSnapshot = desktopMode && window.__DSH_WHALE_INITIAL_SNAPSHOT ? window.__DSH_WHALE_INITIAL_SNAPSHOT : null
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -174,9 +175,10 @@ function mountWhaleBongoWidget(options) {
     var out = JSON.parse(JSON.stringify(DEFAULTS))
     var savedCfg = null
     try {
-      var raw = localStorage.getItem(STORE)
-      if (raw) {
-        var saved = JSON.parse(raw)
+      var saved = initialSnapshot && initialSnapshot.cfg
+        ? initialSnapshot.cfg
+        : JSON.parse(localStorage.getItem(STORE) || 'null')
+      if (saved) {
         savedCfg = saved
         for (var key in saved) {
           if (Object.prototype.hasOwnProperty.call(saved, key)) out[key] = saved[key]
@@ -269,6 +271,7 @@ function mountWhaleBongoWidget(options) {
 
   function readImage() {
     try {
+      if (initialSnapshot && initialSnapshot.image) return initialSnapshot.image
       var data = localStorage.getItem(IMAGE_STORE)
       return data && data.indexOf('data:image/') === 0 ? data : null
     } catch (e) { return null }
@@ -276,6 +279,7 @@ function mountWhaleBongoWidget(options) {
 
   function readSound() {
     try {
+      if (initialSnapshot && initialSnapshot.sound) return initialSnapshot.sound
       var data = localStorage.getItem(SOUND_STORE)
       return data && data.indexOf('data:audio/') === 0 ? data : null
     } catch (e) { return null }

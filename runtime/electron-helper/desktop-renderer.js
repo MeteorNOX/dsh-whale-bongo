@@ -35,8 +35,19 @@ window.__dshWhaleBongoDesktopChanged = sendSnapshot
 
 function applySnapshot(snapshot) {
   if (!snapshot || !snapshot.cfg) return
+  var nextCfg = snapshot.cfg
   try {
-    localStorage.setItem(STORE, JSON.stringify(snapshot.cfg))
+    var previous = JSON.parse(localStorage.getItem(STORE) || 'null')
+    if (previous && previous.snap &&
+        (previous.snap.ref === 'desktop-window' || previous.snap.ref === 'viewport') &&
+        (!nextCfg.snap || nextCfg.snap.ref === 'card')) {
+      nextCfg = Object.assign({}, nextCfg, { snap: previous.snap })
+    }
+  } catch {}
+  snapshot = Object.assign({}, snapshot, { cfg: nextCfg })
+  window.__DSH_WHALE_INITIAL_SNAPSHOT = snapshot
+  try {
+    localStorage.setItem(STORE, JSON.stringify(nextCfg))
     if (snapshot.image) localStorage.setItem(IMAGE_STORE, snapshot.image)
     else localStorage.removeItem(IMAGE_STORE)
     if (snapshot.sound) localStorage.setItem(SOUND_STORE, snapshot.sound)
