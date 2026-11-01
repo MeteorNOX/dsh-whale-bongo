@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   sendConfig(snapshot) {
     ipcRenderer.send('whale:config', snapshot)
   },
+  stopDesktop() {
+    ipcRenderer.send('whale:stop')
+  },
   setInteractive(interactive) {
     ipcRenderer.send('whale:interactive', Boolean(interactive))
   },

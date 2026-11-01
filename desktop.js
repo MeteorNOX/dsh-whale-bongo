@@ -99,6 +99,9 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
         mode = 'web'
         stop()
       }
+    } else if (message.type === 'stop') {
+      mode = 'web'
+      stop()
     } else if (message.type === 'error' && typeof message.message === 'string') {
       lastError = message.message
       log('desktop helper: ' + message.message)

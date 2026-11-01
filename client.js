@@ -271,7 +271,11 @@ function mountWhaleBongoWidget(options) {
   function notifyDesktopChanged() {
     try {
       if (typeof window.__dshWhaleBongoDesktopChanged === 'function') {
-        window.__dshWhaleBongoDesktopChanged()
+        window.__dshWhaleBongoDesktopChanged({
+          cfg: cfg,
+          image: imageData,
+          sound: soundData,
+        })
       }
     } catch (e) {}
   }
@@ -2979,6 +2983,9 @@ function mountWhaleBongoWidget(options) {
       cfg.displayMode = next
       saveCfg()
       syncSettings()
+      if (desktopMode && next === 'web' && window.whaleDesktop && typeof window.whaleDesktop.stopDesktop === 'function') {
+        try { window.whaleDesktop.stopDesktop() } catch (e) {}
+      }
       if (!desktopMode) {
         if (next === 'desktop') startDesktopMode()
         else stopDesktopMode()
@@ -3480,6 +3487,7 @@ function mountWhaleBongoWidget(options) {
   on(document, 'pointerdown', function (event) {
     if (!menuOpen) return
     if (menu.contains(event.target) || menuBtn.contains(event.target)) return
+    if (event.target && event.target.closest && event.target.closest('.dsnw-select-popover')) return
     closeMenu()
   }, true)
 

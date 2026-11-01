@@ -7,6 +7,7 @@ window.__DSH_WHALE_KEY_ANGLES_URL = '../../assets/key-angles.json'
 
 let mounted = false
 let configTimer = 0
+let pendingSnapshot = null
 let interactive = false
 
 function readSnapshot() {
@@ -19,11 +20,14 @@ function readSnapshot() {
   }
 }
 
-function sendSnapshot() {
+function sendSnapshot(snapshot) {
+  if (snapshot) pendingSnapshot = snapshot
   if (configTimer) return
   configTimer = setTimeout(() => {
     configTimer = 0
-    try { bridge.sendConfig(readSnapshot()) } catch {}
+    var next = pendingSnapshot || readSnapshot()
+    pendingSnapshot = null
+    try { bridge.sendConfig(next) } catch {}
   }, 150)
 }
 

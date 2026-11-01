@@ -253,6 +253,9 @@ app.whenReady().then(() => {
     pendingConfig = snapshot || null
     writeLine({ type: 'config', snapshot: pendingConfig })
   })
+  ipcMain.on('whale:stop', () => {
+    writeLine({ type: 'stop' })
+  })
 
 })
 
