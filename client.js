@@ -3518,12 +3518,7 @@ function mountWhaleBongoWidget(options) {
 
   function onKeyDown(event) {
     if (!event.isTrusted) return
-    if (desktopPageActive || cfg.displayMode === 'desktop') {
-      postDesktopKey('down', event)
-      window.setTimeout(function () {
-        postDesktopKey('up', event)
-      }, 120)
-    }
+    if (desktopMode && window.__DSH_WHALE_GLOBAL_KEYS && !event.__whaleGlobal) return
     if (!widgetVisible()) return
     if (event.key === 'Escape' && menuOpen) {
       if (activeSelect) closeAllSelects(true)
@@ -3548,7 +3543,7 @@ function mountWhaleBongoWidget(options) {
     beginInput(id, hands[handIndex], sameKey, code)
   }
   function onKeyUp(event) {
-    if ((desktopPageActive || cfg.displayMode === 'desktop') && event.isTrusted) postDesktopKey('up', event)
+    if (desktopMode && window.__DSH_WHALE_GLOBAL_KEYS && !event.__whaleGlobal) return
     var code = event.code || event.key
     if (!code) return
     endInput('key:' + code)
@@ -3640,6 +3635,7 @@ function mountWhaleBongoWidget(options) {
   function desktopEventPayload(info) {
     return {
       isTrusted: true,
+      __whaleGlobal: true,
       key: info && info.key ? String(info.key) : '',
       code: info && info.code ? String(info.code) : '',
       ctrlKey: Boolean(info && info.ctrlKey),

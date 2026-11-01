@@ -30,6 +30,7 @@ let pendingConfig = null
 let hostGone = false
 let keyChild = null
 let keyBuffer = ''
+let globalKeysActive = false
 
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration()
@@ -296,6 +297,8 @@ function startGlobalKeys() {
     process.stderr.write('[whale helper] global key hook failed: ' + String(error) + String.fromCharCode(10))
     return
   }
+  globalKeysActive = true
+  if (win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
   keyChild.stdout.setEncoding('utf8')
   keyChild.stdout.on('data', (chunk) => {
     keyBuffer += chunk
@@ -313,6 +316,7 @@ function startGlobalKeys() {
   })
   keyChild.once('exit', () => {
     keyChild = null
+    globalKeysActive = false
   })
 }
 
@@ -330,6 +334,7 @@ app.whenReady().then(() => {
 
   ipcMain.on('whale:ready', () => {
     if (pendingConfig) sendConfig(pendingConfig)
+    if (globalKeysActive && win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
     writeLine({ type: 'ready' })
   })
   ipcMain.on('whale:interactive', (_event, interactive) => {

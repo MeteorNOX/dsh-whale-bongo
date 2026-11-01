@@ -87,6 +87,10 @@ bridge.onBlur(() => {
   try { api?.closeMenu?.() } catch {}
 })
 
+bridge.onGlobalKeys(() => {
+  window.__DSH_WHALE_GLOBAL_KEYS = true
+})
+
 bridge.onReleaseAll(() => {
   const api = window.__dshWhaleBongoDesktopInput
   try { api?.releaseAll?.() } catch {}
