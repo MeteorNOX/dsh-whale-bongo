@@ -21,18 +21,12 @@ const { app, BrowserWindow, ipcMain, screen } = electron
 const path = require('node:path')
 const http = require('node:http')
 
-const WIDTH = 620
-const HEIGHT = 780
 const HOST_PID = Number(process.env.DSH_WHALE_HOST_PID || 0)
 const HOST_POLL_MS = 2000
 
 let win = null
 let pendingConfig = null
 let hostGone = false
-let drag = null
-let smallBounds = null
-let menuOpen = false
-let suppressBlurUntil = 0
 
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration()
@@ -83,21 +77,17 @@ if (Number.isInteger(HOST_PID) && HOST_PID > 0) {
   }, HOST_POLL_MS).unref?.()
 }
 
-function windowPosition() {
-  const area = screen.getPrimaryDisplay().workArea
-  return {
-    x: Math.max(area.x, area.x + area.width - WIDTH - 24),
-    y: Math.max(area.y, area.y + area.height - HEIGHT - 24),
-  }
+function workArea() {
+  return screen.getPrimaryDisplay().workArea
 }
 
 function createWindow() {
-  const position = windowPosition()
+  const area = workArea()
   win = new BrowserWindow({
-    width: WIDTH,
-    height: HEIGHT,
-    x: position.x,
-    y: position.y,
+    width: area.width,
+    height: area.height,
+    x: area.x,
+    y: area.y,
     useContentSize: true,
     show: false,
     frame: false,
@@ -144,9 +134,7 @@ function createWindow() {
     try { win.setAlwaysOnTop(true, 'screen-saver') } catch {}
     if (!win || win.isDestroyed()) return
     win.webContents.send('whale:release-all')
-    if (!menuOpen || Date.now() >= suppressBlurUntil) {
-      win.webContents.send('whale:blur')
-    }
+    win.webContents.send('whale:blur')
   })
 }
 
@@ -257,21 +245,6 @@ app.whenReady().then(() => {
     if (pendingConfig) sendConfig(pendingConfig)
     writeLine({ type: 'ready' })
   })
-  ipcMain.on('whale:menu-open', (_event, open) => {
-    if (!win || win.isDestroyed()) return
-    menuOpen = Boolean(open)
-    suppressBlurUntil = Date.now() + 350
-    if (open) {
-      if (!smallBounds) {
-        smallBounds = win.getBounds()
-        win.setBounds(screen.getDisplayMatching(smallBounds).workArea)
-        win.setAlwaysOnTop(true, 'screen-saver')
-      }
-    } else if (smallBounds) {
-      win.setBounds(smallBounds)
-      smallBounds = null
-    }
-  })
   ipcMain.on('whale:interactive', (_event, interactive) => {
     if (!win || win.isDestroyed()) return
     win.setIgnoreMouseEvents(!interactive, { forward: true })
@@ -281,29 +254,6 @@ app.whenReady().then(() => {
     writeLine({ type: 'config', snapshot: pendingConfig })
   })
 
-  ipcMain.on('whale:drag-start', (_event, point) => {
-    if (!win || win.isDestroyed() || !point) return
-    const bounds = win.getBounds()
-    drag = {
-      x: Number(point.x) || 0,
-      y: Number(point.y) || 0,
-      bx: bounds.x,
-      by: bounds.y,
-    }
-  })
-  ipcMain.on('whale:drag-move', (_event, point) => {
-    if (!win || win.isDestroyed() || !drag || !point) return
-    const x = drag.bx + (Number(point.x) - drag.x)
-    const y = drag.by + (Number(point.y) - drag.y)
-    win.setPosition(Math.round(x), Math.round(y))
-  })
-  ipcMain.on('whale:drag-end', () => {
-    drag = null
-  })
-})
-
-app.on('before-quit', () => {
-  drag = null
 })
 
 app.on('window-all-closed', () => {

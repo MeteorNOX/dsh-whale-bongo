@@ -56,6 +56,13 @@ function applySnapshot(snapshot) {
 }
 
 function updateInteractive(event) {
+  if (window.__dshWhaleBongoDesktopDragging) {
+    if (!interactive) {
+      interactive = true
+      try { bridge.setInteractive(true) } catch {}
+    }
+    return
+  }
   const target = document.elementFromPoint(event.clientX, event.clientY)
   const next = Boolean(target && target.closest && target.closest('#dsh-whale-bongo'))
   if (next === interactive) return

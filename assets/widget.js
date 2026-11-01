@@ -20,12 +20,9 @@ function mountWhaleBongoWidget(options) {
   var desktopStarted = false
   var desktopPollTimer = 0
   var desktopDownTicks = 0
-  var desktopWindowDrag = null
   var desktopKeyQueue = []
   var desktopKeyFlushTimer = 0
   var desktopKeyReleaseTimers = {}
-  var desktopLastWinX = window.screenX || 0
-  var desktopLastWinY = window.screenY || 0
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -401,6 +398,12 @@ function mountWhaleBongoWidget(options) {
       background: var(--dsnw-skin);
       border: 3px solid var(--dsnw-ink);
       border: clamp(2.4px, 1.62cqi, 5.2px) solid var(--dsnw-ink);
+    }
+    /* DSH 页面里的手部圆角会被宿主样式压成鼓鼓的圆角方块；桌面没有这层
+       宿主样式，显式使用同样的圆角比例，避免变成纯椭圆。 */
+    #dsh-whale-bongo[data-desktop] .dsnw-ball,
+    #dsh-whale-bongo[data-desktop] .dsnw-trail {
+      border-radius: 32%;
     }
     #dsh-whale-bongo .dsnw-art,
     #dsh-whale-bongo .dsnw-hitbox {
@@ -1000,6 +1003,7 @@ function mountWhaleBongoWidget(options) {
 
   var root = document.createElement('div')
   root.id = 'dsh-whale-bongo'
+  if (desktopMode) root.setAttribute('data-desktop', '1')
   root.setAttribute('data-plugin', 'dsh-whale-bongo')
   root.style.display = 'none'
   root.innerHTML =
@@ -2652,14 +2656,7 @@ function mountWhaleBongoWidget(options) {
   }
   function openMenu() {
     if (menuOpen) return
-    if (desktopMode) {
-      desktopLastWinX = window.screenX || 0
-      desktopLastWinY = window.screenY || 0
-    }
     menuOpen = true
-    if (desktopMode && window.whaleDesktop) {
-      try { window.whaleDesktop.setMenuOpen(true) } catch (e) {}
-    }
     menuLeft = null
     menuTop = null
     menu.style.bottom = 'auto'
@@ -2678,9 +2675,6 @@ function mountWhaleBongoWidget(options) {
     if (!menuOpen) return
     closeAllSelects()
     menuOpen = false
-    if (desktopMode && window.whaleDesktop) {
-      try { window.whaleDesktop.setMenuOpen(false) } catch (e) {}
-    }
     root.classList.remove('is-menu-open')
     menu.classList.remove('open')
     scheduleHideMenuButton()
@@ -3305,18 +3299,6 @@ function mountWhaleBongoWidget(options) {
   function onHitPointerDown(event) {
     if (event.button !== 0) return
     hideSnapDots()
-    if (desktopMode && window.whaleDesktop) {
-      desktopWindowDrag = {
-        id: event.pointerId,
-        startX: event.screenX,
-        startY: event.screenY,
-        moved: false,
-      }
-      try { hitbox.setPointerCapture(event.pointerId) } catch (e) {}
-      startPointerPress()
-      event.preventDefault()
-      return
-    }
     if (springActive) {
       curX = springAnchorX - cfg.size / 2
       curY = springAnchorY - cfg.size
@@ -3332,24 +3314,11 @@ function mountWhaleBongoWidget(options) {
       fromSnapPoint: cfg.snap && cfg.snap.ref === 'point' ? cfg.snap.id : null,
     }
     try { hitbox.setPointerCapture(event.pointerId) } catch (e) {}
+    if (desktopMode) window.__dshWhaleBongoDesktopDragging = true
     event.preventDefault()
     startPointerPress()
   }
   function onHitPointerMove(event) {
-    if (desktopWindowDrag) {
-      var dsx = event.screenX - desktopWindowDrag.startX
-      var dsy = event.screenY - desktopWindowDrag.startY
-      if (!desktopWindowDrag.moved) {
-        if (Math.abs(dsx) + Math.abs(dsy) < 4) return
-        desktopWindowDrag.moved = true
-        cancelPointerPress()
-        try {
-          window.whaleDesktop.beginDrag(desktopWindowDrag.startX, desktopWindowDrag.startY)
-        } catch (e) {}
-      }
-      try { window.whaleDesktop.moveDrag(event.screenX, event.screenY) } catch (e) {}
-      return
-    }
     if (!drag || event.pointerId !== drag.id) return
     var dx = event.clientX - drag.x
     var dy = event.clientY - drag.y
@@ -3381,21 +3350,12 @@ function mountWhaleBongoWidget(options) {
     updateSnapDots()
   }
   function onHitPointerUp(event) {
-    if (desktopWindowDrag) {
-      var desktopMoved = desktopWindowDrag.moved
-      desktopWindowDrag = null
-      if (desktopMoved) {
-        try { window.whaleDesktop.endDrag() } catch (e) {}
-      } else {
-        endPointerPress()
-      }
-      try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
-      return
-    }
+    if (desktopMode) window.__dshWhaleBongoDesktopDragging = false
     if (!drag || (event && event.pointerId !== drag.id)) return
     var moved = drag.moved
     var fromSnapPoint = drag.fromSnapPoint
     drag = null
+    if (desktopMode) window.__dshWhaleBongoDesktopDragging = false
     hideSnapDots()
     root.classList.remove('is-drag')
     try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
@@ -3476,6 +3436,7 @@ function mountWhaleBongoWidget(options) {
         left: menuLeft,
         top: menuTop,
       }
+      if (desktopMode) window.__dshWhaleBongoDesktopDragging = true
       try { menuHead.setPointerCapture(event.pointerId) } catch (e) {}
       event.preventDefault()
     })
@@ -3497,6 +3458,7 @@ function mountWhaleBongoWidget(options) {
     function endMenuDrag(event) {
       if (!menuDrag || (event && event.pointerId !== menuDrag.id)) return
       menuDrag = null
+      if (desktopMode) window.__dshWhaleBongoDesktopDragging = false
       try { menuHead.releasePointerCapture(event.pointerId) } catch (e) {}
     }
     menuHead.addEventListener('pointerup', endMenuDrag)
@@ -3507,6 +3469,10 @@ function mountWhaleBongoWidget(options) {
     if (!menuOpen) return
     if (menu.contains(event.target) || menuBtn.contains(event.target)) return
     closeMenu()
+  }, true)
+
+  on(document, 'pointerup', function () {
+    if (desktopMode) window.__dshWhaleBongoDesktopDragging = false
   }, true)
 
   // ------------------------------------------------------------------ 键盘
@@ -3621,34 +3587,6 @@ function mountWhaleBongoWidget(options) {
       try { ro.observe(document.documentElement) } catch (e) {}
     }
     on(window, 'resize', function () {
-      if (desktopMode) {
-        var nextWinX = window.screenX || 0
-        var nextWinY = window.screenY || 0
-        var winDX = nextWinX - desktopLastWinX
-        var winDY = nextWinY - desktopLastWinY
-        desktopLastWinX = nextWinX
-        desktopLastWinY = nextWinY
-        if (winDX || winDY) {
-          if (cfg.snap && cfg.snap.ref === 'viewport') {
-            cfg.snap.x = numberOr(cfg.snap.x, 0) - winDX
-            cfg.snap.y = numberOr(cfg.snap.y, 0) - winDY
-          }
-          if (menuOpen) {
-            // Re-open next to the pet's new screen position.  Keeping the old
-            // local menu coordinates would leave it in the expanded window's
-            // top-left corner.
-            menuLeft = null
-            menuTop = null
-          }
-          lastPlaceKey = ''
-        }
-        // Preserve the pet's screen position during the temporary
-        // full-work-area menu window, instead of letting the position spring
-        // run from the old local coordinates.
-        place(false)
-        if (menuOpen) positionMenu()
-        return
-      }
       if (menuOpen) positionMenu()
       schedulePlace()
     })
@@ -3737,7 +3675,22 @@ function mountWhaleBongoWidget(options) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keys: batch }),
         keepalive: true,
-      }).catch(function () {})
+      }).then(function (response) {
+        if (response.ok) return
+        throw new Error('batch route unavailable')
+      }).catch(function () {
+        // Compatibility with a Host half that only has the single-key route.
+        for (var i = 0; i < batch.length; i++) {
+          try {
+            fetch(BASE + '/desktop/key', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(batch[i]),
+              keepalive: true,
+            }).catch(function () {})
+          } catch (e) {}
+        }
+      })
     } catch (e) {}
   }
 
