@@ -20,6 +20,7 @@ try {
 const { app, BrowserWindow, ipcMain, screen } = electron
 const path = require('node:path')
 const http = require('node:http')
+const { spawn } = require('node:child_process')
 
 const HOST_PID = Number(process.env.DSH_WHALE_HOST_PID || 0)
 const HOST_POLL_MS = 2000
@@ -27,6 +28,8 @@ const HOST_POLL_MS = 2000
 let win = null
 let pendingConfig = null
 let hostGone = false
+let keyChild = null
+let keyBuffer = ''
 
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration()
@@ -147,6 +150,7 @@ function sendConfig(snapshot) {
 
 function stop() {
   hostGone = true
+  stopGlobalKeys()
   try { if (bridgeServer) bridgeServer.close() } catch {}
   try { if (win && !win.isDestroyed()) win.destroy() } catch {}
   app.quit()
@@ -237,9 +241,92 @@ function startBridge() {
   })
 }
 
+const VK_CODE_MAP = {
+  8: 'Backspace', 9: 'Tab', 13: 'Enter', 27: 'Escape', 32: 'Space',
+  33: 'PageUp', 34: 'PageDown', 35: 'End', 36: 'Home',
+  37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown',
+  45: 'Insert', 46: 'Delete',
+  186: 'Semicolon', 187: 'Equal', 188: 'Comma', 189: 'Minus',
+  190: 'Period', 191: 'Slash', 192: 'Backquote',
+  219: 'BracketLeft', 220: 'Backslash', 221: 'BracketRight', 222: 'Quote',
+}
+for (let i = 0; i < 26; i++) VK_CODE_MAP[0x41 + i] = 'Key' + String.fromCharCode(0x41 + i)
+for (let i = 0; i < 10; i++) VK_CODE_MAP[0x30 + i] = 'Digit' + i
+for (let i = 1; i <= 12; i++) VK_CODE_MAP[0x6F + i] = 'F' + i
+
+function vkCode(vk) {
+  return VK_CODE_MAP[vk] || ('VK_' + vk)
+}
+
+function handleGlobalKeyLine(line) {
+  const parts = line.trim().split('|')
+  if (parts.length !== 6) return
+  const down = parts[0] === '1'
+  const vk = Number(parts[1])
+  if (!Number.isInteger(vk)) return
+  // Mouse buttons, modifiers and lock keys are not typing input.
+  if (vk < 8 || vk === 16 || vk === 17 || vk === 18 || vk === 20 ||
+      vk === 91 || vk === 92 || vk === 144 || vk === 145) return
+  const code = vkCode(vk)
+  const payload = {
+    action: down ? 'down' : 'up',
+    key: code,
+    code: code,
+    ctrlKey: parts[2] === '1',
+    altKey: parts[3] === '1',
+    shiftKey: parts[4] === '1',
+    metaKey: parts[5] === '1',
+  }
+  if (win && !win.isDestroyed()) win.webContents.send('whale:key', payload)
+}
+
+function startGlobalKeys() {
+  if (process.platform !== 'win32' || keyChild) return
+  try {
+    keyChild = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(__dirname, 'global-keys.ps1'),
+    ], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    keyChild = null
+    process.stderr.write('[whale helper] global key hook failed: ' + String(error) + String.fromCharCode(10))
+    return
+  }
+  keyChild.stdout.setEncoding('utf8')
+  keyChild.stdout.on('data', (chunk) => {
+    keyBuffer += chunk
+    let index
+    while ((index = keyBuffer.indexOf(String.fromCharCode(10))) !== -1) {
+      const line = keyBuffer.slice(0, index).trim()
+      keyBuffer = keyBuffer.slice(index + 1)
+      if (line) handleGlobalKeyLine(line)
+    }
+  })
+  keyChild.stderr.setEncoding('utf8')
+  keyChild.stderr.on('data', (chunk) => {
+    const text = String(chunk).trim()
+    if (text) process.stderr.write('[whale helper] global key error: ' + text.slice(0, 500) + String.fromCharCode(10))
+  })
+  keyChild.once('exit', () => {
+    keyChild = null
+  })
+}
+
+function stopGlobalKeys() {
+  if (!keyChild) return
+  try { keyChild.kill() } catch {}
+  keyChild = null
+  keyBuffer = ''
+}
+
 app.whenReady().then(() => {
   createWindow()
   startBridge()
+  startGlobalKeys()
 
   ipcMain.on('whale:ready', () => {
     if (pendingConfig) sendConfig(pendingConfig)
@@ -258,6 +345,10 @@ app.whenReady().then(() => {
   })
 
 })
+
+app.on('before-quit', stopGlobalKeys)
+app.on('will-quit', stopGlobalKeys)
+process.on('exit', stopGlobalKeys)
 
 app.on('window-all-closed', () => {
   app.quit()
