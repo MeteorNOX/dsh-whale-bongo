@@ -407,7 +407,7 @@ function mountWhaleBongoWidget(options) {
        宿主样式，显式使用同样的圆角比例，避免变成纯椭圆。 */
     #dsh-whale-bongo[data-desktop] .dsnw-ball,
     #dsh-whale-bongo[data-desktop] .dsnw-trail {
-      border-radius: 32%;
+      border-radius: 20px;
     }
     #dsh-whale-bongo .dsnw-art,
     #dsh-whale-bongo .dsnw-hitbox {
