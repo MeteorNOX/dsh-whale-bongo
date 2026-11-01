@@ -2127,7 +2127,15 @@ function mountWhaleBongoWidget(options) {
     if (cfg.flipMode === 'auto') {
       var left = 0
       var width = window.innerWidth
-      if (!desktopMode) {
+      if (desktopMode) {
+        if (cfg.snap && cfg.snap.ref === 'desktop-window') {
+          var snappedWindow = findDesktopWindow(cfg.snap.hwnd)
+          if (snappedWindow && snappedWindow.width) {
+            left = snappedWindow.left
+            width = snappedWindow.width
+          }
+        }
+      } else {
         var card = cardEl()
         if (card) {
           var rect = card.getBoundingClientRect()
