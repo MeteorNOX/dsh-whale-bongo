@@ -44,11 +44,14 @@ function mountWhaleBongoWidget(options) {
   var desktopWindows = []
   var globalKeySource = null
   var initialSnapshot = desktopMode && window.__DSH_WHALE_INITIAL_SNAPSHOT ? window.__DSH_WHALE_INITIAL_SNAPSHOT : null
+  var pageReturnTransition = !desktopMode && Boolean(window.__dshWhaleBongoReturningFromDesktop)
+  var desktopEnterTransition = desktopMode && Boolean(window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION)
   var desktopInputAnchor = desktopMode && window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR ? window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR : null
   var modeHoldTimer = 0
   var modeHoldKind = ''
   var holdHint = null
   var holdHintBar = null
+  var clientSnapIndicator = null
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -380,6 +383,16 @@ function mountWhaleBongoWidget(options) {
       0% { opacity: 0; transform: translateY(8px) scale(.9); }
       65% { opacity: 1; transform: translateY(-1.5px) scale(1.018); }
       100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    #dsh-whale-bongo.is-returning .dsnw-reveal-shell,
+    #dsh-whale-bongo.is-desktop-entering .dsnw-reveal-shell {
+      animation: dsnw-mode-pop .42s cubic-bezier(.2, .8, .3, 1.12) both;
+      transform-origin: 50% 100%;
+    }
+    @keyframes dsnw-mode-pop {
+      0% { transform: scale(.84); }
+      62% { transform: scale(1.045); }
+      100% { transform: scale(1); }
     }
     #dsh-whale-bongo .dsnw-move-shell {
       position: absolute;
@@ -1046,7 +1059,9 @@ function mountWhaleBongoWidget(options) {
     }
     @media (prefers-reduced-motion: reduce) {
       #dsh-whale-bongo .dsnw-trail { display: none; }
-      #dsh-whale-bongo .dsnw-reveal-shell.is-revealing { animation: none; }
+      #dsh-whale-bongo .dsnw-reveal-shell.is-revealing,
+      #dsh-whale-bongo.is-returning .dsnw-reveal-shell,
+      #dsh-whale-bongo.is-desktop-entering .dsnw-reveal-shell { animation: none; }
     }
   `
 
@@ -1159,11 +1174,11 @@ function mountWhaleBongoWidget(options) {
             '<span class="dsnw-behavior-label">显示位置</span>' +
             '<div class="dsnw-select" data-select="displayMode">' +
               '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
-                '<span class="dsnw-select-label" data-select-label>网页</span>' +
+                '<span class="dsnw-select-label" data-select-label>客户端</span>' +
                 '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
               '</button>' +
               '<div class="dsnw-select-popover" role="listbox" aria-label="显示位置">' +
-                '<button class="dsnw-select-option" type="button" role="option" data-value="web"><span class="dsnw-select-check">✓</span><span>网页</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="web"><span class="dsnw-select-check">✓</span><span>客户端</span></button>' +
                 '<button class="dsnw-select-option" type="button" role="option" data-value="desktop"><span class="dsnw-select-check">✓</span><span>桌面</span></button>' +
               '</div>' +
             '</div>' +
@@ -1565,7 +1580,7 @@ function mountWhaleBongoWidget(options) {
   var lastPlaceKey = ''
   var lastPlaceCard = null
   var pendingPlaceAnimate = false
-  var hasShownWidget = Boolean(desktopMode)
+  var hasShownWidget = Boolean(desktopMode) || pageReturnTransition
   var initialRevealTimer = 0
   var springAnchorX = 0
   var springAnchorY = 0
@@ -3413,10 +3428,21 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
-  function showModeHoldHint(text) {
+  function showModeHoldHint(text, point) {
     if (!holdHint) return
     var label = holdHint.querySelector('[data-hold-label]')
     if (label) label.textContent = text
+    if (point) {
+      holdHint.style.left = point.x + 'px'
+      holdHint.style.top = point.y + 'px'
+      holdHint.style.bottom = 'auto'
+      holdHint.style.transform = 'translate(-50%,-100%)'
+    } else {
+      holdHint.style.left = '50%'
+      holdHint.style.top = 'auto'
+      holdHint.style.bottom = '48px'
+      holdHint.style.transform = 'translateX(-50%)'
+    }
     holdHint.style.display = 'flex'
     if (holdHintBar) {
       holdHintBar.style.transition = 'none'
@@ -3445,17 +3471,35 @@ function mountWhaleBongoWidget(options) {
     hideModeHoldHint()
   }
 
-  function beginModeHold(kind, text, trigger) {
+  function beginModeHold(kind, text, trigger, point) {
     if (modeHoldTimer && modeHoldKind === kind) return
     clearModeHold()
     modeHoldKind = kind
-    showModeHoldHint(text)
+    showModeHoldHint(text, point)
     modeHoldTimer = window.setTimeout(function () {
       modeHoldTimer = 0
       modeHoldKind = ''
       hideModeHoldHint()
       try { trigger() } catch (e) {}
     }, 500)
+  }
+
+  function showClientSnapIndicator(near) {
+    if (!clientSnapIndicator || !desktopInputAnchor) return
+    var size = cfg.size
+    var x = numberOr(desktopInputAnchor.x, 0) - (window.screenX || 0)
+    var y = numberOr(desktopInputAnchor.y, 0) - (window.screenY || 0)
+    clientSnapIndicator.style.left = x + 'px'
+    clientSnapIndicator.style.top = y + 'px'
+    clientSnapIndicator.style.display = 'block'
+    clientSnapIndicator.style.opacity = near ? '1' : '.72'
+    clientSnapIndicator.style.width = near ? '18px' : '14px'
+    clientSnapIndicator.style.height = near ? '18px' : '14px'
+    void size
+  }
+
+  function hideClientSnapIndicator() {
+    if (clientSnapIndicator) clientSnapIndicator.style.display = 'none'
   }
 
   function windowFrameOffset() {
@@ -3468,16 +3512,17 @@ function mountWhaleBongoWidget(options) {
   function switchPageToDesktop(event) {
     if (desktopMode || desktopPageActive) return
     clearModeHold()
+    hideClientSnapIndicator()
     drag = null
     cancelPointerPress()
     hideSnapDots()
     try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
     var size = cfg.size
-    var frame = windowFrameOffset()
-    var centerX = (window.screenX || 0) + frame.x + curX + size / 2
-    var bottomY = (window.screenY || 0) + frame.y + curY + size
-    cfg.snap = { ref: 'viewport', x: centerX - size / 2, y: bottomY - size }
+    var screenX = isFinite(Number(event.screenX)) ? Number(event.screenX) : (window.screenX || 0) + event.clientX
+    var screenY = isFinite(Number(event.screenY)) ? Number(event.screenY) : (window.screenY || 0) + event.clientY
+    cfg.snap = { ref: 'viewport', x: screenX - size / 2, y: screenY - size / 2 }
     cfg.displayMode = 'desktop'
+    window.__dshWhaleBongoSwitchToDesktop = true
     saveCfg()
     startDesktopMode()
   }
@@ -3485,6 +3530,7 @@ function mountWhaleBongoWidget(options) {
   function switchDesktopToPage(event) {
     if (!desktopMode) return
     clearModeHold()
+    hideClientSnapIndicator()
     drag = null
     cancelPointerPress()
     try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
@@ -3503,6 +3549,7 @@ function mountWhaleBongoWidget(options) {
     }
     if (desktopMode) {
       if (!desktopInputAnchor) {
+        hideClientSnapIndicator()
         if (modeHoldKind === 'desktop-return') clearModeHold()
         return
       }
@@ -3511,10 +3558,12 @@ function mountWhaleBongoWidget(options) {
       var petY = (window.screenY || 0) + curY + imageBottomNorm * size
       var dx = petX - numberOr(desktopInputAnchor.x, petX)
       var dy = petY - numberOr(desktopInputAnchor.y, petY)
-      if (Math.sqrt(dx * dx + dy * dy) <= 90) {
+      var near = Math.sqrt(dx * dx + dy * dy) <= 90
+      showClientSnapIndicator(near)
+      if (near) {
         beginModeHold('desktop-return', '保持 0.5 秒回到客户端', function () {
           switchDesktopToPage(event)
-        })
+        }, { x: event.clientX, y: event.clientY })
       } else if (modeHoldKind === 'desktop-return') {
         clearModeHold()
       }
@@ -3532,7 +3581,7 @@ function mountWhaleBongoWidget(options) {
     if (nearRight && nearBottom) {
       beginModeHold('page-desktop', '保持 0.5 秒进入桌面', function () {
         switchPageToDesktop(event)
-      })
+      }, { x: event.clientX, y: event.clientY })
     } else if (modeHoldKind === 'page-desktop') {
       clearModeHold()
     }
@@ -3596,6 +3645,7 @@ function mountWhaleBongoWidget(options) {
   }
   function onHitPointerUp(event) {
     clearModeHold()
+    hideClientSnapIndicator()
     if (desktopMode) window.__dshWhaleBongoDesktopDragging = false
     if (!drag || (event && event.pointerId !== drag.id)) return
     var moved = drag.moved
@@ -3745,7 +3795,7 @@ function mountWhaleBongoWidget(options) {
 
   function onKeyDown(event) {
     if (!event.isTrusted) return
-    if (desktopMode && window.__DSH_WHALE_GLOBAL_KEYS && !event.__whaleGlobal) return
+    if (!event.__whaleGlobal && (desktopMode || window.__DSH_WHALE_PAGE_GLOBAL_KEYS)) return
     if (!widgetVisible()) return
     if (event.key === 'Escape' && menuOpen) {
       if (activeSelect) closeAllSelects(true)
@@ -3770,13 +3820,14 @@ function mountWhaleBongoWidget(options) {
     beginInput(id, hands[handIndex], sameKey, code)
   }
   function onKeyUp(event) {
-    if (desktopMode && window.__DSH_WHALE_GLOBAL_KEYS && !event.__whaleGlobal) return
+    if (!event.__whaleGlobal && (desktopMode || window.__DSH_WHALE_PAGE_GLOBAL_KEYS)) return
     var code = event.code || event.key
     if (!code) return
     endInput('key:' + code)
   }
   function onWindowBlur() {
     clearModeHold()
+    hideClientSnapIndicator()
     releaseAll()
   }
   on(document, 'keydown', onKeyDown, true)
@@ -3806,10 +3857,15 @@ function mountWhaleBongoWidget(options) {
     holdHint.innerHTML = '<span data-hold-label>保持 0.5 秒</span><span style="height:3px;border-radius:2px;background:rgba(255,255,255,.16);overflow:hidden"><i data-hold-bar style="display:block;width:0;height:100%;background:#6d8cff"></i></span>'
     document.body.appendChild(holdHint)
     holdHintBar = holdHint.querySelector('[data-hold-bar]')
+    clientSnapIndicator = document.createElement('div')
+    clientSnapIndicator.style.cssText = 'position:fixed;z-index:2147483646;display:none;width:14px;height:14px;border-radius:50%;background:#4d6bfe;box-shadow:0 0 0 5px rgba(77,107,254,.20),0 0 0 1px rgba(255,255,255,.7) inset;transform:translate(-50%,-50%);pointer-events:none;transition:width .12s ease,height .12s ease,opacity .12s ease;opacity:.8;'
+    document.body.appendChild(clientSnapIndicator)
     widgetCleanups.push(function () {
       try { holdHint.remove() } catch (e) {}
+      try { clientSnapIndicator.remove() } catch (e) {}
       holdHint = null
       holdHintBar = null
+      clientSnapIndicator = null
     })
     dsnDiag('appended')
     buildSettingRows(imageSettingList, 'image')
@@ -3866,6 +3922,16 @@ function mountWhaleBongoWidget(options) {
       } catch (e) {}
     }
     schedulePlace()
+    if (pageReturnTransition && revealShell) {
+      root.classList.add('is-returning')
+      later(function () { root.classList.remove('is-returning') }, 700)
+      delete window.__dshWhaleBongoReturningFromDesktop
+    }
+    if (desktopEnterTransition && revealShell) {
+      root.classList.add('is-desktop-entering')
+      later(function () { root.classList.remove('is-desktop-entering') }, 700)
+      delete window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION
+    }
     if (desktopMode && Array.isArray(window.__DSH_WHALE_DESKTOP_WINDOWS)) {
       setDesktopWindows(window.__DSH_WHALE_DESKTOP_WINDOWS)
     }
@@ -3949,6 +4015,12 @@ function mountWhaleBongoWidget(options) {
     if (desktopMode || globalKeySource || typeof window.EventSource !== 'function') return
     try {
       globalKeySource = new window.EventSource(BASE + '/key-stream')
+      globalKeySource.onopen = function () {
+        window.__DSH_WHALE_PAGE_GLOBAL_KEYS = true
+      }
+      globalKeySource.onerror = function () {
+        window.__DSH_WHALE_PAGE_GLOBAL_KEYS = false
+      }
       globalKeySource.onmessage = function (message) {
         try { handleGlobalKeyPayload(JSON.parse(message.data)) } catch (e) {}
       }
@@ -4019,6 +4091,10 @@ function mountWhaleBongoWidget(options) {
 
   function desktopSnapshot() {
     var snapshot = { cfg: cfg, image: imageData, sound: soundData }
+    if (window.__dshWhaleBongoSwitchToDesktop) {
+      snapshot.transitionToDesktop = true
+      delete window.__dshWhaleBongoSwitchToDesktop
+    }
     if (!desktopMode) {
       try {
         var card = document.querySelector('[data-composer-card]') || document.querySelector('[data-composer-input]')
@@ -4133,6 +4209,7 @@ function mountWhaleBongoWidget(options) {
         if (snapshot.sound) localStorage.setItem(SOUND_STORE, snapshot.sound)
         else localStorage.removeItem(SOUND_STORE)
         if (typeof window.__dshWhaleBongoRemountPageWidget === 'function') {
+          window.__dshWhaleBongoReturningFromDesktop = true
           window.__dshWhaleBongoRemountPageWidget()
           return
         }
