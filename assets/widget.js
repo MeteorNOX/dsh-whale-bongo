@@ -3923,13 +3923,23 @@ function mountWhaleBongoWidget(options) {
       .then(function (data) {
         var snapshot = data && data.snapshot
         if (!snapshot || !snapshot.cfg) throw new Error('no desktop config')
+        var previous = null
+        try { previous = JSON.parse(localStorage.getItem(STORE) || 'null') } catch (e) {}
         var nextCfg = snapshot.cfg
         nextCfg.displayMode = 'web'
+        // Keep the page widget's previous placement; the desktop snap belongs
+        // to the desktop overlay and must not move the client widget.
+        if (previous && previous.snap && previous.snap.ref !== 'desktop-window') nextCfg.snap = previous.snap
+        else nextCfg.snap = { ref: 'card', edge: 'top', x: null }
         localStorage.setItem(STORE, JSON.stringify(nextCfg))
         if (snapshot.image) localStorage.setItem(IMAGE_STORE, snapshot.image)
         else localStorage.removeItem(IMAGE_STORE)
         if (snapshot.sound) localStorage.setItem(SOUND_STORE, snapshot.sound)
         else localStorage.removeItem(SOUND_STORE)
+        if (typeof window.__dshWhaleBongoRemountPageWidget === 'function') {
+          window.__dshWhaleBongoRemountPageWidget()
+          return
+        }
         window.location.reload()
       })
       .catch(function () {
