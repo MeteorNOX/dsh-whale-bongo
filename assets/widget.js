@@ -1407,6 +1407,7 @@ function mountWhaleBongoWidget(options) {
   }
 
   function applyAll() {
+    if (desktopMode) root.style.setProperty('--dsnw-desktop-hand-radius', cfg.desktopHandRadius + 'px')
     applyGeometry()
     applyImageStyle()
     applyColors()
@@ -3490,7 +3491,11 @@ function mountWhaleBongoWidget(options) {
 
   // ------------------------------------------------------------------ 键盘
   function widgetVisible() {
-    return root.style.display !== 'none' && document.visibilityState === 'visible'
+    if (root.style.display === 'none') return false
+    // The desktop overlay can be visible but not the focused Chromium window;
+    // its document.visibilityState may be hidden even though the user sees it.
+    if (desktopMode) return true
+    return document.visibilityState === 'visible'
   }
 
   function splitHandForCode(code) {
