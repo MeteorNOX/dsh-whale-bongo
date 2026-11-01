@@ -91,6 +91,12 @@ bridge.onGlobalKeys(() => {
   window.__DSH_WHALE_GLOBAL_KEYS = true
 })
 
+bridge.onWindows((list) => {
+  window.__DSH_WHALE_DESKTOP_WINDOWS = Array.isArray(list) ? list : []
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.setDesktopWindows?.(window.__DSH_WHALE_DESKTOP_WINDOWS) } catch {}
+})
+
 bridge.onReleaseAll(() => {
   const api = window.__dshWhaleBongoDesktopInput
   try { api?.releaseAll?.() } catch {}

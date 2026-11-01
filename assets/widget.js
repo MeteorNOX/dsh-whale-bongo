@@ -23,6 +23,7 @@ function mountWhaleBongoWidget(options) {
   var desktopKeyQueue = []
   var desktopKeyFlushTimer = 0
   var desktopKeyReleaseTimers = {}
+  var desktopWindows = []
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -172,8 +173,24 @@ function mountWhaleBongoWidget(options) {
     out.size = clamp(numberOr(out.size, 140), 80, 400)
     var snap = out.snap
     if (!snap || typeof snap !== 'object') snap = null
-    if (!snap || (snap.ref !== 'card' && snap.ref !== 'viewport' && snap.ref !== 'point')) {
+    if (!snap || (snap.ref !== 'card' && snap.ref !== 'viewport' && snap.ref !== 'point' && snap.ref !== 'desktop-window')) {
       out.snap = { ref: 'card', edge: 'top', x: null }
+    } else if (snap.ref === 'desktop-window') {
+      var winAnchor = snap.anchorX
+      out.snap = {
+        ref: 'desktop-window',
+        hwnd: typeof snap.hwnd === 'string' ? snap.hwnd : String(snap.hwnd || ''),
+        edge: snap.edge === 'bottom' ? 'bottom' : 'top',
+      }
+      if (!out.snap.hwnd) out.snap = { ref: 'card', edge: 'top', x: null }
+      else if (winAnchor && (winAnchor.mode === 'ratio' || winAnchor.mode === 'left' || winAnchor.mode === 'right') && isFinite(Number(winAnchor.value))) {
+        out.snap.anchorX = {
+          mode: winAnchor.mode,
+          value: winAnchor.mode === 'ratio'
+            ? clamp(numberOr(winAnchor.value, 0.5), 0, 1)
+            : clamp(numberOr(winAnchor.value, 0), -4000, 4000),
+        }
+      }
     } else if (snap.ref === 'viewport') {
       out.snap = { ref: 'viewport', x: clamp(numberOr(snap.x, 24), 4, 4000), y: clamp(numberOr(snap.y, 120), 4, 4000) }
     } else if (snap.ref === 'point') {
@@ -2417,6 +2434,14 @@ function mountWhaleBongoWidget(options) {
       setMoveImmediate(x, y)
     }
   }
+  function findDesktopWindow(hwnd) {
+    var key = String(hwnd || '')
+    for (var i = 0; i < desktopWindows.length; i++) {
+      if (String(desktopWindows[i].hwnd) === key) return desktopWindows[i]
+    }
+    return null
+  }
+
   function place(animate) {
     if (widgetDisposed) return
     if (desktopPageActive) { root.style.display = 'none'; return }
@@ -2438,7 +2463,18 @@ function mountWhaleBongoWidget(options) {
     var imageBottom = imageBottomNorm * size
     var snap = cfg.snap
     var x, y
-    if (snap && snap.ref === 'point') {
+    if (snap && snap.ref === 'desktop-window') {
+      var desktopRect = findDesktopWindow(snap.hwnd)
+      if (desktopRect) {
+        x = anchorCenterX(snap.anchorX, desktopRect) - size / 2
+        y = (snap.edge === 'bottom' ? desktopRect.bottom : desktopRect.top) - imageBottom
+      } else {
+        x = curX
+        y = curY
+        cfg.snap = { ref: 'viewport', x: x, y: y }
+        saveCfg()
+      }
+    } else if (snap && snap.ref === 'point') {
       var point = findSnapPoint(snap.id, r, size, imageBottom)
       if (point) {
         x = point.x
@@ -2552,6 +2588,46 @@ function mountWhaleBongoWidget(options) {
       saveCfg()
       lastPlaceKey = ''
       place(true)
+    }
+    if (desktopMode) {
+      var centerX = x + size / 2
+      var centerY = y + imageBottom
+      var desktopCandidates = []
+      for (var wi = 0; wi < desktopWindows.length; wi++) {
+        var wr = desktopWindows[wi]
+        if (!wr || !wr.right || !wr.bottom) continue
+        var topD = distanceToSegment(centerX, centerY, wr.left, wr.top, wr.right, wr.top)
+        var bottomD = distanceToSegment(centerX, centerY, wr.left, wr.bottom, wr.right, wr.bottom)
+        desktopCandidates.push({ kind: 'window', edge: 'top', rect: wr, d: topD })
+        desktopCandidates.push({ kind: 'window', edge: 'bottom', rect: wr, d: bottomD })
+      }
+      desktopCandidates.push({ kind: 'viewport', edge: 'left', d: Math.abs(x - 4), x: 4, y: y })
+      desktopCandidates.push({ kind: 'viewport', edge: 'right', d: Math.abs(x - (vw - size - 4)), x: vw - size - 4, y: y })
+      desktopCandidates.push({ kind: 'viewport', edge: 'top', d: Math.abs(y - 4), x: x, y: 4 })
+      desktopCandidates.push({ kind: 'viewport', edge: 'bottom', d: Math.abs((y + imageBottom) - vh), x: x, y: vh - imageBottom })
+      var desktopBest = null
+      var desktopBestScore = Infinity
+      for (var di = 0; di < desktopCandidates.length; di++) {
+        var dc = desktopCandidates[di]
+        var dscore = dc.d - (dc.kind === 'window' ? 4 : 0) - (dc.kind === 'viewport' && dc.edge === 'bottom' ? 10 : 0)
+        if (dscore < desktopBestScore) { desktopBestScore = dscore; desktopBest = dc }
+      }
+      if (desktopBest && desktopBest.d <= SNAP_RANGE) {
+        if (desktopBest.kind === 'window') {
+          cfg.snap = {
+            ref: 'desktop-window',
+            hwnd: String(desktopBest.rect.hwnd),
+            edge: desktopBest.edge,
+            anchorX: makeHorizontalAnchor(x, desktopBest.rect, size),
+          }
+        } else {
+          cfg.snap = { ref: 'viewport', x: desktopBest.x, y: desktopBest.y }
+        }
+      } else {
+        cfg.snap = { ref: 'viewport', x: x, y: y }
+      }
+      finish()
+      return
     }
     // 从吸附点开始拖动：本次手势不再吸附到点；拖回原点也不重新吸附。
     if (suppressPointId) {
@@ -3273,6 +3349,10 @@ function mountWhaleBongoWidget(options) {
 
   function updateSnapDots() {
     if (!snapDots) return
+    if (desktopMode) {
+      hideSnapDots()
+      return
+    }
     if (!drag || !drag.moved) {
       hideSnapDots()
       return
@@ -3616,8 +3696,46 @@ function mountWhaleBongoWidget(options) {
       } catch (e) {}
     }
     schedulePlace()
+    if (desktopMode && Array.isArray(window.__DSH_WHALE_DESKTOP_WINDOWS)) {
+      setDesktopWindows(window.__DSH_WHALE_DESKTOP_WINDOWS)
+    }
     if (desktopPageActive) startDesktopMode()
     dsnDiag('mount', { hasCard: Boolean(cardEl()), desktop: desktopPageActive })
+  }
+
+  function setDesktopWindows(list) {
+    var next = []
+    if (Array.isArray(list)) {
+      for (var i = 0; i < list.length; i++) {
+        var w = list[i]
+        if (!w) continue
+        var left = Number(w.left)
+        var top = Number(w.top)
+        var right = Number(w.right)
+        var bottom = Number(w.bottom)
+        if (![left, top, right, bottom].every(isFinite) || right - left < 40 || bottom - top < 40) continue
+        next.push({
+          hwnd: String(w.hwnd),
+          left: left,
+          top: top,
+          right: right,
+          bottom: bottom,
+          width: right - left,
+          height: bottom - top,
+          title: w.title || '',
+        })
+      }
+    }
+    desktopWindows = next
+    if (!desktopMode || drag) return
+    if (cfg.snap && cfg.snap.ref === 'desktop-window') {
+      if (!findDesktopWindow(cfg.snap.hwnd)) {
+        cfg.snap = { ref: 'viewport', x: curX, y: curY }
+        saveCfg()
+      }
+      lastPlaceKey = ''
+      schedulePlace()
+    }
   }
 
   function desktopEventPayload(info) {
@@ -3669,6 +3787,7 @@ function mountWhaleBongoWidget(options) {
       },
       closeMenu: function () { closeMenu() },
       releaseAll: function () { desktopReleaseAllKeys() },
+      setDesktopWindows: function (list) { setDesktopWindows(list) },
     }
     window.__dshWhaleBongoDesktopInput = desktopInputApi
   }

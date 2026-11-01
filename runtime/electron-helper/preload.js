@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onGlobalKeys(callback) {
     ipcRenderer.on('whale:global-keys', () => callback())
   },
+  onWindows(callback) {
+    ipcRenderer.on('whale:windows', (_event, list) => callback(list))
+  },
   ready() {
     ipcRenderer.send('whale:ready')
   },

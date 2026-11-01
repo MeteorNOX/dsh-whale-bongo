@@ -31,6 +31,9 @@ let hostGone = false
 let keyChild = null
 let keyBuffer = ''
 let globalKeysActive = false
+let windowsChild = null
+let windowsBuffer = ''
+let latestWindows = []
 
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration()
@@ -152,6 +155,7 @@ function sendConfig(snapshot) {
 function stop() {
   hostGone = true
   stopGlobalKeys()
+  stopDesktopWindows()
   try { if (bridgeServer) bridgeServer.close() } catch {}
   try { if (win && !win.isDestroyed()) win.destroy() } catch {}
   app.quit()
@@ -281,6 +285,55 @@ function handleGlobalKeyLine(line) {
   if (win && !win.isDestroyed()) win.webContents.send('whale:key', payload)
 }
 
+function startDesktopWindows() {
+  if (process.platform !== 'win32' || windowsChild) return
+  try {
+    windowsChild = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(__dirname, 'desktop-windows.ps1'),
+    ], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, DSH_WHALE_HELPER_PID: String(process.pid) },
+    })
+  } catch (error) {
+    windowsChild = null
+    process.stderr.write('[whale helper] windows watcher failed: ' + String(error) + String.fromCharCode(10))
+    return
+  }
+  windowsChild.stdout.setEncoding('utf8')
+  windowsChild.stdout.on('data', (chunk) => {
+    windowsBuffer += chunk
+    let index
+    while ((index = windowsBuffer.indexOf(String.fromCharCode(10))) !== -1) {
+      const line = windowsBuffer.slice(0, index).trim()
+      windowsBuffer = windowsBuffer.slice(index + 1)
+      if (!line) continue
+      let list
+      try { list = JSON.parse(line) } catch { continue }
+      if (!Array.isArray(list)) continue
+      latestWindows = list
+      if (win && !win.isDestroyed()) win.webContents.send('whale:windows', list)
+    }
+  })
+  windowsChild.stderr.setEncoding('utf8')
+  windowsChild.stderr.on('data', (chunk) => {
+    const text = String(chunk).trim()
+    if (text) process.stderr.write('[whale helper] windows error: ' + text.slice(0, 500) + String.fromCharCode(10))
+  })
+  windowsChild.once('exit', () => {
+    windowsChild = null
+  })
+}
+
+function stopDesktopWindows() {
+  if (!windowsChild) return
+  try { windowsChild.kill() } catch {}
+  windowsChild = null
+  windowsBuffer = ''
+}
+
 function startGlobalKeys() {
   if (process.platform !== 'win32' || keyChild) return
   try {
@@ -331,10 +384,12 @@ app.whenReady().then(() => {
   createWindow()
   startBridge()
   startGlobalKeys()
+  startDesktopWindows()
 
   ipcMain.on('whale:ready', () => {
     if (pendingConfig) sendConfig(pendingConfig)
     if (globalKeysActive && win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
+    if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
     writeLine({ type: 'ready' })
   })
   ipcMain.on('whale:interactive', (_event, interactive) => {
@@ -351,9 +406,9 @@ app.whenReady().then(() => {
 
 })
 
-app.on('before-quit', stopGlobalKeys)
-app.on('will-quit', stopGlobalKeys)
-process.on('exit', stopGlobalKeys)
+app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows() })
+app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows() })
+process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows() })
 
 app.on('window-all-closed', () => {
   app.quit()
