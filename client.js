@@ -2093,11 +2093,29 @@ function mountWhaleBongoWidget() {
     return null
   }
 
+  function queueDockCard() {
+    var docks = document.querySelectorAll('[data-queue-dock]')
+    for (var i = docks.length - 1; i >= 0; i--) {
+      var dock = docks[i]
+      if (!dock || !dock.isConnected) continue
+      var card = dock.querySelector('[class*="_panel"]') || dock.firstElementChild || dock
+      var rect = card.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      var style = window.getComputedStyle(card)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      return card
+    }
+    return null
+  }
+
   function cardEl() {
     // 提问、授权、计划确认会以 composer takeover 形式暂时替换输入框。
     // 优先把当前面板当作吸附元素；面板关闭后再回到输入框。
     var panel = activePanelCard()
     if (panel) return panel
+    // 排队消息框和授权/问题框一样，是输入框上方的临时交互面板。
+    var queue = queueDockCard()
+    if (queue) return queue
     // 输入框上方有任务清单时，优先吸附到任务条，而不是隔着它吸输入框。
     var todo = todoPanelCard()
     if (todo) return todo
