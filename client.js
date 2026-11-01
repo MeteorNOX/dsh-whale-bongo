@@ -1117,7 +1117,7 @@ function mountWhaleBongoWidget() {
         '<span class="dsnw-setting-value"><span data-size-label>140</span><button type="button" data-reset-size title="恢复默认大小">↺</button></span></div>' +
       '</div>' +
       '<button class="dsnw-reset" type="button" data-reset>恢复默认设置</button>' +
-      '<div class="dsnw-foot">v0.2.2</div>' +
+      '<div class="dsnw-foot">v0.2.3</div>' +
     '</div></div>'
 
   var stage = root.querySelector('.dsnw-stage')
@@ -2093,6 +2093,36 @@ function mountWhaleBongoWidget() {
     return null
   }
 
+  function goalBarCard() {
+    var docks = document.querySelectorAll('[data-goal-bar]')
+    for (var i = docks.length - 1; i >= 0; i--) {
+      var dock = docks[i]
+      if (!dock || !dock.isConnected) continue
+      var card = dock.querySelector('[class*="_bar"]') || dock.firstElementChild || dock
+      var rect = card.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      var style = window.getComputedStyle(card)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      return card
+    }
+    return null
+  }
+
+  function queueDockCard() {
+    var docks = document.querySelectorAll('[data-queue-dock]')
+    for (var i = docks.length - 1; i >= 0; i--) {
+      var dock = docks[i]
+      if (!dock || !dock.isConnected) continue
+      var card = dock.querySelector('[class*="_panel"]') || dock.firstElementChild || dock
+      var rect = card.getBoundingClientRect()
+      if (!rect.width || !rect.height) continue
+      var style = window.getComputedStyle(card)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      return card
+    }
+    return null
+  }
+
   function cardEl() {
     // 提问、授权、计划确认会以 composer takeover 形式暂时替换输入框。
     // 优先把当前面板当作吸附元素；面板关闭后再回到输入框。
@@ -2101,6 +2131,12 @@ function mountWhaleBongoWidget() {
     // 输入框上方有任务清单时，优先吸附到任务条，而不是隔着它吸输入框。
     var todo = todoPanelCard()
     if (todo) return todo
+    // 目标栏排在 todo(0) 和 queue(20) 之间，对应 DSH 的 dock order 10。
+    var goal = goalBarCard()
+    if (goal) return goal
+    // 排队消息框也是输入框上方的临时面板，但优先级低于任务栏和目标栏。
+    var queue = queueDockCard()
+    if (queue) return queue
     var card = document.querySelector('[data-composer-card]')
     if (card) return card
     var input = document.querySelector('[data-composer-input]')

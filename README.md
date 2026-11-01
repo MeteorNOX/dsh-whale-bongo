@@ -2,7 +2,7 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>v0.2.2</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
+  <p><code>v0.2.3</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
@@ -102,6 +102,8 @@
 | **菜单安全区** | 菜单不会进入 DSH 标题栏，关闭按钮始终可点。 |
 | **自定义音效** | 支持上传本地音频替换默认敲击音，可恢复默认；音效保存在浏览器本地。 |
 | **面板同步吸附** | 提问、授权、计划确认面板出现时，按输入框的吸附方式贴到当前面板上；面板关闭后回到输入框。 |
+| **目标栏优先吸附** | 当前目标状态栏出现时，按任务栏 > 目标栏 > 排队框的顺序优先吸附。 |
+| **排队框优先吸附** | 对话排队消息框出现时，优先吸附排队框；任务栏的优先级高于排队框。 |
 | **任务栏优先吸附** | 输入框上方出现「任务 N 已完成」任务条时，优先吸附任务条，而不是隔着它吸输入框。 |
 | **出现动效** | 首次挂载时从底部中心轻微上浮、放大并回弹到正常尺寸。 |
 | **布局平滑过渡** | 任务栏展开/收起、提问/授权面板出现/消失时，挂件以底部中心为锚点，通过克制的弹簧位移和明显的身体拉伸/落地挤压平滑移动，幅度随「Q 弹程度」变化。 |
@@ -115,7 +117,7 @@
 ### 从 GitHub Release 安装
 
 1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
-2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.2-package.zip` 或 `dsh-whale-bongo-0.2.2.tgz`；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.2.3-package.zip` 或 `dsh-whale-bongo-0.2.3.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
 4. 在插件列表启用；正常情况下挂件会即时出现。若 Host 路由尚未加载，刷新一次页面即可。
 
@@ -142,7 +144,7 @@ dsh-whale-bongo
 
 ```bash
 # 仅 npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.2.2
+dsh plugin --profile web add dsh-whale-bongo@0.2.3
 ```
 
 > [!TIP]
