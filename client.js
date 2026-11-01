@@ -32,7 +32,10 @@ function mountWhaleBongoWidget(options) {
   var desktopStarted = false
   var desktopPollTimer = 0
   var desktopDownTicks = 0
-  var desktopWindowDrag = false
+  var desktopWindowDrag = null
+  var desktopKeyQueue = []
+  var desktopKeyFlushTimer = 0
+  var desktopKeyReleaseTimers = {}
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -2660,6 +2663,9 @@ function mountWhaleBongoWidget(options) {
   function openMenu() {
     if (menuOpen) return
     menuOpen = true
+    if (desktopMode && window.whaleDesktop) {
+      try { window.whaleDesktop.setMenuOpen(true) } catch (e) {}
+    }
     menuLeft = null
     menuTop = null
     menu.style.bottom = 'auto'
@@ -2678,6 +2684,9 @@ function mountWhaleBongoWidget(options) {
     if (!menuOpen) return
     closeAllSelects()
     menuOpen = false
+    if (desktopMode && window.whaleDesktop) {
+      try { window.whaleDesktop.setMenuOpen(false) } catch (e) {}
+    }
     root.classList.remove('is-menu-open')
     menu.classList.remove('open')
     scheduleHideMenuButton()
@@ -3303,9 +3312,14 @@ function mountWhaleBongoWidget(options) {
     if (event.button !== 0) return
     hideSnapDots()
     if (desktopMode && window.whaleDesktop) {
-      desktopWindowDrag = true
-      try { window.whaleDesktop.beginDrag(event.screenX, event.screenY) } catch (e) {}
+      desktopWindowDrag = {
+        id: event.pointerId,
+        startX: event.screenX,
+        startY: event.screenY,
+        moved: false,
+      }
       try { hitbox.setPointerCapture(event.pointerId) } catch (e) {}
+      startPointerPress()
       event.preventDefault()
       return
     }
@@ -3329,6 +3343,16 @@ function mountWhaleBongoWidget(options) {
   }
   function onHitPointerMove(event) {
     if (desktopWindowDrag) {
+      var dsx = event.screenX - desktopWindowDrag.startX
+      var dsy = event.screenY - desktopWindowDrag.startY
+      if (!desktopWindowDrag.moved) {
+        if (Math.abs(dsx) + Math.abs(dsy) < 4) return
+        desktopWindowDrag.moved = true
+        cancelPointerPress()
+        try {
+          window.whaleDesktop.beginDrag(desktopWindowDrag.startX, desktopWindowDrag.startY)
+        } catch (e) {}
+      }
       try { window.whaleDesktop.moveDrag(event.screenX, event.screenY) } catch (e) {}
       return
     }
@@ -3364,8 +3388,13 @@ function mountWhaleBongoWidget(options) {
   }
   function onHitPointerUp(event) {
     if (desktopWindowDrag) {
-      desktopWindowDrag = false
-      try { window.whaleDesktop.endDrag() } catch (e) {}
+      var desktopMoved = desktopWindowDrag.moved
+      desktopWindowDrag = null
+      if (desktopMoved) {
+        try { window.whaleDesktop.endDrag() } catch (e) {}
+      } else {
+        endPointerPress()
+      }
       try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
       return
     }
@@ -3481,7 +3510,9 @@ function mountWhaleBongoWidget(options) {
   }
 
   on(document, 'pointerdown', function (event) {
-    if (menuOpen && !root.contains(event.target)) closeMenu()
+    if (!menuOpen) return
+    if (menu.contains(event.target) || menuBtn.contains(event.target)) return
+    closeMenu()
   }, true)
 
   // ------------------------------------------------------------------ 键盘
@@ -3595,7 +3626,10 @@ function mountWhaleBongoWidget(options) {
       })
       try { ro.observe(document.documentElement) } catch (e) {}
     }
-    on(window, 'resize', schedulePlace)
+    on(window, 'resize', function () {
+    if (menuOpen) positionMenu()
+    schedulePlace()
+  })
     on(window, 'scroll', function () {
       // 滚动只用于暂停位置探针；绝不因为滚动把挂件直接瞬移。
       scrollActiveUntil = nowMs() + 120
@@ -3628,10 +3662,40 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
+  function desktopReleaseAllKeys() {
+    for (var id in desktopKeyReleaseTimers) {
+      if (!Object.prototype.hasOwnProperty.call(desktopKeyReleaseTimers, id)) continue
+      try { window.clearTimeout(desktopKeyReleaseTimers[id]) } catch (e) {}
+      delete desktopKeyReleaseTimers[id]
+    }
+    releaseAll()
+  }
+
   if (desktopMode) {
     var desktopInputApi = {
-      keydown: function (info) { onKeyDown(desktopEventPayload(info)) },
-      keyup: function (info) { onKeyUp(desktopEventPayload(info)) },
+      keydown: function (info) {
+        var payload = desktopEventPayload(info)
+        onKeyDown(payload)
+        var id = 'key:' + (payload.code || payload.key)
+        if (desktopKeyReleaseTimers[id]) {
+          try { window.clearTimeout(desktopKeyReleaseTimers[id]) } catch (e) {}
+        }
+        desktopKeyReleaseTimers[id] = later(function () {
+          delete desktopKeyReleaseTimers[id]
+          onKeyUp(payload)
+        }, 1800)
+      },
+      keyup: function (info) {
+        var payload = desktopEventPayload(info)
+        var id = 'key:' + (payload.code || payload.key)
+        if (desktopKeyReleaseTimers[id]) {
+          try { window.clearTimeout(desktopKeyReleaseTimers[id]) } catch (e) {}
+          delete desktopKeyReleaseTimers[id]
+        }
+        onKeyUp(payload)
+      },
+      closeMenu: function () { closeMenu() },
+      releaseAll: function () { desktopReleaseAllKeys() },
     }
     window.__dshWhaleBongoDesktopInput = desktopInputApi
   }
@@ -3640,23 +3704,40 @@ function mountWhaleBongoWidget(options) {
     return { cfg: cfg, image: imageData, sound: soundData }
   }
 
-  function postDesktopKey(action, event) {
+  function flushDesktopKeys() {
+    desktopKeyFlushTimer = 0
+    if (!desktopPageActive || !desktopKeyQueue.length) return
+    var batch = desktopKeyQueue
+    desktopKeyQueue = []
     try {
-      fetch(BASE + '/desktop/key', {
+      fetch(BASE + '/desktop/keys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: action,
-          key: event.key,
-          code: event.code,
-          ctrlKey: !!event.ctrlKey,
-          metaKey: !!event.metaKey,
-          altKey: !!event.altKey,
-          shiftKey: !!event.shiftKey,
-        }),
+        body: JSON.stringify({ keys: batch }),
         keepalive: true,
       }).catch(function () {})
     } catch (e) {}
+  }
+
+  function postDesktopKey(action, event) {
+    if (!desktopPageActive) return
+    desktopKeyQueue.push({
+      action: action,
+      key: event.key,
+      code: event.code,
+      ctrlKey: !!event.ctrlKey,
+      metaKey: !!event.metaKey,
+      altKey: !!event.altKey,
+      shiftKey: !!event.shiftKey,
+    })
+    if (!desktopKeyFlushTimer) {
+      desktopKeyFlushTimer = -1
+      if (typeof window.queueMicrotask === 'function') {
+        window.queueMicrotask(flushDesktopKeys)
+      } else {
+        desktopKeyFlushTimer = window.setTimeout(flushDesktopKeys, 0)
+      }
+    }
   }
 
   function stopDesktopPoll() {
@@ -3673,6 +3754,7 @@ function mountWhaleBongoWidget(options) {
     try { fetch(BASE + '/desktop/stop', { method: 'POST' }).catch(function () {}) } catch (e) {}
     root.style.display = ''
     lastPlaceKey = ''
+    releaseAll()
     schedulePlace(false)
     syncMenu()
     if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
@@ -3751,6 +3833,7 @@ function mountWhaleBongoWidget(options) {
         body: JSON.stringify(desktopSnapshot()),
       }).then(function (response) { return response.json() })
         .then(function (state) {
+          if (!desktopPageActive || !desktopStarted) return
           if (!state || !state.running) {
             cfg.displayMode = 'web'
             desktopStarted = false
@@ -3780,6 +3863,7 @@ function mountWhaleBongoWidget(options) {
     try { fetch(BASE + '/desktop/stop', { method: 'POST' }).catch(function () {}) } catch (e) {}
     root.style.display = ''
     lastPlaceKey = ''
+    releaseAll()
     schedulePlace(false)
   }
 
@@ -3787,6 +3871,12 @@ function mountWhaleBongoWidget(options) {
     if (widgetDisposed) return
     widgetDisposed = true
     stopDesktopPoll()
+    if (desktopKeyFlushTimer) {
+      try { window.clearTimeout(desktopKeyFlushTimer) } catch (e) {}
+      desktopKeyFlushTimer = 0
+    }
+    desktopKeyQueue = []
+    if (desktopMode) desktopReleaseAllKeys()
     if (desktopMode && window.__dshWhaleBongoDesktopInput === desktopInputApi) delete window.__dshWhaleBongoDesktopInput
     mounted = false
 

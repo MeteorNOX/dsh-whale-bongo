@@ -30,6 +30,9 @@ let win = null
 let pendingConfig = null
 let hostGone = false
 let drag = null
+let smallBounds = null
+let menuOpen = false
+let suppressBlurUntil = 0
 
 if (process.platform === 'win32') {
   app.disableHardwareAcceleration()
@@ -138,8 +141,12 @@ function createWindow() {
     app.quit()
   })
   win.on('blur', () => {
-    // A frameless window has no OS title bar; keep it topmost.
     try { win.setAlwaysOnTop(true, 'screen-saver') } catch {}
+    if (!win || win.isDestroyed()) return
+    win.webContents.send('whale:release-all')
+    if (!menuOpen || Date.now() >= suppressBlurUntil) {
+      win.webContents.send('whale:blur')
+    }
   })
 }
 
@@ -214,6 +221,17 @@ function startBridge() {
       }).catch((error) => sendJson(res, 400, { ok: false, error: String(error) }))
       return
     }
+
+    if (req.method === 'POST' && req.url === '/keys') {
+      readBody(req).then((body) => {
+        const list = body && Array.isArray(body.keys) ? body.keys : []
+        if (win && !win.isDestroyed()) {
+          for (const key of list) win.webContents.send('whale:key', key || null)
+        }
+        sendJson(res, 200, { ok: true })
+      }).catch((error) => sendJson(res, 400, { ok: false, error: String(error) }))
+      return
+    }
     if (req.method === 'POST' && req.url === '/stop') {
       sendJson(res, 200, { ok: true })
       setTimeout(stop, 20)
@@ -238,6 +256,21 @@ app.whenReady().then(() => {
   ipcMain.on('whale:ready', () => {
     if (pendingConfig) sendConfig(pendingConfig)
     writeLine({ type: 'ready' })
+  })
+  ipcMain.on('whale:menu-open', (_event, open) => {
+    if (!win || win.isDestroyed()) return
+    menuOpen = Boolean(open)
+    suppressBlurUntil = Date.now() + 350
+    if (open) {
+      if (!smallBounds) {
+        smallBounds = win.getBounds()
+        win.setBounds(screen.getDisplayMatching(smallBounds).workArea)
+        win.setAlwaysOnTop(true, 'screen-saver')
+      }
+    } else if (smallBounds) {
+      win.setBounds(smallBounds)
+      smallBounds = null
+    }
   })
   ipcMain.on('whale:interactive', (_event, interactive) => {
     if (!win || win.isDestroyed()) return

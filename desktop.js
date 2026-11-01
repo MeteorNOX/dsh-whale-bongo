@@ -222,6 +222,11 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
     return post('/key', payload)
   }
 
+  function keys(list) {
+    if (!desired || !child || !Array.isArray(list) || !list.length) return false
+    return post('/keys', { keys: list })
+  }
+
   function dispose() {
     desired = false
     stopping = true
@@ -244,6 +249,7 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {} }) {
     stop,
     updateConfig,
     key,
+    keys,
     dispose,
     getSnapshot: () => snapshot,
   }

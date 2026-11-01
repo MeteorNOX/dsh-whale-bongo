@@ -71,6 +71,16 @@ window.addEventListener('pointerleave', () => {
 })
 
 bridge.onConfig(applySnapshot)
+bridge.onBlur(() => {
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.closeMenu?.() } catch {}
+})
+
+bridge.onReleaseAll(() => {
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.releaseAll?.() } catch {}
+})
+
 bridge.onKey((payload) => {
   const api = window.__dshWhaleBongoDesktopInput
   if (!api || !payload) return

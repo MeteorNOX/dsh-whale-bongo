@@ -7,6 +7,15 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onKey(callback) {
     ipcRenderer.on('whale:key', (_event, payload) => callback(payload))
   },
+  onBlur(callback) {
+    ipcRenderer.on('whale:blur', () => callback())
+  },
+  onReleaseAll(callback) {
+    ipcRenderer.on('whale:release-all', () => callback())
+  },
+  setMenuOpen(open) {
+    ipcRenderer.send('whale:menu-open', Boolean(open))
+  },
   ready() {
     ipcRenderer.send('whale:ready')
   },

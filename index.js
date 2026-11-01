@@ -213,6 +213,17 @@ export default {
 
       route({
         kind: 'exact',
+        path: BASE + '/desktop/keys',
+        handler(req, res) {
+          readJsonBody(req, 256 * 1024).then((body) => {
+            const list = body && Array.isArray(body.keys) ? body.keys : []
+            json(res, { ok: desktop.keys(list) })
+          }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
+        },
+      })
+
+      route({
+        kind: 'exact',
         path: BASE + '/desktop/key',
         handler(req, res) {
           readJsonBody(req, 64 * 1024).then((body) => {
