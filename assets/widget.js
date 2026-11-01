@@ -35,6 +35,7 @@ function mountWhaleBongoWidget(options) {
   var modeHoldKind = ''
   var holdHint = null
   var holdHintBar = null
+  var modeFading = false
   var clientSnapIndicator = null
 
   var widgetDisposed = false
@@ -368,15 +369,19 @@ function mountWhaleBongoWidget(options) {
       65% { opacity: 1; transform: translateY(-1.5px) scale(1.018); }
       100% { opacity: 1; transform: translateY(0) scale(1); }
     }
-    #dsh-whale-bongo.is-returning .dsnw-reveal-shell,
-    #dsh-whale-bongo.is-desktop-entering .dsnw-reveal-shell {
-      animation: dsnw-mode-pop .42s cubic-bezier(.2, .8, .3, 1.12) both;
-      transform-origin: 50% 100%;
+    #dsh-whale-bongo.is-mode-leaving .dsnw-reveal-shell {
+      animation: dsnw-mode-leave .18s ease both;
     }
-    @keyframes dsnw-mode-pop {
-      0% { transform: scale(.84); }
-      62% { transform: scale(1.045); }
-      100% { transform: scale(1); }
+    #dsh-whale-bongo.is-mode-entering .dsnw-reveal-shell {
+      animation: dsnw-mode-enter .24s ease both;
+    }
+    @keyframes dsnw-mode-leave {
+      0% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(.92); }
+    }
+    @keyframes dsnw-mode-enter {
+      0% { opacity: 0; transform: scale(.94); }
+      100% { opacity: 1; transform: scale(1); }
     }
     #dsh-whale-bongo .dsnw-move-shell {
       position: absolute;
@@ -1044,8 +1049,8 @@ function mountWhaleBongoWidget(options) {
     @media (prefers-reduced-motion: reduce) {
       #dsh-whale-bongo .dsnw-trail { display: none; }
       #dsh-whale-bongo .dsnw-reveal-shell.is-revealing,
-      #dsh-whale-bongo.is-returning .dsnw-reveal-shell,
-      #dsh-whale-bongo.is-desktop-entering .dsnw-reveal-shell { animation: none; }
+      #dsh-whale-bongo.is-mode-leaving .dsnw-reveal-shell,
+      #dsh-whale-bongo.is-mode-entering .dsnw-reveal-shell { animation: none; }
     }
   `
 
@@ -3505,6 +3510,17 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
+  function fadeOutThen(callback) {
+    if (modeFading) return
+    modeFading = true
+    root.classList.add('is-mode-leaving')
+    later(function () {
+      root.classList.remove('is-mode-leaving')
+      modeFading = false
+      try { callback() } catch (e) {}
+    }, 180)
+  }
+
   function switchPageToDesktop(event) {
     if (desktopMode || desktopPageActive) return
     clearModeHold()
@@ -3521,7 +3537,7 @@ function mountWhaleBongoWidget(options) {
     window.__dshWhaleBongoSwitchToDesktop = true
     window.__dshWhaleBongoFollowMouse = true
     saveCfg()
-    startDesktopMode()
+    fadeOutThen(startDesktopMode)
   }
 
   function switchDesktopToPage(event) {
@@ -3534,9 +3550,11 @@ function mountWhaleBongoWidget(options) {
     cfg.displayMode = 'web'
     cfg.returnToComposerCenter = true
     saveCfg()
-    try {
-      window.whaleDesktop.stopDesktop({ cfg: cfg, image: imageData, sound: soundData })
-    } catch (e) {}
+    fadeOutThen(function () {
+      try {
+        window.whaleDesktop.stopDesktop({ cfg: cfg, image: imageData, sound: soundData })
+      } catch (e) {}
+    })
   }
 
   function evaluateModeHold(event) {
@@ -3923,13 +3941,13 @@ function mountWhaleBongoWidget(options) {
     }
     schedulePlace()
     if (pageReturnTransition && revealShell) {
-      root.classList.add('is-returning')
-      later(function () { root.classList.remove('is-returning') }, 700)
+      root.classList.add('is-mode-entering')
+      later(function () { root.classList.remove('is-mode-entering') }, 700)
       delete window.__dshWhaleBongoReturningFromDesktop
     }
     if (desktopEnterTransition && revealShell) {
-      root.classList.add('is-desktop-entering')
-      later(function () { root.classList.remove('is-desktop-entering') }, 700)
+      root.classList.add('is-mode-entering')
+      later(function () { root.classList.remove('is-mode-entering') }, 700)
       delete window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION
     }
     if (desktopMode && Array.isArray(window.__DSH_WHALE_DESKTOP_WINDOWS)) {
