@@ -3646,16 +3646,19 @@ function mountWhaleBongoWidget(options) {
             cfg.snap.y = numberOr(cfg.snap.y, 0) - winDY
           }
           if (menuOpen) {
-            if (menuLeft !== null) menuLeft -= winDX
-            if (menuTop !== null) menuTop -= winDY
+            // Re-open next to the pet's new screen position.  Keeping the old
+            // local menu coordinates would leave it in the expanded window's
+            // top-left corner.
+            menuLeft = null
+            menuTop = null
           }
           lastPlaceKey = ''
         }
-        if (menuOpen) positionMenu()
         // Preserve the pet's screen position during the temporary
         // full-work-area menu window, instead of letting the position spring
         // run from the old local coordinates.
         place(false)
+        if (menuOpen) positionMenu()
         return
       }
       if (menuOpen) positionMenu()
