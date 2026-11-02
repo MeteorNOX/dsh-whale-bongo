@@ -5,7 +5,7 @@
 > [!WARNING]
 > npm 包暂未发布；请使用 GitHub Release 的 zip/tgz，或本地目录安装。
 
-## 未发布
+## v0.3.1
 
 ### 修复
 
