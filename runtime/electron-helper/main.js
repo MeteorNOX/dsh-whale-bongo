@@ -800,6 +800,7 @@ function handleNativeWindows(list) {
 }
 
 function handleNativeKey(message) {
+  if (process.env.DSH_WHALE_DEBUG_KEYS) console.error('native-key', JSON.stringify(message))
   if (!nativeKeysActive) return
   const vk = Number(message && message.vk)
   if (!Number.isInteger(vk)) return
@@ -871,7 +872,7 @@ function startNativeHelper() {
   let child
   try {
     child = spawn(exe, [], {
-      windowsHide: true,
+      windowsHide: false,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, DSH_WHALE_HELPER_PID: String(process.pid) },
     })
@@ -1021,7 +1022,9 @@ function startGlobalKeys() {
   if (!startNativeHelper()) return
   nativeKeysActive = true
   globalKeysActive = true
-  if (!sendNative('keys:start')) {
+  const sentKeys = sendNative('keys:start')
+  if (process.env.DSH_WHALE_DEBUG_KEYS) console.error('native-keys-start', sentKeys)
+  if (!sentKeys) {
     nativeKeysActive = false
     globalKeysActive = false
     return
