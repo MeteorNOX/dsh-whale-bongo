@@ -28,6 +28,7 @@ const HOST_POLL_MS = 2000
 
 let win = null
 let pendingConfig = null
+let latestConfig = null
 let hostGone = false
 let keyChild = null
 let keyBuffer = ''
@@ -38,15 +39,15 @@ let latestWindows = []
 let latestWindowsRaw = []
 let snappedHwnd = ''
 let activeDisplay = null
-let rehoming = false
-let rehomeTimer = null
-let rehomeNotifyTimer = null
-let displaySwitchPending = false
-let displayFadeTimer = null
+let activeEntryRef = null
+let overlays = new Map()
+let handoffPromise = null
+let handoffSequence = 0
+let resettingBounds = false
 let tray = null
 let mouseChild = null
 let mouseBuffer = ''
-let rendererReady = false
+let mouseFollowOffset = null
 let mouseFollowStarted = false
 
 if (process.env.DSH_WHALE_SOFTWARE_RENDER === '1') {
@@ -98,14 +99,13 @@ if (Number.isInteger(HOST_PID) && HOST_PID > 0) {
   }, HOST_POLL_MS).unref?.()
 }
 
+function activeEntry() {
+  if (activeEntryRef && activeEntryRef.win && !activeEntryRef.win.isDestroyed()) return activeEntryRef
+  return null
+}
+
 function currentDisplay() {
   if (activeDisplay) return activeDisplay
-  if (win && !win.isDestroyed()) {
-    const bounds = win.getContentBounds()
-    if (typeof screen.getDisplayMatching === 'function') {
-      return screen.getDisplayMatching(bounds)
-    }
-  }
   return screen.getPrimaryDisplay()
 }
 
@@ -113,48 +113,59 @@ function workArea() {
   return currentDisplay().workArea
 }
 
-function displayInfo(display) {
-  const target = display || currentDisplay()
+function displayInfoFor(entry) {
+  const target = entry && entry.display ? entry.display : currentDisplay()
   const info = {
     id: String(target.id),
     bounds: target.bounds,
     workArea: target.workArea,
     scaleFactor: target.scaleFactor,
   }
-  if (win && !win.isDestroyed()) {
+  if (entry && entry.win && !entry.win.isDestroyed()) {
     try {
       const cursor = screen.getCursorScreenPoint()
-      const bounds = win.getContentBounds()
+      const bounds = entry.win.getContentBounds()
       info.pointer = { x: cursor.x - bounds.x, y: cursor.y - bounds.y }
     } catch {}
   }
   return info
 }
 
-function toOverlayDip(list) {
-  const area = workArea()
-  const bounds = win && !win.isDestroyed()
-    ? win.getContentBounds()
+function displayInfo(display) {
+  return displayInfoFor(activeEntry() || { display: display || currentDisplay() })
+}
+
+function toOverlayDipFor(entry, list) {
+  const display = entry && entry.display ? entry.display : currentDisplay()
+  const area = display.workArea
+  const bounds = entry && entry.win && !entry.win.isDestroyed()
+    ? entry.win.getContentBounds()
     : { x: area.x, y: area.y, width: area.width, height: area.height }
-  const display = currentDisplay()
   return windowsToOverlayDip(list, {
     origin: { x: bounds.x, y: bounds.y },
     width: bounds.width,
     height: bounds.height,
     scaleFactor: display.scaleFactor,
-    // screenToDipRect converts a physical screen rectangle using the DPI of
-    // the display the rectangle belongs to. Passing null here is deliberate:
-    // the overlay itself is only on the active display, but the candidate
-    // windows may span mixed-DPI monitors.
+    // A candidate window may live on a display with a different DPI. Passing
+    // null lets Electron pick the scale of the display containing the rect.
     toDipRect: typeof screen.screenToDipRect === 'function'
       ? (rect) => screen.screenToDipRect(null, rect)
       : null,
   })
 }
 
+function toOverlayDip(list) {
+  const entry = activeEntry()
+  return entry ? toOverlayDipFor(entry, list) : []
+}
+
+function sendDisplayTo(entry) {
+  if (!entry || !entry.win || entry.win.isDestroyed()) return
+  try { entry.win.webContents.send('whale:display', displayInfoFor(entry)) } catch {}
+}
+
 function sendDisplay() {
-  if (!win || win.isDestroyed()) return
-  try { win.webContents.send('whale:display', displayInfo()) } catch {}
+  sendDisplayTo(activeEntry())
 }
 
 function displayForPhysicalRect(item) {
@@ -182,9 +193,9 @@ function displayForPhysicalRect(item) {
     : screen.getDisplayMatching(physical)
 }
 
-// The overlay can only draw one display at a time. When the window the pet is
-// attached to crosses a monitor boundary, move the whole overlay first so the
-// renderer keeps receiving that hwnd instead of falling back to a viewport snap.
+// A-lazy: one static overlay per display, created only when needed. The
+// snapped window tells us which display should be active; the target overlay
+// is prepared hidden before the old one is removed.
 function followSnappedWindow() {
   if (!snappedHwnd || !Array.isArray(latestWindowsRaw) || !latestWindowsRaw.length) return false
   const item = latestWindowsRaw.find((entry) => String(entry && entry.hwnd) === snappedHwnd)
@@ -192,21 +203,25 @@ function followSnappedWindow() {
   const target = displayForPhysicalRect(item)
   if (!target) return false
   if (activeDisplay && target.id === activeDisplay.id) return false
-  return rehomeTo(target)
+  activateDisplay(target, { snap: true })
+  return true
 }
 
 function resendWindows() {
-  latestWindows = toOverlayDip(latestWindowsRaw)
-  if (win && !win.isDestroyed()) {
-    try { win.webContents.send('whale:windows', latestWindows) } catch {}
-  }
+  const entry = activeEntry()
+  if (!entry) return []
+  latestWindows = toOverlayDipFor(entry, latestWindowsRaw)
+  try { entry.win.webContents.send('whale:windows', latestWindows) } catch {}
   return latestWindows
 }
 
-function createWindow() {
-  activeDisplay = screen.getPrimaryDisplay()
-  const area = workArea()
-  win = new BrowserWindow({
+function createOverlay(display, options) {
+  const target = display || screen.getPrimaryDisplay()
+  const id = String(target.id)
+  const existing = overlays.get(id)
+  if (existing && existing.win && !existing.win.isDestroyed()) return existing
+  const area = target.workArea
+  const bw = new BrowserWindow({
     width: area.width,
     height: area.height,
     x: area.x,
@@ -229,169 +244,264 @@ function createWindow() {
       backgroundThrottling: false,
     },
   })
-  win.setAlwaysOnTop(true, 'screen-saver')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  win.webContents.setBackgroundThrottling(false)
-  try { win.webContents.setFrameRate(60) } catch {}
-  win.setIgnoreMouseEvents(true, { forward: true })
-  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+  const entry = {
+    id,
+    display: target,
+    win: bw,
+    ready: false,
+    mounted: false,
+    showOnReady: Boolean(options && options.show),
+    readyResolve: null,
+    mountedResolve: null,
+  }
+  entry.readyPromise = new Promise((resolve) => { entry.readyResolve = resolve })
+  entry.mountedPromise = new Promise((resolve) => { entry.mountedResolve = resolve })
+  overlays.set(id, entry)
+
+  bw.setAlwaysOnTop(true, 'screen-saver')
+  bw.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  bw.setOpacity(0)
+  bw.webContents.setBackgroundThrottling(false)
+  try { bw.webContents.setFrameRate(60) } catch {}
+  bw.setIgnoreMouseEvents(true, { forward: true })
+  bw.webContents.on('did-fail-load', (_e, code, desc, url) => {
     process.stderr.write('[whale helper] did-fail-load ' + code + ' ' + desc + ' ' + url + String.fromCharCode(10))
   })
-  win.webContents.on('preload-error', (_e, preloadPath, error) => {
+  bw.webContents.on('preload-error', (_e, preloadPath, error) => {
     process.stderr.write('[whale helper] preload-error ' + preloadPath + ' ' + String(error) + String.fromCharCode(10))
   })
-  win.webContents.on('render-process-gone', (_e, details) => {
+  bw.webContents.on('render-process-gone', (_e, details) => {
     process.stderr.write('[whale helper] render-gone ' + JSON.stringify(details) + String.fromCharCode(10))
   })
-  win.loadFile(path.join(__dirname, 'index.html'))
-  win.once('ready-to-show', () => {
-    win.show()
-  })
-  win.webContents.once('did-finish-load', () => {
-    win.show()
-  })
-  win.on('closed', () => {
-    win = null
-    app.quit()
-  })
-  win.on('blur', () => {
-    try { win.setAlwaysOnTop(true, 'screen-saver') } catch {}
-    if (!win || win.isDestroyed()) return
-    win.webContents.send('whale:release-all')
-    win.webContents.send('whale:blur')
-  })
-  win.on('moved', handleWindowMoved)
-  // Windows may report an OS-initiated move (Shift+Win+Arrow) through 'move'
-  // without a matching 'moved'. Debouncing keeps the rehome check cheap.
-  win.on('move', handleWindowMoved)
-}
-
-function rehomeTo(display, options) {
-  if (!win || win.isDestroyed()) return false
-  const target = display || currentDisplay()
-  if (!target) return false
-  const area = target.workArea
-  const bounds = win.getContentBounds()
-  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
-  // activeDisplay is only a cached intent. The native window may have been
-  // moved by the OS, so derive the actual monitor from its bounds as well.
-  // Otherwise a stale cache can treat secondary->primary as a same-display
-  // recall and skip the fade while the window is still on the other monitor.
-  const actualDisplay = typeof screen.getDisplayNearestPoint === 'function'
-    ? screen.getDisplayNearestPoint(center)
-    : target
-  const same = Boolean(activeDisplay) &&
-    activeDisplay.id === target.id &&
-    actualDisplay.id === target.id
-  const force = Boolean(options && options.force)
-  const recall = Boolean(options && options.recall)
-  if (same && !force && !recall) return false
-  if (displaySwitchPending) return true
-  const switching = actualDisplay.id !== target.id
-  const commit = () => {
-    activeDisplay = target
-    rehoming = true
-    try {
-      // setContentBounds keeps the transparent canvas exactly on the work area
-      // instead of inheriting the frame/shadow size of the previous display.
-      if (!same || force) {
-        win.setContentBounds({
-          x: area.x,
-          y: area.y,
-          width: area.width,
-          height: area.height,
-        })
-      }
-    } catch (error) {
-      process.stderr.write('[whale helper] rehome failed: ' + String(error) + String.fromCharCode(10))
-    } finally {
-      rehoming = false
+  bw.loadFile(path.join(__dirname, 'index.html'))
+  bw.once('ready-to-show', () => {
+    if (entry.showOnReady) {
+      entry.showOnReady = false
+      bw.showInactive()
+      bw.setOpacity(1)
     }
-    if (rehomeNotifyTimer) {
-      try { clearTimeout(rehomeNotifyTimer) } catch {}
-    }
-    // Let Chromium deliver the resize before the renderer rebases pointer
-    // coordinates. Sending synchronously would use the old innerWidth.
-    rehomeNotifyTimer = setTimeout(() => {
-      rehomeNotifyTimer = null
-      if (!win || win.isDestroyed()) return
-      resendWindows()
-      sendDisplay()
-      if (displaySwitchPending) {
-        displaySwitchPending = false
-        try {
-          win.webContents.send('whale:display-switch', {
-            phase: 'in',
-            id: String(activeDisplay.id),
-          })
-        } catch {}
-      }
-      if (options && options.recall) {
-        try { win.webContents.send('whale:recall') } catch {}
+  })
+  bw.webContents.once('did-finish-load', () => {
+    // Fallback for an old preload that does not send whale:ready.
+    setTimeout(() => {
+      if (!entry.ready) {
+        entry.ready = true
+        entry.readyResolve?.()
       }
     }, 80)
-  }
-  if (switching && win && !win.isDestroyed()) {
-    displaySwitchPending = true
-    try {
-      win.webContents.send('whale:display-switch', {
-        phase: 'out',
-        from: activeDisplay ? String(activeDisplay.id) : '',
-        to: String(target.id),
-      })
-    } catch {}
-    // Give the 65ms opacity fade time to finish before resizing the native
-    // window. Otherwise the resize is visible halfway through the fade.
-    if (displayFadeTimer) {
-      try { clearTimeout(displayFadeTimer) } catch {}
+  })
+  bw.on('closed', () => {
+    overlays.delete(id)
+    if (activeEntryRef === entry) {
+      activeEntryRef = null
+      win = null
+      if (!hostGone) app.quit()
     }
-    displayFadeTimer = setTimeout(() => {
-      displayFadeTimer = null
-      if (!win || win.isDestroyed()) {
-        displaySwitchPending = false
-        return
-      }
-      commit()
-    }, 72)
-    return true
+  })
+  bw.on('blur', () => {
+    try { bw.setAlwaysOnTop(true, 'screen-saver') } catch {}
+    if (bw.isDestroyed()) return
+    bw.webContents.send('whale:release-all')
+    bw.webContents.send('whale:blur')
+  })
+  bw.on('moved', handleWindowMoved)
+  bw.on('move', handleWindowMoved)
+  return entry
+}
+
+function createWindow() {
+  const entry = createOverlay(screen.getPrimaryDisplay(), { show: true })
+  activeEntryRef = entry
+  activeDisplay = entry.display
+  win = entry.win
+  return entry
+}
+
+function destroyOverlay(entry) {
+  if (!entry) return
+  const id = entry.id
+  if (overlays.get(id) === entry) overlays.delete(id)
+  try {
+    if (entry.win && !entry.win.isDestroyed()) entry.win.destroy()
+  } catch {}
+}
+
+function activateEntry(entry, options) {
+  if (!entry || !entry.win || entry.win.isDestroyed()) return false
+  const old = activeEntry()
+  if (old === entry) return false
+  activeEntryRef = entry
+  activeDisplay = entry.display
+  win = entry.win
+  entry.showOnReady = false
+  try {
+    entry.win.setIgnoreMouseEvents(true, { forward: true })
+    entry.win.setOpacity(0)
+    entry.win.showInactive()
+  } catch (error) {
+    process.stderr.write('[whale helper] show overlay failed: ' + String(error) + String.fromCharCode(10))
+    return false
   }
-  commit()
+  // Keep the old overlay visible under the transparent target for one paint
+  // turn, then reveal the target and hide the source in the same tick. This
+  // avoids both a blank frame and two visible pets.
+  setTimeout(() => {
+    if (!entry.win || entry.win.isDestroyed()) return
+    try { entry.win.setOpacity(1) } catch {}
+    if (old) {
+      try { old.win.hide() } catch {}
+      setTimeout(() => destroyOverlay(old), 700)
+    }
+  }, 24)
+  sendDisplayTo(entry)
+  sendWindowsTo(entry)
+  if (!(options && options.silent)) writeLine({ type: 'active-display', id: entry.id })
   return true
 }
 
-function handleWindowMoved() {
-  if (rehoming) return
-  if (rehomeTimer) {
-    try { clearTimeout(rehomeTimer) } catch {}
+function sendWindowsTo(entry) {
+  if (!entry || !entry.win || entry.win.isDestroyed()) return []
+  const list = toOverlayDipFor(entry, latestWindowsRaw)
+  if (entry === activeEntry()) latestWindows = list
+  try { entry.win.webContents.send('whale:windows', list) } catch {}
+  return list
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+function baseSnapshot() {
+  const source = pendingConfig || latestConfig
+  if (!source || !source.cfg) return null
+  try { return JSON.parse(JSON.stringify(source)) } catch { return null }
+}
+
+function buildSnapshot(target, options) {
+  const snapshot = baseSnapshot()
+  if (!snapshot) return null
+  snapshot.cfg = Object.assign({}, snapshot.cfg, { displayMode: 'desktop' })
+  const size = Number(snapshot.cfg.size) || 140
+  const area = target.display.workArea
+  if (options && options.drag) {
+    const cursor = screen.getCursorScreenPoint()
+    const offsetX = Number(options.offsetX) || 0
+    const offsetY = Number(options.offsetY) || 0
+    snapshot.cfg.snap = {
+      ref: 'viewport',
+      x: clamp(cursor.x - area.x - offsetX, 4, area.width - size - 4),
+      y: clamp(cursor.y - area.y - offsetY, 4, area.height - size - 4),
+    }
+  } else if (options && options.recall) {
+    const cursor = screen.getCursorScreenPoint()
+    snapshot.cfg.snap = {
+      ref: 'viewport',
+      x: Math.round((area.width - size) / 2),
+      y: Math.round((area.height - size) / 2),
+    }
+    snapshot.recallPoint = { x: cursor.x - area.x, y: cursor.y - area.y }
+  } else if (options && options.viewport) {
+    // The overlay itself was moved to another display (Shift+Win+Arrow).
+    // The previously snapped window may still live on the old display, so
+    // keep the widget visible at a stable position on the target display
+    // instead of leaving it hidden while waiting for a missing hwnd.
+    snapshot.cfg.snap = {
+      ref: 'viewport',
+      x: Math.round((area.width - size) / 2),
+      y: Math.round((area.height - size) / 2),
+    }
+  } else if (snapshot.cfg.snap && snapshot.cfg.snap.ref === 'viewport') {
+    snapshot.cfg.snap = {
+      ref: 'viewport',
+      x: clamp(Number(snapshot.cfg.snap.x) || 24, 4, area.width - size - 4),
+      y: clamp(Number(snapshot.cfg.snap.y) || 24, 4, area.height - size - 4),
+    }
   }
-  rehomeTimer = setTimeout(() => {
-    rehomeTimer = null
-    if (!win || win.isDestroyed()) return
-    const bounds = win.getContentBounds()
-    const center = {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
+  return snapshot
+}
+
+function sendConfigTo(entry, snapshot) {
+  if (!entry || !entry.win || entry.win.isDestroyed()) return
+  try { entry.win.webContents.send('whale:config', snapshot) } catch {}
+}
+
+function activateDisplay(display, options) {
+  const targetDisplay = display || currentDisplay()
+  if (!targetDisplay) return Promise.resolve(false)
+  const current = activeEntry()
+  if (current && current.display.id === targetDisplay.id && !(options && options.force)) {
+    if (options && options.recall) {
+      try { current.win.webContents.send('whale:recall') } catch {}
     }
-    const target = typeof screen.getDisplayNearestPoint === 'function'
-      ? screen.getDisplayNearestPoint(center)
-      : screen.getDisplayMatching(bounds)
-    if (!activeDisplay || target.id !== activeDisplay.id) {
-      rehomeTo(target)
-      return
+    return Promise.resolve(false)
+  }
+  if (handoffPromise) return handoffPromise
+  const sequence = ++handoffSequence
+  handoffPromise = (async () => {
+    const existing = overlays.get(String(targetDisplay.id))
+    if (existing && existing !== activeEntry()) destroyOverlay(existing)
+    const target = createOverlay(targetDisplay, { show: false })
+    await Promise.race([target.readyPromise, wait(1800)])
+    const snapshot = buildSnapshot(target, options)
+    sendConfigTo(target, snapshot)
+    sendWindowsTo(target)
+    sendDisplayTo(target)
+    await Promise.race([target.mountedPromise, wait(1400)])
+    if (sequence !== handoffSequence) return false
+    if (!target.win || target.win.isDestroyed()) return false
+    if (options && options.drag) {
+      mouseFollowOffset = {
+        x: Number(options.offsetX) || 0,
+        y: Number(options.offsetY) || 0,
+      }
     }
-    // The OS can move a frameless always-on-top window (for example
-    // Shift+Win+Arrow). Keep the overlay covering the work area instead of
-    // leaving a primary-sized window stranded on another monitor.
-    const area = activeDisplay.workArea
-    if (Math.abs(bounds.x - area.x) > 3 || Math.abs(bounds.y - area.y) > 3) {
-      rehomeTo(activeDisplay, { force: true })
-    }
-  }, 90)
+    const shown = activateEntry(target, { silent: Boolean(options && options.silent) })
+    if (shown && options && options.drag) startMouseFollow()
+    return shown
+  })().catch((error) => {
+    process.stderr.write('[whale helper] display handoff failed: ' + String(error) + String.fromCharCode(10))
+    return false
+  }).finally(() => {
+    handoffPromise = null
+  })
+  return handoffPromise
+}
+
+function handleWindowMoved() {
+  if (resettingBounds || handoffPromise) return
+  const entry = activeEntry()
+  if (!entry) return
+  const bounds = entry.win.getContentBounds()
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  const target = typeof screen.getDisplayNearestPoint === 'function'
+    ? screen.getDisplayNearestPoint(center)
+    : screen.getDisplayMatching(bounds)
+  if (target.id !== entry.display.id) {
+    // Shift+Win+Arrow moved the whole overlay. Restore its static display and
+    // hand off to the target display's own overlay instead of resizing it.
+    resettingBounds = true
+    try { entry.win.setContentBounds(entry.display.workArea) } catch {}
+    resettingBounds = false
+    activateDisplay(target, { silent: true, viewport: true })
+    return
+  }
+  const area = entry.display.workArea
+  if (Math.abs(bounds.x - area.x) > 3 || Math.abs(bounds.y - area.y) > 3 ||
+      Math.abs(bounds.width - area.width) > 3 || Math.abs(bounds.height - area.height) > 3) {
+    resettingBounds = true
+    try { entry.win.setContentBounds(area) } catch {}
+    resettingBounds = false
+  }
 }
 
 function requestDisplay(payload) {
-  if (!win || win.isDestroyed()) return
-  const bounds = win.getContentBounds()
+  const entry = activeEntry()
+  if (!entry) return
+  const bounds = entry.win.getContentBounds()
   const x = payload && Number.isFinite(Number(payload.x)) ? Number(payload.x) : 0
   const y = payload && Number.isFinite(Number(payload.y)) ? Number(payload.y) : 0
   const edge = payload && payload.edge
@@ -405,17 +515,26 @@ function requestDisplay(payload) {
   const target = typeof screen.getDisplayNearestPoint === 'function'
     ? screen.getDisplayNearestPoint(point)
     : screen.getDisplayMatching(bounds)
-  if (!target || (activeDisplay && target.id === activeDisplay.id)) return
-  rehomeTo(target)
+  if (!target || target.id === entry.display.id) return
+  activateDisplay(target, {
+    drag: true,
+    offsetX: payload && payload.offsetX,
+    offsetY: payload && payload.offsetY,
+  })
 }
 
 function recallWidget() {
-  if (!win || win.isDestroyed()) return
+  const entry = activeEntry()
+  if (!entry) return
   const point = screen.getCursorScreenPoint()
   const target = typeof screen.getDisplayNearestPoint === 'function'
     ? screen.getDisplayNearestPoint(point)
-    : screen.getDisplayMatching(win.getContentBounds())
-  rehomeTo(target, { recall: true })
+    : screen.getDisplayMatching(entry.win.getContentBounds())
+  if (target.id === entry.display.id) {
+    try { entry.win.webContents.send('whale:recall') } catch {}
+    return
+  }
+  activateDisplay(target, { recall: true })
 }
 
 function createTray() {
@@ -444,10 +563,12 @@ function destroyTray() {
 
 function sendConfig(snapshot) {
   pendingConfig = snapshot || null
-  if (win && !win.isDestroyed()) {
-    win.webContents.send('whale:config', pendingConfig)
+  if (pendingConfig) latestConfig = pendingConfig
+  sendConfigTo(activeEntry(), pendingConfig)
+  if (pendingConfig && pendingConfig.followMouse && activeEntry()) {
+    mouseFollowOffset = null
+    startMouseFollow()
   }
-  if (pendingConfig && pendingConfig.followMouse && rendererReady) startMouseFollow()
 }
 
 function stop() {
@@ -457,7 +578,10 @@ function stop() {
   stopMouseFollow()
   destroyTray()
   try { if (bridgeServer) bridgeServer.close() } catch {}
-  try { if (win && !win.isDestroyed()) win.destroy() } catch {}
+  win = null
+  activeEntryRef = null
+  activeDisplay = null
+  for (const entry of Array.from(overlays.values())) destroyOverlay(entry)
   app.quit()
 }
 
@@ -629,13 +753,21 @@ function startMouseFollow() {
       if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) continue
       const bounds = win && !win.isDestroyed() ? win.getBounds() : { x: 0, y: 0 }
       if (win && !win.isDestroyed()) {
-        win.webContents.send('whale:mouse-follow', {
+        const follow = {
           left: left,
           x: screenX - bounds.x,
           y: screenY - bounds.y,
-        })
+        }
+        if (mouseFollowOffset) {
+          follow.offsetX = mouseFollowOffset.x
+          follow.offsetY = mouseFollowOffset.y
+        }
+        win.webContents.send('whale:mouse-follow', follow)
       }
-      if (!left) stopMouseFollow()
+      if (!left) {
+        mouseFollowOffset = null
+        stopMouseFollow()
+      }
     }
   })
   mouseChild.stderr.setEncoding('utf8')
@@ -647,9 +779,26 @@ function startMouseFollow() {
     mouseChild = null
     mouseBuffer = ''
   })
+  if (win && !win.isDestroyed()) {
+    try {
+      const point = screen.getCursorScreenPoint()
+      const bounds = win.getBounds()
+      const follow = {
+        left: true,
+        x: point.x - bounds.x,
+        y: point.y - bounds.y,
+      }
+      if (mouseFollowOffset) {
+        follow.offsetX = mouseFollowOffset.x
+        follow.offsetY = mouseFollowOffset.y
+      }
+      win.webContents.send('whale:mouse-follow', follow)
+    } catch {}
+  }
 }
 
 function stopMouseFollow() {
+  mouseFollowStarted = false
   if (!mouseChild) return
   try { mouseChild.kill() } catch {}
   mouseChild = null
@@ -685,13 +834,14 @@ function startDesktopWindows() {
       try { list = JSON.parse(line) } catch { continue }
       if (!Array.isArray(list)) continue
       latestWindowsRaw = list
-      // Rehome before publishing a list that no longer contains the snapped
-      // hwnd. Otherwise the renderer would immediately replace the attachment
-      // with a viewport snap at the old screen edge.
+      if (handoffPromise) continue
+      // Switch displays before publishing a list that no longer contains the
+      // snapped hwnd. The new overlay receives the unfiltered raw list.
       if (followSnappedWindow()) continue
-      if (rehomeNotifyTimer) continue
-      latestWindows = toOverlayDip(latestWindowsRaw)
-      if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
+      const entry = activeEntry()
+      if (!entry) continue
+      latestWindows = toOverlayDipFor(entry, latestWindowsRaw)
+      try { entry.win.webContents.send('whale:windows', latestWindows) } catch {}
     }
   })
   windowsChild.stderr.setEncoding('utf8')
@@ -757,6 +907,38 @@ function stopGlobalKeys() {
   keyBuffer = ''
 }
 
+function entryForEvent(event) {
+  for (const entry of overlays.values()) {
+    if (entry.win && !entry.win.isDestroyed() && entry.win.webContents === event.sender) return entry
+  }
+  return null
+}
+
+function handleDisplayChange() {
+  const displays = screen.getAllDisplays()
+  const ids = new Set(displays.map((display) => String(display.id)))
+  for (const [id, entry] of overlays) {
+    if (!ids.has(id) && entry !== activeEntry()) destroyOverlay(entry)
+  }
+  const entry = activeEntry()
+  if (!entry) return
+  const kept = displays.find((display) => String(display.id) === entry.id)
+  if (kept) {
+    entry.display = kept
+    resettingBounds = true
+    try { entry.win.setContentBounds(kept.workArea) } catch {}
+    resettingBounds = false
+    activeDisplay = kept
+    sendDisplayTo(entry)
+    sendWindowsTo(entry)
+    return
+  }
+  const target = typeof screen.getDisplayNearestPoint === 'function'
+    ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    : screen.getPrimaryDisplay()
+  activateDisplay(target, { silent: true })
+}
+
 app.whenReady().then(() => {
   createWindow()
   createTray()
@@ -764,39 +946,38 @@ app.whenReady().then(() => {
   startGlobalKeys()
   startDesktopWindows()
 
-  const rehomeForDisplays = () => {
-    if (!activeDisplay) return
-    const displays = screen.getAllDisplays()
-    const kept = displays.find((display) => display.id === activeDisplay.id)
-    if (kept) {
-      rehomeTo(kept, { force: true })
-    } else {
-      const target = typeof screen.getDisplayNearestPoint === 'function'
-        ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-        : screen.getPrimaryDisplay()
-      rehomeTo(target)
-    }
-  }
-  screen.on('display-removed', rehomeForDisplays)
-  screen.on('display-metrics-changed', rehomeForDisplays)
-  screen.on('display-added', rehomeForDisplays)
+  screen.on('display-removed', handleDisplayChange)
+  screen.on('display-metrics-changed', handleDisplayChange)
+  screen.on('display-added', handleDisplayChange)
 
-  ipcMain.on('whale:ready', () => {
-    rendererReady = true
-    if (pendingConfig) sendConfig(pendingConfig)
-    if (pendingConfig && pendingConfig.followMouse) startMouseFollow()
-    if (globalKeysActive && win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('whale:windows', latestWindows)
-      sendDisplay()
+  ipcMain.on('whale:ready', (event) => {
+    const entry = entryForEvent(event)
+    if (!entry) return
+    entry.ready = true
+    try { entry.readyResolve?.() } catch {}
+    if (entry === activeEntry()) {
+      if (pendingConfig) sendConfigTo(entry, pendingConfig)
+      if (globalKeysActive && entry.win && !entry.win.isDestroyed()) {
+        entry.win.webContents.send('whale:global-keys')
+      }
+      sendWindowsTo(entry)
+      sendDisplayTo(entry)
+      writeLine({ type: 'ready' })
     }
-    writeLine({ type: 'ready' })
   })
-  ipcMain.on('whale:interactive', (_event, interactive) => {
-    if (!win || win.isDestroyed()) return
-    win.setIgnoreMouseEvents(!interactive, { forward: true })
+  ipcMain.on('whale:renderer-mounted', (event) => {
+    const entry = entryForEvent(event)
+    if (!entry) return
+    entry.mounted = true
+    try { entry.mountedResolve?.() } catch {}
   })
-  ipcMain.on('whale:request-display', (_event, payload) => {
+  ipcMain.on('whale:interactive', (event, interactive) => {
+    const entry = entryForEvent(event)
+    if (!entry || !entry.win || entry.win.isDestroyed()) return
+    entry.win.setIgnoreMouseEvents(!interactive, { forward: true })
+  })
+  ipcMain.on('whale:request-display', (event, payload) => {
+    if (entryForEvent(event) !== activeEntry()) return
     requestDisplay(payload)
   })
   ipcMain.on('whale:snap-window', (_event, payload) => {
@@ -804,15 +985,21 @@ app.whenReady().then(() => {
     snappedHwnd = hwnd
     if (hwnd) followSnappedWindow()
   })
-  ipcMain.on('whale:config', (_event, snapshot) => {
+  ipcMain.on('whale:config', (event, snapshot) => {
+    const entry = entryForEvent(event)
+    if (!entry || entry !== activeEntry()) return
     pendingConfig = snapshot || null
+    latestConfig = pendingConfig
     writeLine({ type: 'config', snapshot: pendingConfig })
   })
-  ipcMain.on('whale:request-anchor', () => {
+  ipcMain.on('whale:request-anchor', (event) => {
+    if (entryForEvent(event) !== activeEntry()) return
     writeLine({ type: 'request-anchor' })
   })
-  ipcMain.on('whale:stop', (_event, snapshot) => {
+  ipcMain.on('whale:stop', (event, snapshot) => {
+    if (entryForEvent(event) !== activeEntry()) return
     if (snapshot && snapshot.cfg) pendingConfig = snapshot
+    latestConfig = pendingConfig
     writeLine({ type: 'stop', snapshot: pendingConfig })
   })
 

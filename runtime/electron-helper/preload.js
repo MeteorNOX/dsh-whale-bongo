@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   ready() {
     ipcRenderer.send('whale:ready')
   },
+  rendererMounted() {
+    ipcRenderer.send('whale:renderer-mounted')
+  },
   sendConfig(snapshot) {
     ipcRenderer.send('whale:config', snapshot)
   },

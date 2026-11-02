@@ -4038,11 +4038,15 @@ function mountWhaleBongoWidget(options) {
     else if (edge === 'left') px = 0
     else if (edge === 'bottom') py = height - 1
     else if (edge === 'top') py = 0
+    var offsetX = drag ? drag.x - drag.ox : size / 2
+    var offsetY = drag ? drag.y - drag.oy : size / 2
     try {
       window.whaleDesktop.requestDisplay({
         x: px,
         y: py,
         edge: edge,
+        offsetX: offsetX,
+        offsetY: offsetY,
       })
     } catch (e) {}
   }
@@ -4290,8 +4294,12 @@ function mountWhaleBongoWidget(options) {
     if (!desktopMode || !payload) return
     if (payload.left) {
       var size = cfg.size
-      var x = clamp(Number(payload.x) - size / 2, 4, Math.max(4, window.innerWidth - size - 4))
-      var y = clamp(Number(payload.y) - size / 2, 4, Math.max(4, window.innerHeight - size - 4))
+      var offsetX = Number(payload.offsetX)
+      var offsetY = Number(payload.offsetY)
+      if (!isFinite(offsetX)) offsetX = size / 2
+      if (!isFinite(offsetY)) offsetY = size / 2
+      var x = clamp(Number(payload.x) - offsetX, 4, Math.max(4, window.innerWidth - size - 4))
+      var y = clamp(Number(payload.y) - offsetY, 4, Math.max(4, window.innerHeight - size - 4))
       if (!isFinite(x) || !isFinite(y)) return
       mouseFollowing = true
       drag = null

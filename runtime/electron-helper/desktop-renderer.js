@@ -65,6 +65,7 @@ function applySnapshot(snapshot) {
     window.__dshWhaleBongoDesktopInput = null
     const dispose = window.mountWhaleBongoWidget({ desktop: true })
     window.__dshWhaleBongoDesktopDispose = dispose
+    try { bridge.rendererMounted() } catch {}
   } catch (error) {
     try {
       bridge.sendConfig({ cfg: { error: String(error && error.message ? error.message : error) } })
