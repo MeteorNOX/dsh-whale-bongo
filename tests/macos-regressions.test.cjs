@@ -202,7 +202,8 @@ function motion() {
   })
   c.cfg.imageQBounceLevel=5
   vm.runInContext(['findDesktopWindow','anchorCenterX','moveBounceRatio','applyMoveShellTransform',
-    'resetFollowBounce','pulseFollowBounce','stepFollowBounce','setMoveImmediate','retargetMove','stepMove',
+    'resetFollowBounce','pulseFollowBounce','stepFollowBounce','clearFollowOffset','setFollowPosition',
+    'setFollowImmediate','setMoveImmediate','retargetMove','stepMove',
     'onHitPointerMove','applyDesktopWindowFollow','scheduleDesktopWindowFollow','setDesktopWindows'].map(fn).join('\n'),c)
   return c
 }

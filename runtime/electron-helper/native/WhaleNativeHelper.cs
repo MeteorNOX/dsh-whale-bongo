@@ -81,8 +81,19 @@ class WhaleNativeHelper
         mouseThread.IsBackground = true;
         mouseThread.Start();
 
-        CommandLoop();
-        running = false;
+        // Thread.Sleep granularity defaults to ~15.6 ms on Windows, which caps
+        // the hot window sampler around 64 Hz and visibly judders on a 144/165
+        // Hz display. Request 1 ms timers while the helper is alive.
+        timeBeginPeriod(1);
+        try
+        {
+            CommandLoop();
+        }
+        finally
+        {
+            running = false;
+            timeEndPeriod(1);
+        }
         return 0;
     }
 
@@ -195,7 +206,7 @@ class WhaleNativeHelper
                 WriteLine("{\"type\":\"error\",\"message\":\"" + Escape(error.Message) + "\"}");
                 Thread.Sleep(500);
             }
-            Thread.Sleep(DateTime.UtcNow < hotUntil ? 12 : 33);
+            Thread.Sleep(DateTime.UtcNow < hotUntil ? 6 : 33);
         }
     }
 
@@ -576,6 +587,11 @@ class WhaleNativeHelper
         public int X;
         public int Y;
     }
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeBeginPeriod(uint period);
+    [DllImport("winmm.dll")]
+    private static extern uint timeEndPeriod(uint period);
 
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);

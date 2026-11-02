@@ -1653,6 +1653,8 @@ function mountWhaleBongoWidget(options) {
   var lastDesktopFollowY = null
   var desktopFollowFrame = 0
   var lastFollowWindowRect = null
+  var followBaseX = null
+  var followBaseY = null
   var lastProbeCard = null
   var lastProbeLeft = 0
   var lastProbeTop = 0
@@ -2367,12 +2369,22 @@ function mountWhaleBongoWidget(options) {
     // move leaves the top behind and stretches the body; an upward move
     // compresses it, with the bottom pinned by transform-origin.
     var deltaY = Number(dy) || 0
-    followStretchV += clamp(deltaY * 3.25 * q, -maxImpulse / 2, maxImpulse / 2)
+    // Scale-space is much smaller than angle-space: a 1% vertical stretch
+    // already reads clearly, so the old 3.25 multiplier pinned the spring at
+    // its cap for most of the follow and made the body look permanently tall.
+    followStretchV += clamp(deltaY * 0.02 * q, -0.4 * q, 0.4 * q)
   }
 
   function stepFollowBounce(dt, q) {
     var stiffness = 420 + 180 * q
-    var damping = 10 - 2 * q
+    // q=0.5 used to give zero damping, leaving both axes ringing for seconds.
+    // Keep a visible overshoot but let the motion settle with the window.
+    var damping = 10 - 0.8 * q
+    // Vertical is capped in scale space (6% at q=5), not angle space. Use a
+    // slightly faster spring so the body recovers as soon as the window stops,
+    // instead of staying tall for the whole horizontal oscillation.
+    var stretchStiffness = 520 + 220 * q
+    var stretchDamping = 12 - 0.8 * q
     if (Math.abs(followLean) > 0.01 || Math.abs(followLeanV) > 0.05) {
       followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
       var leanLimit = 9 * q
@@ -2383,8 +2395,8 @@ function mountWhaleBongoWidget(options) {
       }
     }
     if (Math.abs(followStretch) > 0.0005 || Math.abs(followStretchV) > 0.001) {
-      followStretchV += (-followStretch * stiffness - followStretchV * damping) * dt
-      var stretchLimit = 0.045 * q
+      followStretchV += (-followStretch * stretchStiffness - followStretchV * stretchDamping) * dt
+      var stretchLimit = 0.012 * q
       followStretch = clamp(followStretch + followStretchV * dt, -stretchLimit, stretchLimit)
       if (Math.abs(followStretch) < 0.0005 && Math.abs(followStretchV) < 0.001) {
         followStretch = 0
@@ -2393,7 +2405,47 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
+  function clearFollowOffset() {
+    followBaseX = null
+    followBaseY = null
+    root.style.translate = ''
+  }
+
+  function setFollowPosition(x, y) {
+    // Window-following is a compositor-only translation: left/top stay at a
+    // nearby base and the per-frame motion uses translate, avoiding a layout
+    // of the whole overlay on every native sample.
+    var useTranslate = 'translate' in root.style
+    if (!useTranslate || followBaseX === null || Math.abs(x - followBaseX) > 220 || Math.abs(y - followBaseY) > 220) {
+      followBaseX = x
+      followBaseY = y
+      root.style.left = x.toFixed(2) + 'px'
+      root.style.top = y.toFixed(2) + 'px'
+      root.style.translate = ''
+      return
+    }
+    root.style.translate = (x - followBaseX).toFixed(2) + 'px ' + (y - followBaseY).toFixed(2) + 'px'
+  }
+
+  function setFollowImmediate(x, y) {
+    var size = cfg.size
+    springAnchorX = x + size / 2
+    springAnchorY = y + size
+    springVX = 0
+    springVY = 0
+    springTargetAnchorX = springAnchorX
+    springTargetAnchorY = springAnchorY
+    springActive = false
+    moveSquash = 0
+    moveSquashV = 0
+    moveSquashArmed = false
+    bodyStretch = 0
+    setFollowPosition(x, y)
+    applyMoveShellTransform(moveBounceRatio())
+  }
+
   function setMoveImmediate(x, y) {
+    clearFollowOffset()
     var size = cfg.size
     // 位置弹簧与落地挤压共用同一个底部中心锚点。
     springAnchorX = x + size / 2
@@ -2468,6 +2520,7 @@ function mountWhaleBongoWidget(options) {
       var maxTop = Math.max(0, vh - imageBottomNorm * size)
       var minTop = desktopMode && cfg.snap && cfg.snap.ref === 'desktop-window' && cfg.snap.edge === 'top'
         ? 4 - imageBottomNorm * size : 0
+      clearFollowOffset()
       root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
       root.style.top = clamp(springAnchorY - size, minTop, maxTop).toFixed(2) + 'px'
 
@@ -2653,7 +2706,7 @@ function mountWhaleBongoWidget(options) {
           lastPlaceKey = followedKey
           root.style.display = ''
           root.style.transform = 'none'
-          setMoveImmediate(followedX, followedY)
+          setFollowImmediate(followedX, followedY)
         }
         return
       }
@@ -3838,6 +3891,7 @@ function mountWhaleBongoWidget(options) {
     cfg.snap = { ref: 'viewport', x: curX, y: curY }
     root.style.display = ''
     root.style.transform = 'none'
+    clearFollowOffset()
     root.style.left = curX.toFixed(2) + 'px'
     root.style.top = curY.toFixed(2) + 'px'
     springAnchorX = curX + size / 2
@@ -4295,6 +4349,7 @@ function mountWhaleBongoWidget(options) {
         cfg.snap = { ref: 'viewport', x: curX, y: curY }
         root.style.display = ''
         root.style.transform = 'none'
+        clearFollowOffset()
         root.style.left = curX.toFixed(2) + 'px'
         root.style.top = curY.toFixed(2) + 'px'
         springAnchorX = curX + size / 2
