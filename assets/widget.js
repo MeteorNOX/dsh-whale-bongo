@@ -2396,7 +2396,7 @@ function mountWhaleBongoWidget(options) {
     }
     if (Math.abs(followStretch) > 0.0005 || Math.abs(followStretchV) > 0.001) {
       followStretchV += (-followStretch * stretchStiffness - followStretchV * stretchDamping) * dt
-      var stretchLimit = 0.012 * q
+      var stretchLimit = 0.03 * q
       followStretch = clamp(followStretch + followStretchV * dt, -stretchLimit, stretchLimit)
       if (Math.abs(followStretch) < 0.0005 && Math.abs(followStretchV) < 0.001) {
         followStretch = 0
@@ -2701,6 +2701,7 @@ function mountWhaleBongoWidget(options) {
         curX = followedX
         curY = followedY
         applyFlip()
+        if (desktopMode) positionMenuButton()
         var followedKey = followedX.toFixed(2) + ',' + followedY.toFixed(2) + ',' + followedSize
         if (followedKey !== lastPlaceKey || root.style.display === 'none') {
           lastPlaceKey = followedKey
@@ -2800,6 +2801,7 @@ function mountWhaleBongoWidget(options) {
     curX = x
     curY = y
     applyFlip()
+    if (desktopMode) positionMenuButton()
     lastPlaceCard = card
     var key = x.toFixed(2) + ',' + y.toFixed(2) + ',' + size
     if (!hasShownWidget) {
@@ -3368,6 +3370,12 @@ function mountWhaleBongoWidget(options) {
     var size = cfg.size
     var btn = parseFloat(menuBtn.style.width) || Math.max(20, Math.round(size * 0.12))
     var top = clamp(imageTopNorm * size + 3, 3, Math.max(3, size - btn - 3))
+    // Top-edge snapping lets the portrait extend above the viewport. The
+    // menu button is absolute inside the root, so without this clamp its
+    // top-right corner would sit off-screen and become unclickable.
+    if (desktopMode) {
+      top = clamp(top, 4 - curY, Math.max(4 - curY, window.innerHeight - curY - btn - 4))
+    }
     var right = clamp((1 - imageRightNorm) * size + 3, 3, Math.max(3, size - btn - 3))
     menuBtn.style.top = top.toFixed(2) + 'px'
     menuBtn.style.right = right.toFixed(2) + 'px'
