@@ -44,6 +44,7 @@ function mountWhaleBongoWidget(options) {
   var desktopKeyReleaseTimers = {}
   var mouseFollowing = false
   var desktopWindows = []
+  var lastDisplayRequest = 0
   var globalKeySource = null
   var initialSnapshot = desktopMode && window.__DSH_WHALE_INITIAL_SNAPSHOT ? window.__DSH_WHALE_INITIAL_SNAPSHOT : null
   var pageReturnTransition = !desktopMode && Boolean(window.__dshWhaleBongoReturningFromDesktop)
@@ -3690,6 +3691,7 @@ function mountWhaleBongoWidget(options) {
     var imageBottom = imageBottomNorm * size
     curX = clamp(drag.ox + dx, 4, window.innerWidth - size - 4)
     curY = clamp(drag.oy + dy, 4, window.innerHeight - imageBottom)
+    requestDesktopDisplayAtEdge(event, dx, dy)
     applyFlip()
     cfg.snap = { ref: 'viewport', x: curX, y: curY }
     root.style.display = ''
@@ -4011,6 +4013,113 @@ function mountWhaleBongoWidget(options) {
     dsnDiag('mount', { hasCard: Boolean(cardEl()), desktop: desktopPageActive })
   }
 
+  function requestDesktopDisplayAtEdge(event, dx, dy) {
+    if (!desktopMode || !window.whaleDesktop || typeof window.whaleDesktop.requestDisplay !== 'function') return
+    var width = window.innerWidth
+    var height = window.innerHeight
+    var margin = 6
+    var size = cfg.size
+    var imageBottom = imageBottomNorm * size
+    var maxX = Math.max(4, width - size - 4)
+    var maxY = Math.max(4, height - imageBottom)
+    var edge = ''
+    // Trigger on either the cursor reaching the edge or the pet being pinned
+    // against it while the drag keeps pushing outward. The second condition is
+    // important for narrow screens: the cursor can stop moving before the
+    // browser delivers a pointermove exactly at the last pixel.
+    if (event.clientX <= margin || (dx < -2 && curX <= 4)) edge = 'left'
+    else if (event.clientX >= width - margin || (dx > 2 && curX >= maxX)) edge = 'right'
+    else if (event.clientY <= margin || (dy < -2 && curY <= 4)) edge = 'top'
+    else if (event.clientY >= height - margin || (dy > 2 && curY >= maxY)) edge = 'bottom'
+    if (!edge) return
+    var now = Date.now()
+    if (now - lastDisplayRequest < 180) return
+    lastDisplayRequest = now
+    // When the pet is pinned, the cursor can be several pixels inside the
+    // viewport. Normalize the request to the edge so the helper's 8px probe
+    // actually crosses into the neighboring display.
+    var px = event.clientX
+    var py = event.clientY
+    if (edge === 'right') px = width - 1
+    else if (edge === 'left') px = 0
+    else if (edge === 'bottom') py = height - 1
+    else if (edge === 'top') py = 0
+    try {
+      window.whaleDesktop.requestDisplay({
+        x: px,
+        y: py,
+        edge: edge,
+      })
+    } catch (e) {}
+  }
+
+  function setDesktopDisplay(info) {
+    if (!desktopMode) return
+    window.__DSH_WHALE_DESKTOP_DISPLAY = info || null
+    lastDisplayRequest = 0
+    if (drag) {
+      // Moving the BrowserWindow resets clientX/clientY to the new window's
+      // local space. Rebase the drag origin so the pet keeps its grab offset
+      // instead of jumping by the width of the old screen.
+      var pointer = info && info.pointer
+      if (pointer && isFinite(Number(pointer.x)) && isFinite(Number(pointer.y))) {
+        var vw = window.innerWidth
+        var vh = window.innerHeight
+        var size = cfg.size
+        var imageBottom = imageBottomNorm * size
+        var grabX = drag.x - drag.ox
+        var grabY = drag.y - drag.oy
+        var px = Number(pointer.x)
+        var py = Number(pointer.y)
+        // Keep the raw pointer and origin. At the screen boundary the cursor
+        // can be a few pixels outside the new overlay; clamping the origin
+        // here would lose the grab offset and make the pet snap to the edge.
+        drag.x = px
+        drag.y = py
+        drag.ox = px - grabX
+        drag.oy = py - grabY
+        curX = clamp(drag.ox, 4, Math.max(4, vw - size - 4))
+        curY = clamp(drag.oy, 4, Math.max(4, vh - imageBottom))
+        cfg.snap = { ref: 'viewport', x: curX, y: curY }
+        root.style.display = ''
+        root.style.transform = 'none'
+        root.style.left = curX.toFixed(2) + 'px'
+        root.style.top = curY.toFixed(2) + 'px'
+        springAnchorX = curX + size / 2
+        springAnchorY = curY + imageBottom
+        springVX = 0
+        springVY = 0
+        springActive = false
+        moveSquash = 0
+        moveSquashV = 0
+        moveSquashArmed = false
+        bodyStretch = 0
+        if (moveShell) moveShell.style.transform = ''
+      }
+      return
+    }
+    lastPlaceKey = ''
+    place(false)
+    applyFlip()
+  }
+
+  function recallDesktopWidget() {
+    if (!desktopMode) return
+    closeMenu()
+    var size = cfg.size
+    var imageBottom = imageBottomNorm * size
+    var x = clamp((window.innerWidth - size) / 2, 4, Math.max(4, window.innerWidth - size - 4))
+    var y = clamp((window.innerHeight - imageBottom) / 2, 4, Math.max(4, window.innerHeight - imageBottom))
+    curX = x
+    curY = y
+    cfg.snap = { ref: 'viewport', x: x, y: y }
+    saveCfg()
+    lastPlaceKey = ''
+    root.style.display = ''
+    place(false)
+    applyFlip()
+  }
+
   function setDesktopWindows(list) {
     var next = []
     if (Array.isArray(list)) {
@@ -4184,10 +4293,13 @@ function mountWhaleBongoWidget(options) {
       closeMenu: function () { closeMenu() },
       releaseAll: function () { desktopReleaseAllKeys() },
       setDesktopWindows: function (list) { setDesktopWindows(list) },
+      setDesktopDisplay: function (info) { setDesktopDisplay(info) },
+      recall: function () { recallDesktopWidget() },
       setDesktopInputAnchor: function (anchor) { desktopInputAnchor = anchor || null },
       setMouseFollow: function (payload) { setMouseFollow(payload) },
     }
     window.__dshWhaleBongoDesktopInput = desktopInputApi
+    if (window.__DSH_WHALE_DESKTOP_DISPLAY) setDesktopDisplay(window.__DSH_WHALE_DESKTOP_DISPLAY)
   }
 
   function pageComposerAnchor() {
@@ -4839,7 +4951,6 @@ function mountWhaleBongoWidget(options) {
   }
   return disposeWidget
 }
-
 
 
     return {

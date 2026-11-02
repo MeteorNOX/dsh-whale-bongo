@@ -121,6 +121,17 @@ bridge.onWindows((list) => {
   try { api?.setDesktopWindows?.(window.__DSH_WHALE_DESKTOP_WINDOWS) } catch {}
 })
 
+bridge.onDisplay((info) => {
+  window.__DSH_WHALE_DESKTOP_DISPLAY = info || null
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.setDesktopDisplay?.(info || null) } catch {}
+})
+
+bridge.onRecall(() => {
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.recall?.() } catch {}
+})
+
 bridge.onReleaseAll(() => {
   const api = window.__dshWhaleBongoDesktopInput
   try { api?.releaseAll?.() } catch {}

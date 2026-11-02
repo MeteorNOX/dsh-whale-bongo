@@ -17,7 +17,7 @@ try {
   process.exit(3)
 }
 
-const { app, BrowserWindow, ipcMain, screen } = electron
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = electron
 const path = require('node:path')
 const http = require('node:http')
 const { spawn } = require('node:child_process')
@@ -35,6 +35,12 @@ let globalKeysActive = false
 let windowsChild = null
 let windowsBuffer = ''
 let latestWindows = []
+let latestWindowsRaw = []
+let activeDisplay = null
+let rehoming = false
+let rehomeTimer = null
+let rehomeNotifyTimer = null
+let tray = null
 let mouseChild = null
 let mouseBuffer = ''
 let rendererReady = false
@@ -89,8 +95,37 @@ if (Number.isInteger(HOST_PID) && HOST_PID > 0) {
   }, HOST_POLL_MS).unref?.()
 }
 
+function currentDisplay() {
+  if (activeDisplay) return activeDisplay
+  if (win && !win.isDestroyed()) {
+    const bounds = win.getContentBounds()
+    if (typeof screen.getDisplayMatching === 'function') {
+      return screen.getDisplayMatching(bounds)
+    }
+  }
+  return screen.getPrimaryDisplay()
+}
+
 function workArea() {
-  return screen.getPrimaryDisplay().workArea
+  return currentDisplay().workArea
+}
+
+function displayInfo(display) {
+  const target = display || currentDisplay()
+  const info = {
+    id: String(target.id),
+    bounds: target.bounds,
+    workArea: target.workArea,
+    scaleFactor: target.scaleFactor,
+  }
+  if (win && !win.isDestroyed()) {
+    try {
+      const cursor = screen.getCursorScreenPoint()
+      const bounds = win.getContentBounds()
+      info.pointer = { x: cursor.x - bounds.x, y: cursor.y - bounds.y }
+    } catch {}
+  }
+  return info
 }
 
 function toOverlayDip(list) {
@@ -98,9 +133,7 @@ function toOverlayDip(list) {
   const bounds = win && !win.isDestroyed()
     ? win.getContentBounds()
     : { x: area.x, y: area.y, width: area.width, height: area.height }
-  const display = typeof screen.getDisplayMatching === 'function'
-    ? screen.getDisplayMatching(bounds)
-    : screen.getPrimaryDisplay()
+  const display = currentDisplay()
   return windowsToOverlayDip(list, {
     origin: { x: bounds.x, y: bounds.y },
     width: bounds.width,
@@ -108,7 +141,7 @@ function toOverlayDip(list) {
     scaleFactor: display.scaleFactor,
     // screenToDipRect converts a physical screen rectangle using the DPI of
     // the display the rectangle belongs to. Passing null here is deliberate:
-    // the overlay itself is only on the primary display, but the candidate
+    // the overlay itself is only on the active display, but the candidate
     // windows may span mixed-DPI monitors.
     toDipRect: typeof screen.screenToDipRect === 'function'
       ? (rect) => screen.screenToDipRect(null, rect)
@@ -116,7 +149,21 @@ function toOverlayDip(list) {
   })
 }
 
+function sendDisplay() {
+  if (!win || win.isDestroyed()) return
+  try { win.webContents.send('whale:display', displayInfo()) } catch {}
+}
+
+function resendWindows() {
+  latestWindows = toOverlayDip(latestWindowsRaw)
+  if (win && !win.isDestroyed()) {
+    try { win.webContents.send('whale:windows', latestWindows) } catch {}
+  }
+  return latestWindows
+}
+
 function createWindow() {
+  activeDisplay = screen.getPrimaryDisplay()
   const area = workArea()
   win = new BrowserWindow({
     width: area.width,
@@ -172,6 +219,137 @@ function createWindow() {
     win.webContents.send('whale:release-all')
     win.webContents.send('whale:blur')
   })
+  win.on('moved', handleWindowMoved)
+  // Windows may report an OS-initiated move (Shift+Win+Arrow) through 'move'
+  // without a matching 'moved'. Debouncing keeps the rehome check cheap.
+  win.on('move', handleWindowMoved)
+}
+
+function rehomeTo(display, options) {
+  if (!win || win.isDestroyed()) return false
+  const target = display || currentDisplay()
+  if (!target) return false
+  const area = target.workArea
+  const same = activeDisplay && activeDisplay.id === target.id
+  const force = Boolean(options && options.force)
+  const recall = Boolean(options && options.recall)
+  if (same && !force && !recall) return false
+  activeDisplay = target
+  rehoming = true
+  try {
+    // setContentBounds keeps the transparent canvas exactly on the work area
+    // instead of inheriting the frame/shadow size of the previous display.
+    if (!same || force) {
+      win.setContentBounds({
+        x: area.x,
+        y: area.y,
+        width: area.width,
+        height: area.height,
+      })
+    }
+  } catch (error) {
+    process.stderr.write('[whale helper] rehome failed: ' + String(error) + String.fromCharCode(10))
+  } finally {
+    rehoming = false
+  }
+  if (rehomeNotifyTimer) {
+    try { clearTimeout(rehomeNotifyTimer) } catch {}
+  }
+  // Let Chromium deliver the resize before the renderer rebases pointer
+  // coordinates. Sending synchronously would use the old innerWidth.
+  rehomeNotifyTimer = setTimeout(() => {
+    rehomeNotifyTimer = null
+    if (!win || win.isDestroyed()) return
+    resendWindows()
+    sendDisplay()
+    if (options && options.recall) {
+      try { win.webContents.send('whale:recall') } catch {}
+    }
+  }, 80)
+  return true
+}
+
+function handleWindowMoved() {
+  if (rehoming) return
+  if (rehomeTimer) {
+    try { clearTimeout(rehomeTimer) } catch {}
+  }
+  rehomeTimer = setTimeout(() => {
+    rehomeTimer = null
+    if (!win || win.isDestroyed()) return
+    const bounds = win.getContentBounds()
+    const center = {
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    }
+    const target = typeof screen.getDisplayNearestPoint === 'function'
+      ? screen.getDisplayNearestPoint(center)
+      : screen.getDisplayMatching(bounds)
+    if (!activeDisplay || target.id !== activeDisplay.id) {
+      rehomeTo(target)
+      return
+    }
+    // The OS can move a frameless always-on-top window (for example
+    // Shift+Win+Arrow). Keep the overlay covering the work area instead of
+    // leaving a primary-sized window stranded on another monitor.
+    const area = activeDisplay.workArea
+    if (Math.abs(bounds.x - area.x) > 3 || Math.abs(bounds.y - area.y) > 3) {
+      rehomeTo(activeDisplay, { force: true })
+    }
+  }, 90)
+}
+
+function requestDisplay(payload) {
+  if (!win || win.isDestroyed()) return
+  const bounds = win.getContentBounds()
+  const x = payload && Number.isFinite(Number(payload.x)) ? Number(payload.x) : 0
+  const y = payload && Number.isFinite(Number(payload.y)) ? Number(payload.y) : 0
+  const edge = payload && payload.edge
+  const step = 8
+  const point = { x: bounds.x + x, y: bounds.y + y }
+  if (edge === 'left') point.x -= step
+  else if (edge === 'right') point.x += step
+  else if (edge === 'top') point.y -= step
+  else if (edge === 'bottom') point.y += step
+  else return
+  const target = typeof screen.getDisplayNearestPoint === 'function'
+    ? screen.getDisplayNearestPoint(point)
+    : screen.getDisplayMatching(bounds)
+  if (!target || (activeDisplay && target.id === activeDisplay.id)) return
+  rehomeTo(target)
+}
+
+function recallWidget() {
+  if (!win || win.isDestroyed()) return
+  const point = screen.getCursorScreenPoint()
+  const target = typeof screen.getDisplayNearestPoint === 'function'
+    ? screen.getDisplayNearestPoint(point)
+    : screen.getDisplayMatching(win.getContentBounds())
+  rehomeTo(target, { recall: true })
+}
+
+function createTray() {
+  if (tray) return
+  try {
+    let image = nativeImage.createFromPath(path.join(__dirname, '..', '..', 'assets', 'dsh-whale-bongo-icon.png'))
+    if (image.isEmpty()) return
+    image = image.resize({ width: 16, height: 16 })
+    tray = new Tray(image)
+    tray.setToolTip('DSH 桌宠')
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: '召回挂件到当前屏幕', click: recallWidget },
+    ]))
+    tray.on('click', recallWidget)
+  } catch (error) {
+    tray = null
+    process.stderr.write('[whale helper] tray failed: ' + String(error) + String.fromCharCode(10))
+  }
+}
+
+function destroyTray() {
+  if (!tray) return
+  try { tray.destroy() } catch {}
+  tray = null
 }
 
 function sendConfig(snapshot) {
@@ -187,6 +365,7 @@ function stop() {
   stopGlobalKeys()
   stopDesktopWindows()
   stopMouseFollow()
+  destroyTray()
   try { if (bridgeServer) bridgeServer.close() } catch {}
   try { if (win && !win.isDestroyed()) win.destroy() } catch {}
   app.quit()
@@ -415,7 +594,8 @@ function startDesktopWindows() {
       let list
       try { list = JSON.parse(line) } catch { continue }
       if (!Array.isArray(list)) continue
-      latestWindows = toOverlayDip(list)
+      latestWindowsRaw = list
+      latestWindows = toOverlayDip(latestWindowsRaw)
       if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
     }
   })
@@ -484,21 +664,45 @@ function stopGlobalKeys() {
 
 app.whenReady().then(() => {
   createWindow()
+  createTray()
   startBridge()
   startGlobalKeys()
   startDesktopWindows()
+
+  const rehomeForDisplays = () => {
+    if (!activeDisplay) return
+    const displays = screen.getAllDisplays()
+    const kept = displays.find((display) => display.id === activeDisplay.id)
+    if (kept) {
+      rehomeTo(kept, { force: true })
+    } else {
+      const target = typeof screen.getDisplayNearestPoint === 'function'
+        ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+        : screen.getPrimaryDisplay()
+      rehomeTo(target)
+    }
+  }
+  screen.on('display-removed', rehomeForDisplays)
+  screen.on('display-metrics-changed', rehomeForDisplays)
+  screen.on('display-added', rehomeForDisplays)
 
   ipcMain.on('whale:ready', () => {
     rendererReady = true
     if (pendingConfig) sendConfig(pendingConfig)
     if (pendingConfig && pendingConfig.followMouse) startMouseFollow()
     if (globalKeysActive && win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
-    if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('whale:windows', latestWindows)
+      sendDisplay()
+    }
     writeLine({ type: 'ready' })
   })
   ipcMain.on('whale:interactive', (_event, interactive) => {
     if (!win || win.isDestroyed()) return
     win.setIgnoreMouseEvents(!interactive, { forward: true })
+  })
+  ipcMain.on('whale:request-display', (_event, payload) => {
+    requestDisplay(payload)
   })
   ipcMain.on('whale:config', (_event, snapshot) => {
     pendingConfig = snapshot || null
@@ -514,9 +718,9 @@ app.whenReady().then(() => {
 
 })
 
-app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow() })
-app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow() })
-process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow() })
+app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); destroyTray() })
+app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); destroyTray() })
+process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); destroyTray() })
 
 app.on('window-all-closed', () => {
   app.quit()

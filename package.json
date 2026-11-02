@@ -68,7 +68,7 @@
     "dsh": ">=0.1.0-rc.1"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js && node --check runtime/electron-helper/main.js && node --check runtime/electron-helper/window-dip.js",
+    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js && node --check runtime/electron-helper/main.js && node --check runtime/electron-helper/preload.js && node --check runtime/electron-helper/desktop-renderer.js && node --check runtime/electron-helper/window-dip.js",
     "ensure:electron": "node scripts/ensure-electron.mjs"
   }
 }
