@@ -55,6 +55,8 @@ function mountWhaleBongoWidget(options) {
   var holdHintBar = null
   var modeFading = false
   var clientSnapIndicator = null
+  var desktopErrorToast = null
+  var desktopErrorTimer = 0
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -4302,6 +4304,31 @@ function mountWhaleBongoWidget(options) {
     desktopPollTimer = 0
   }
 
+  function hideDesktopError() {
+    if (desktopErrorTimer) {
+      try { window.clearTimeout(desktopErrorTimer) } catch (e) {}
+      desktopErrorTimer = 0
+    }
+    if (!desktopErrorToast) return
+    try { desktopErrorToast.remove() } catch (e) {}
+    desktopErrorToast = null
+  }
+
+  function showDesktopError(message) {
+    hideDesktopError()
+    var text = message ? String(message) : 'Electron 运行时不可用'
+    var toast = document.createElement('div')
+    toast.setAttribute('role', 'status')
+    toast.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483647;max-width:min(520px,calc(100vw - 32px));padding:9px 13px;border:1px solid rgba(255,160,150,.28);border-radius:9px;background:rgba(38,20,24,.94);color:#ffd9d4;font:12px/1.45 system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.34);pointer-events:none;'
+    toast.textContent = '桌面模式无法启动：' + text
+    document.body.appendChild(toast)
+    desktopErrorToast = toast
+    desktopErrorTimer = window.setTimeout(function () {
+      desktopErrorTimer = 0
+      if (desktopErrorToast === toast) hideDesktopError()
+    }, 8000)
+  }
+
   function showWebWidget() {
     desktopPageActive = false
     desktopStarted = false
@@ -4373,9 +4400,11 @@ function mountWhaleBongoWidget(options) {
           if (!state || !state.running) {
             desktopDownTicks += 1
             if (desktopDownTicks >= 3) {
+              var reason = state && state.error ? state.error : '桌面进程已退出'
               cfg.displayMode = 'web'
               saveCfg()
               showWebWidget()
+              showDesktopError(reason)
             }
           } else {
             desktopDownTicks = 0
@@ -4388,6 +4417,7 @@ function mountWhaleBongoWidget(options) {
             cfg.displayMode = 'web'
             saveCfg()
             showWebWidget()
+            showDesktopError('无法连接桌面运行时')
           }
         })
     }, 1000)
@@ -4409,24 +4439,30 @@ function mountWhaleBongoWidget(options) {
       }).then(function (response) { return response.json() })
         .then(function (state) {
           if (!desktopPageActive || !desktopStarted) return
-          if (!state || !state.running) {
+          if (!state || state.ok === false || !state.running) {
+            var reason = state && state.error ? state.error : 'Electron 运行时不可用'
             cfg.displayMode = 'web'
             desktopStarted = false
             saveCfg()
             showWebWidget()
+            showDesktopError(reason)
             return
           }
           startDesktopPoll()
         })
         .catch(function () {
           cfg.displayMode = 'web'
+          desktopStarted = false
           saveCfg()
           showWebWidget()
+          showDesktopError('无法连接桌面运行时')
         })
     } catch (e) {
       cfg.displayMode = 'web'
+      desktopStarted = false
       saveCfg()
       showWebWidget()
+      showDesktopError('无法连接桌面运行时')
     }
   }
 
@@ -4473,6 +4509,7 @@ function mountWhaleBongoWidget(options) {
     }
 
     try { closeMenu() } catch (e) {}
+    try { hideDesktopError() } catch (e) {}
     try { releaseAll() } catch (e) {}
 
     for (var ti = 0; ti < widgetTimeouts.length; ti++) {

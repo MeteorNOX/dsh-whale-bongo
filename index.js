@@ -256,7 +256,8 @@ export default {
         path: BASE + '/desktop/start',
         handler(req, res) {
           readJsonBody(req).then((body) => {
-            json(res, { ok: true, ...desktop.start(body && body.cfg ? body : null) })
+            const state = desktop.start(body && body.cfg ? body : null)
+            json(res, { ok: Boolean(state.running && state.available), ...state })
           }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
         },
       })

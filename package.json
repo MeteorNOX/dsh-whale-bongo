@@ -69,9 +69,5 @@
   "scripts": {
     "check": "node --check index.js && node --check client.js && node --check assets/widget.js",
     "ensure:electron": "node scripts/ensure-electron.mjs"
-  },
-  "dependencies": {
-    "@electron/get": "^5.1.0",
-    "@electron-internal/extract-zip": "^1.0.5"
   }
 }

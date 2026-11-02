@@ -216,26 +216,25 @@ v0.3.0 新增：挂件可以从 DSH 页面里“跳出来”，作为一个透�
 - 桌面模式不显示吸附点。
 - 想回到客户端模式，在桌面挂件菜单里把「显示位置」改回「客户端」。
 
-桌面模式需要 Electron。优先使用：
+桌面模式需要 Electron。会优先使用环境变量指定的可执行文件，否则自动扫描：
 
 ```text
-~/.dsh/electron-whale/43.3.0/electron.exe
+~/.dsh/electron-whale/<任意已安装版本>/electron.exe
+~/.dsh/electron-whale/current/electron.exe
+~/.dsh/electron/electron.exe
 ```
 
-缺失时，安装依赖后运行：
+不存在时运行零依赖下载脚本：
 
 ```bash
 node scripts/ensure-electron.mjs
 ```
 
-也可以设置环境变量指向已有 Electron：
-
-```bash
-DSH_WHALE_ELECTRON=/path/to/electron
-```
+脚本默认从 npmmirror 获取最新 Electron，并解压到 `~/.dsh/electron-whale/<version>/`；可用 `DSH_WHALE_ELECTRON_VERSION` 固定版本，或 `DSH_WHALE_ELECTRON_DIR` 指定目录。
 
 说明：
 
+- Electron 缺失或桌面进程启动失败时，会保持客户端模式，并在页面下方显示失败原因。
 - 桌面模式不参与 DSH 输入框、任务栏、排队框等页面吸附；这些吸附只在客户端模式生效。
 - 桌面模式使用覆盖当前显示器工作区的透明、点击穿透窗口；只有挂件和菜单区域可交互。
 - 菜单可以在整个工作区拖动，不会因为窗口尺寸变化而瞬移。

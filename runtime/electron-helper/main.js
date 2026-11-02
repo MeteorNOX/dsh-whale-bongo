@@ -268,6 +268,11 @@ const VK_CODE_MAP = {
   186: 'Semicolon', 187: 'Equal', 188: 'Comma', 189: 'Minus',
   190: 'Period', 191: 'Slash', 192: 'Backquote',
   219: 'BracketLeft', 220: 'Backslash', 221: 'BracketRight', 222: 'Quote',
+  0x60: 'Numpad0', 0x61: 'Numpad1', 0x62: 'Numpad2', 0x63: 'Numpad3',
+  0x64: 'Numpad4', 0x65: 'Numpad5', 0x66: 'Numpad6', 0x67: 'Numpad7',
+  0x68: 'Numpad8', 0x69: 'Numpad9', 0x6A: 'NumpadMultiply',
+  0x6B: 'NumpadAdd', 0x6C: 'NumpadComma', 0x6D: 'NumpadSubtract',
+  0x6E: 'NumpadDecimal', 0x6F: 'NumpadDivide', 0x92: 'NumpadEqual',
 }
 for (let i = 0; i < 26; i++) VK_CODE_MAP[0x41 + i] = 'Key' + String.fromCharCode(0x41 + i)
 for (let i = 0; i < 10; i++) VK_CODE_MAP[0x30 + i] = 'Digit' + i
