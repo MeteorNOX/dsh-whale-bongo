@@ -2411,11 +2411,32 @@ function mountWhaleBongoWidget(options) {
     root.style.translate = ''
   }
 
+  // A fixed menu inside a translated root is positioned relative to the root,
+  // not the viewport. Fold the current translate back into left/top before the
+  // menu opens so its viewport coordinates stay correct.
+  function commitFollowOffset() {
+    if (followBaseX === null || followBaseY === null) {
+      root.style.translate = ''
+      return
+    }
+    var parts = String(root.style.translate || '').trim().split(/\s+/)
+    var tx = parseFloat(parts[0]) || 0
+    var ty = parseFloat(parts[1]) || 0
+    var x = followBaseX + tx
+    var y = followBaseY + ty
+    root.style.left = x.toFixed(2) + 'px'
+    root.style.top = y.toFixed(2) + 'px'
+    root.style.translate = ''
+    followBaseX = null
+    followBaseY = null
+  }
+
   function setFollowPosition(x, y) {
     // Window-following is a compositor-only translation: left/top stay at a
     // nearby base and the per-frame motion uses translate, avoiding a layout
-    // of the whole overlay on every native sample.
-    var useTranslate = 'translate' in root.style
+    // of the whole overlay on every native sample. While the fixed menu is
+    // open, keep using left/top so the menu remains viewport-anchored.
+    var useTranslate = 'translate' in root.style && !menuOpen
     if (!useTranslate || followBaseX === null || Math.abs(x - followBaseX) > 220 || Math.abs(y - followBaseY) > 220) {
       followBaseX = x
       followBaseY = y
@@ -3012,7 +3033,12 @@ function mountWhaleBongoWidget(options) {
     var left = curX + cfg.size + 6
     if (left + mw > vw - 8) left = curX - mw - 6
     left = clamp(Math.round(left), 8, Math.max(8, vw - 8 - mw))
-    var top = clamp(Math.round(curY + cfg.size - mh), safeTop, Math.max(safeTop, vh - 8 - mh))
+    // In desktop mode the menu button sits near the top of the portrait.
+    // Align the popover with that button instead of the portrait bottom, so a
+    // tall menu does not float far above the pet.
+    var top = desktopMode
+      ? clamp(Math.round(curY + (parseFloat(menuBtn.style.top) || 0)), safeTop, Math.max(safeTop, vh - 8 - mh))
+      : clamp(Math.round(curY + cfg.size - mh), safeTop, Math.max(safeTop, vh - 8 - mh))
     menu.style.left = left + 'px'
     menu.style.top = top + 'px'
     menuLeft = left
@@ -3020,6 +3046,7 @@ function mountWhaleBongoWidget(options) {
   }
   function openMenu() {
     if (menuOpen) return
+    commitFollowOffset()
     menuOpen = true
     menuLeft = null
     menuTop = null
