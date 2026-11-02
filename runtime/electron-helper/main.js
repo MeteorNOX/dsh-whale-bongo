@@ -40,6 +40,8 @@ let nativeBuffer = ''
 let nativeRestartTimer = 0
 let nativeWindowsActive = false
 let nativeKeysActive = false
+let keyChild = null
+let keyBuffer = ''
 let globalKeysActive = false
 let latestWindows = []
 let latestWindowsRaw = []
@@ -988,26 +990,84 @@ function stopDesktopWindows() {
   sendNative('windows:stop')
 }
 
+function handleGlobalKeyLine(line) {
+  const parts = line.trim().split('|')
+  if (parts.length !== 6) return
+  const down = parts[0] === '1'
+  const vk = Number(parts[1])
+  if (!Number.isInteger(vk)) return
+  // Mouse buttons, modifiers and lock keys are not typing input.
+  if (vk < 8 || vk === 16 || vk === 17 || vk === 18 || vk === 20 ||
+      vk === 91 || vk === 92 || vk === 144 || vk === 145) return
+  const code = vkCode(vk)
+  const payload = {
+    action: down ? 'down' : 'up',
+    key: code,
+    code: code,
+    ctrlKey: parts[2] === '1',
+    altKey: parts[3] === '1',
+    shiftKey: parts[4] === '1',
+    metaKey: parts[5] === '1',
+  }
+  const entry = activeEntry()
+  if (entry && entry.win && !entry.win.isDestroyed()) {
+    entry.win.webContents.send('whale:key', payload)
+  }
+}
+
 function startGlobalKeys() {
-  if (process.platform !== 'win32' || nativeKeysActive) return
-  if (!startNativeHelper()) return
-  nativeKeysActive = true
+  if (process.platform !== 'win32' || keyChild) return
+  try {
+    keyChild = spawn('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy', 'Bypass',
+      '-File', path.join(__dirname, 'global-keys.ps1'),
+    ], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    keyChild = null
+    process.stderr.write('[whale helper] global key hook failed: ' + String(error) + String.fromCharCode(10))
+    return
+  }
   globalKeysActive = true
-  sendNative('keys:start')
   const entry = activeEntry()
   if (entry && entry.win && !entry.win.isDestroyed()) {
     entry.win.webContents.send('whale:global-keys')
   }
+  keyChild.stdout.setEncoding('utf8')
+  keyChild.stdout.on('data', (chunk) => {
+    keyBuffer += chunk
+    let index
+    while ((index = keyBuffer.indexOf(String.fromCharCode(10))) !== -1) {
+      const line = keyBuffer.slice(0, index).trim()
+      keyBuffer = keyBuffer.slice(index + 1)
+      if (line) handleGlobalKeyLine(line)
+    }
+  })
+  keyChild.stderr.setEncoding('utf8')
+  keyChild.stderr.on('data', (chunk) => {
+    const text = String(chunk).trim()
+    if (text) process.stderr.write('[whale helper] global key error: ' + text.slice(0, 500) + String.fromCharCode(10))
+  })
+  keyChild.once('exit', () => {
+    keyChild = null
+    keyBuffer = ''
+    globalKeysActive = false
+  })
 }
 
 function stopGlobalKeys() {
-  if (!nativeKeysActive) {
+  if (!keyChild) {
     globalKeysActive = false
     return
   }
-  nativeKeysActive = false
+  const child = keyChild
+  keyChild = null
+  keyBuffer = ''
   globalKeysActive = false
-  sendNative('keys:stop')
+  try { child.kill() } catch {}
 }
 
 function entryForEvent(event) {
