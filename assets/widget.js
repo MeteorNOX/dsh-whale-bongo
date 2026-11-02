@@ -44,6 +44,10 @@ function mountWhaleBongoWidget(options) {
   var desktopPrepareBusy = false
   var desktopPrepareAutoStarted = false
   var desktopPrepareUi = null
+  var lastSnapTargetHwnd = ''
+  var desktopSnapMissingAt = 0
+  var desktopDisplaySwitching = false
+  var desktopDisplaySwitchSeq = 0
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -2536,9 +2540,17 @@ function mountWhaleBongoWidget(options) {
     if (snap && snap.ref === 'desktop-window') {
       var desktopRect = findDesktopWindow(snap.hwnd)
       if (desktopRect) {
+        desktopSnapMissingAt = 0
         x = anchorCenterX(snap.anchorX, desktopRect) - size / 2
         y = (snap.edge === 'bottom' ? desktopRect.bottom : desktopRect.top) - imageBottom
       } else {
+        // Do not destroy the attachment before the helper has a chance to
+        // follow the window onto another display.
+        if (!desktopSnapMissingAt) desktopSnapMissingAt = Date.now()
+        if (Date.now() - desktopSnapMissingAt < 2000) {
+          syncDesktopSnapTarget()
+          return
+        }
         x = curX
         y = curY
         cfg.snap = { ref: 'viewport', x: x, y: y }
@@ -4035,8 +4047,50 @@ function mountWhaleBongoWidget(options) {
     } catch (e) {}
   }
 
+  function restoreDesktopFollowTransition() {
+    if (widgetDisposed || drag) return
+    root.style.transition = 'left 45ms linear, top 45ms linear'
+    root.style.pointerEvents = ''
+  }
+
+  function setDesktopDisplaySwitch(payload) {
+    if (!desktopMode) return
+    var phase = payload && payload.phase
+    desktopDisplaySwitchSeq += 1
+    var seq = desktopDisplaySwitchSeq
+    if (phase === 'out') {
+      // The overlay is about to move to another DPI/coordinate space. Fade the
+      // pet out before the native resize; otherwise its old left/top values
+      // are interpolated across the new viewport and look like a teleport.
+      desktopDisplaySwitching = true
+      root.style.transition = 'opacity 65ms ease'
+      root.style.opacity = '0'
+      root.style.pointerEvents = 'none'
+      later(function () {
+        if (seq !== desktopDisplaySwitchSeq || !desktopDisplaySwitching) return
+        // Safety net for a missed 'in' event (helper crashed or display lost).
+        desktopDisplaySwitching = false
+        root.style.transition = 'opacity 120ms ease'
+        root.style.opacity = '1'
+        root.style.pointerEvents = ''
+        later(restoreDesktopFollowTransition, 150)
+      }, 600)
+      return
+    }
+    if (phase === 'in') {
+      desktopDisplaySwitching = false
+      root.style.transition = 'opacity 120ms ease'
+      root.style.opacity = '1'
+      root.style.pointerEvents = ''
+      later(restoreDesktopFollowTransition, 150)
+    }
+  }
+
   function setDesktopDisplay(info) {
     if (!desktopMode) return
+    var previousDisplay = window.__DSH_WHALE_DESKTOP_DISPLAY
+    var crossDisplay = Boolean(previousDisplay && info &&
+      String(previousDisplay.id) !== String(info.id))
     window.__DSH_WHALE_DESKTOP_DISPLAY = info || null
     lastDisplayRequest = 0
     if (drag) {
@@ -4056,6 +4110,7 @@ function mountWhaleBongoWidget(options) {
         // Keep the raw pointer and origin. At the screen boundary the cursor
         // can be a few pixels outside the new overlay; clamping the origin
         // here would lose the grab offset and make the pet snap to the edge.
+        if (crossDisplay) root.style.transition = 'none'
         drag.x = px
         drag.y = py
         drag.ox = px - grabX
@@ -4080,9 +4135,18 @@ function mountWhaleBongoWidget(options) {
       }
       return
     }
+    if (crossDisplay) {
+      // Never interpolate left/top across a display resize. The helper fades
+      // the pet out first on the normal path; this is the fallback for a
+      // cached/direct display notification.
+      root.style.transition = 'none'
+    }
     lastPlaceKey = ''
     place(false)
     applyFlip()
+    if (crossDisplay && !desktopDisplaySwitching) {
+      later(restoreDesktopFollowTransition, 160)
+    }
   }
 
   function recallDesktopWidget() {
@@ -4100,6 +4164,14 @@ function mountWhaleBongoWidget(options) {
     root.style.display = ''
     place(false)
     applyFlip()
+  }
+
+  function syncDesktopSnapTarget() {
+    if (!desktopMode || !window.whaleDesktop || typeof window.whaleDesktop.setSnapTarget !== 'function') return
+    var hwnd = cfg.snap && cfg.snap.ref === 'desktop-window' ? String(cfg.snap.hwnd || '') : ''
+    if (hwnd === lastSnapTargetHwnd) return
+    lastSnapTargetHwnd = hwnd
+    window.whaleDesktop.setSnapTarget(hwnd ? { hwnd: hwnd } : null)
   }
 
   function setDesktopWindows(list) {
@@ -4126,6 +4198,7 @@ function mountWhaleBongoWidget(options) {
       }
     }
     desktopWindows = next
+    syncDesktopSnapTarget()
     if (!desktopMode || mouseFollowing) return
     if (!desktopInputAnchor) {
       for (var di = 0; di < desktopWindows.length; di++) {
@@ -4142,15 +4215,24 @@ function mountWhaleBongoWidget(options) {
     if (drag) return
     if (cfg.snap && cfg.snap.ref === 'desktop-window') {
       if (!findDesktopWindow(cfg.snap.hwnd)) {
+        // The window may have just crossed to another monitor. The helper
+        // rehomes the overlay as soon as it sees the new raw rectangle; keep
+        // the attachment during that handoff instead of collapsing it to the
+        // old screen edge.
+        if (!desktopSnapMissingAt) desktopSnapMissingAt = Date.now()
+        if (Date.now() - desktopSnapMissingAt < 2000) return
         cfg.snap = { ref: 'viewport', x: curX, y: curY }
         saveCfg()
       }
+      desktopSnapMissingAt = 0
       lastPlaceKey = ''
       // Window following is a live attachment, not a snap transition. A very
       // short CSS interpolation bridges the 30–60Hz window samples without
       // the lag of the client position spring.
       root.style.transition = 'left 45ms linear, top 45ms linear'
       place(false)
+    } else {
+      desktopSnapMissingAt = 0
     }
   }
 
@@ -4276,6 +4358,7 @@ function mountWhaleBongoWidget(options) {
       releaseAll: function () { desktopReleaseAllKeys() },
       setDesktopWindows: function (list) { setDesktopWindows(list) },
       setDesktopDisplay: function (info) { setDesktopDisplay(info) },
+      setDesktopDisplaySwitch: function (payload) { setDesktopDisplaySwitch(payload) },
       recall: function () { recallDesktopWidget() },
       setDesktopInputAnchor: function (anchor) { desktopInputAnchor = anchor || null },
       setMouseFollow: function (payload) { setMouseFollow(payload) },

@@ -22,11 +22,17 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onDisplay(callback) {
     ipcRenderer.on('whale:display', (_event, info) => callback(info))
   },
+  onDisplaySwitch(callback) {
+    ipcRenderer.on('whale:display-switch', (_event, payload) => callback(payload))
+  },
   onRecall(callback) {
     ipcRenderer.on('whale:recall', () => callback())
   },
   requestDisplay(payload) {
     ipcRenderer.send('whale:request-display', payload || {})
+  },
+  setSnapTarget(payload) {
+    ipcRenderer.send('whale:snap-window', payload || null)
   },
   onInputAnchor(callback) {
     ipcRenderer.on('whale:input-anchor', (_event, anchor) => callback(anchor))

@@ -36,10 +36,13 @@ let windowsChild = null
 let windowsBuffer = ''
 let latestWindows = []
 let latestWindowsRaw = []
+let snappedHwnd = ''
 let activeDisplay = null
 let rehoming = false
 let rehomeTimer = null
 let rehomeNotifyTimer = null
+let displaySwitchPending = false
+let displayFadeTimer = null
 let tray = null
 let mouseChild = null
 let mouseBuffer = ''
@@ -154,6 +157,44 @@ function sendDisplay() {
   try { win.webContents.send('whale:display', displayInfo()) } catch {}
 }
 
+function displayForPhysicalRect(item) {
+  if (!item) return null
+  const left = Number(item.left)
+  const top = Number(item.top)
+  const right = Number(item.right)
+  const bottom = Number(item.bottom)
+  if (![left, top, right, bottom].every(Number.isFinite)) return null
+  if (right <= left || bottom <= top) return null
+  const physical = { x: left, y: top, width: right - left, height: bottom - top }
+  let dip = physical
+  try {
+    if (typeof screen.screenToDipRect === 'function') {
+      dip = screen.screenToDipRect(null, physical) || physical
+    }
+  } catch {}
+  const point = {
+    x: Number(dip.x) + Number(dip.width) / 2,
+    y: Number(dip.y) + Number(dip.height) / 2,
+  }
+  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return null
+  return typeof screen.getDisplayNearestPoint === 'function'
+    ? screen.getDisplayNearestPoint(point)
+    : screen.getDisplayMatching(physical)
+}
+
+// The overlay can only draw one display at a time. When the window the pet is
+// attached to crosses a monitor boundary, move the whole overlay first so the
+// renderer keeps receiving that hwnd instead of falling back to a viewport snap.
+function followSnappedWindow() {
+  if (!snappedHwnd || !Array.isArray(latestWindowsRaw) || !latestWindowsRaw.length) return false
+  const item = latestWindowsRaw.find((entry) => String(entry && entry.hwnd) === snappedHwnd)
+  if (!item) return false
+  const target = displayForPhysicalRect(item)
+  if (!target) return false
+  if (activeDisplay && target.id === activeDisplay.id) return false
+  return rehomeTo(target)
+}
+
 function resendWindows() {
   latestWindows = toOverlayDip(latestWindowsRaw)
   if (win && !win.isDestroyed()) {
@@ -234,38 +275,76 @@ function rehomeTo(display, options) {
   const force = Boolean(options && options.force)
   const recall = Boolean(options && options.recall)
   if (same && !force && !recall) return false
-  activeDisplay = target
-  rehoming = true
-  try {
-    // setContentBounds keeps the transparent canvas exactly on the work area
-    // instead of inheriting the frame/shadow size of the previous display.
-    if (!same || force) {
-      win.setContentBounds({
-        x: area.x,
-        y: area.y,
-        width: area.width,
-        height: area.height,
+  if (displaySwitchPending) return true
+  const switching = !same
+  const commit = () => {
+    activeDisplay = target
+    rehoming = true
+    try {
+      // setContentBounds keeps the transparent canvas exactly on the work area
+      // instead of inheriting the frame/shadow size of the previous display.
+      if (!same || force) {
+        win.setContentBounds({
+          x: area.x,
+          y: area.y,
+          width: area.width,
+          height: area.height,
+        })
+      }
+    } catch (error) {
+      process.stderr.write('[whale helper] rehome failed: ' + String(error) + String.fromCharCode(10))
+    } finally {
+      rehoming = false
+    }
+    if (rehomeNotifyTimer) {
+      try { clearTimeout(rehomeNotifyTimer) } catch {}
+    }
+    // Let Chromium deliver the resize before the renderer rebases pointer
+    // coordinates. Sending synchronously would use the old innerWidth.
+    rehomeNotifyTimer = setTimeout(() => {
+      rehomeNotifyTimer = null
+      if (!win || win.isDestroyed()) return
+      resendWindows()
+      sendDisplay()
+      if (displaySwitchPending) {
+        displaySwitchPending = false
+        try {
+          win.webContents.send('whale:display-switch', {
+            phase: 'in',
+            id: String(activeDisplay.id),
+          })
+        } catch {}
+      }
+      if (options && options.recall) {
+        try { win.webContents.send('whale:recall') } catch {}
+      }
+    }, 80)
+  }
+  if (switching && win && !win.isDestroyed()) {
+    displaySwitchPending = true
+    try {
+      win.webContents.send('whale:display-switch', {
+        phase: 'out',
+        from: activeDisplay ? String(activeDisplay.id) : '',
+        to: String(target.id),
       })
+    } catch {}
+    // Give the 65ms opacity fade time to finish before resizing the native
+    // window. Otherwise the resize is visible halfway through the fade.
+    if (displayFadeTimer) {
+      try { clearTimeout(displayFadeTimer) } catch {}
     }
-  } catch (error) {
-    process.stderr.write('[whale helper] rehome failed: ' + String(error) + String.fromCharCode(10))
-  } finally {
-    rehoming = false
+    displayFadeTimer = setTimeout(() => {
+      displayFadeTimer = null
+      if (!win || win.isDestroyed()) {
+        displaySwitchPending = false
+        return
+      }
+      commit()
+    }, 72)
+    return true
   }
-  if (rehomeNotifyTimer) {
-    try { clearTimeout(rehomeNotifyTimer) } catch {}
-  }
-  // Let Chromium deliver the resize before the renderer rebases pointer
-  // coordinates. Sending synchronously would use the old innerWidth.
-  rehomeNotifyTimer = setTimeout(() => {
-    rehomeNotifyTimer = null
-    if (!win || win.isDestroyed()) return
-    resendWindows()
-    sendDisplay()
-    if (options && options.recall) {
-      try { win.webContents.send('whale:recall') } catch {}
-    }
-  }, 80)
+  commit()
   return true
 }
 
@@ -595,6 +674,11 @@ function startDesktopWindows() {
       try { list = JSON.parse(line) } catch { continue }
       if (!Array.isArray(list)) continue
       latestWindowsRaw = list
+      // Rehome before publishing a list that no longer contains the snapped
+      // hwnd. Otherwise the renderer would immediately replace the attachment
+      // with a viewport snap at the old screen edge.
+      if (followSnappedWindow()) continue
+      if (rehomeNotifyTimer) continue
       latestWindows = toOverlayDip(latestWindowsRaw)
       if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
     }
@@ -703,6 +787,11 @@ app.whenReady().then(() => {
   })
   ipcMain.on('whale:request-display', (_event, payload) => {
     requestDisplay(payload)
+  })
+  ipcMain.on('whale:snap-window', (_event, payload) => {
+    const hwnd = payload && payload.hwnd ? String(payload.hwnd) : ''
+    snappedHwnd = hwnd
+    if (hwnd) followSnappedWindow()
   })
   ipcMain.on('whale:config', (_event, snapshot) => {
     pendingConfig = snapshot || null

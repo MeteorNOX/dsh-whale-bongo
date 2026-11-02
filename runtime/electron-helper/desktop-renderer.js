@@ -127,6 +127,11 @@ bridge.onDisplay((info) => {
   try { api?.setDesktopDisplay?.(info || null) } catch {}
 })
 
+bridge.onDisplaySwitch((payload) => {
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.setDesktopDisplaySwitch?.(payload || null) } catch {}
+})
+
 bridge.onRecall(() => {
   const api = window.__dshWhaleBongoDesktopInput
   try { api?.recall?.() } catch {}
