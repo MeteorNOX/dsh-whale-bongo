@@ -5,7 +5,7 @@
 > [!WARNING]
 > npm 包暂未发布；请使用 GitHub Release 的 zip/tgz，或本地目录安装。
 
-## 未发布
+## v0.3.1
 
 ### 新增
 
@@ -16,13 +16,11 @@
 - 自动识别系统 `HTTPS_PROXY` / `https_proxy`（HTTP CONNECT 代理），支持代理 Basic Auth、重定向和 `NO_PROXY`；暂不支持 SOCKS 代理。
 - 已有安装、`DSH_WHALE_ELECTRON`、`DSH_WHALE_ELECTRON_DIR` 和自动扫描到的运行时直接复用，不会重复下载。
 
-## v0.3.1
-
 ### 修复
 
 - 桌面模式启动不再“假成功”：Electron 缺失或启动失败时 `/desktop/start` 返回 `ok: false`，客户端会恢复挂件并显示具体原因。
 - 不再硬编码 Electron `43.3.0`：自动扫描 `~/.dsh/electron-whale/` 下任意已安装版本、`current` 和 `~/.dsh/electron/`，也支持 `DSH_WHALE_ELECTRON` 指向目录。
-- `scripts/ensure-electron.mjs` 改为零依赖下载：不再需要 `@electron/get` / `extract-zip`，默认从 npmmirror 获取 latest，解压时使用系统 PowerShell `Expand-Archive`（Windows）或 `unzip`。
+- `scripts/ensure-electron.mjs` 改为零依赖下载：不再需要 `@electron/get` / `extract-zip`，默认固定 Electron `43.3.0`，解压时使用系统 PowerShell `Expand-Archive`（Windows）或 `unzip`。
 - 修复桌面全局键盘的小键盘映射：补齐 `VK_NUMPAD0..9`、乘除加减、小数点、分隔符和 `NumpadEqual`，并细化小键盘各列的真实横向键位，左右手分配和真实角度不再落到 `VK_96` 之类的未知键。
 - 发布包移除 `@electron/get` 依赖，`node scripts/ensure-electron.mjs` 在仅解压发布包的机器上也可直接运行。
 
