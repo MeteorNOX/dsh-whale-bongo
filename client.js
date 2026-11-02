@@ -1790,7 +1790,7 @@ function mountWhaleBongoWidget(options) {
       Math.abs(hand.y.velocity) < 0.5
   }
   function kickImage() {
-    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * (cfg.imageQBounceLevel / 2)
+    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * (cfg.imageQBounceLevel / 3)
   }
 
   function renderImageMotion() {
@@ -1903,7 +1903,7 @@ function mountWhaleBongoWidget(options) {
       }
     }
     pointerPress = { downAt: now, hands: pressed, mode: mode }
-    imageSquash.target = clamp(0.03 * (cfg.imageQBounceLevel / 2), 0, 0.14)
+    imageSquash.target = clamp(0.03 * (cfg.imageQBounceLevel / 3), 0, 0.14)
     playHit()
     render()
   }
