@@ -1798,7 +1798,15 @@ function mountWhaleBongoWidget(options) {
     return strength
   }
 
+  function updateImageSquashDamping() {
+    // Higher Q means less damping, so the press keeps a visible overshoot
+    // instead of snapping back rigidly.
+    var q = clamp(pressQBounceStrength() / 5, 0, 1.5)
+    imageSquash.damping = 22 - 4 * q
+  }
+
   function kickImage() {
+    updateImageSquashDamping()
     imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * pressQBounceStrength()
   }
 
@@ -1912,6 +1920,7 @@ function mountWhaleBongoWidget(options) {
       }
     }
     pointerPress = { downAt: now, hands: pressed, mode: mode }
+    updateImageSquashDamping()
     imageSquash.target = clamp(0.03 * pressQBounceStrength(), 0, 0.14)
     playHit()
     render()
