@@ -2337,8 +2337,8 @@ function mountWhaleBongoWidget(options) {
   // Q-bounce slider; no vertical component is applied.
   function pulseFollowBounce(dx) {
     var q = moveBounceRatio()
-    var maxImpulse = 160 * q
-    followLeanV += clamp(Number(dx) * 4 * q, -maxImpulse, maxImpulse)
+    var maxImpulse = 260 * q
+    followLeanV += clamp(Number(dx) * 6.5 * q, -maxImpulse, maxImpulse)
   }
 
   function stepFollowBounce(dt, q) {
@@ -2347,10 +2347,10 @@ function mountWhaleBongoWidget(options) {
       followLeanV = 0
       return
     }
-    var stiffness = 150 + 70 * q
+    var stiffness = 420 + 180 * q
     var damping = 10 - 2 * q
     followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
-    var leanLimit = 8 * q
+    var leanLimit = 9 * q
     followLean = clamp(followLean + followLeanV * dt, -leanLimit, leanLimit)
     if (Math.abs(followLean) < 0.01 && Math.abs(followLeanV) < 0.05) {
       followLean = 0
