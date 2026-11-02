@@ -419,6 +419,7 @@ dsh-whale-bongo/
 ## 致谢
 
 - [YUsaltyfish](https://github.com/YUsaltyfish)：原版 [`dsh-bongo-fish`](https://github.com/YUsaltyfish/dsh-bongo-fish) 的作者，注入方式、交互思路、图片与音效素材
+- [DenseFLoe](https://github.com/DenseFLoe)：macOS 兼容性测试、问题复现与修复建议
 - Kenney：CC0 音效原始素材
 - DSH：桌面端与 Web bundle 能力
 
