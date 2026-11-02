@@ -421,6 +421,15 @@ function buildSnapshot(target, options) {
       y: clamp(Number(snapshot.cfg.snap.y) || 24, 4, area.height - size - 4),
     }
   }
+  // A display switch is not a client→desktop handoff. Do not reuse the
+  // client's fade/scale transition; the target enters from the side instead.
+  snapshot.transitionToDesktop = false
+  delete snapshot.displayEnter
+  if (activeDisplay && activeDisplay.id !== target.display.id) {
+    snapshot.displayEnter = {
+      from: target.display.bounds.x < activeDisplay.bounds.x ? 'right' : 'left',
+    }
+  }
   return snapshot
 }
 

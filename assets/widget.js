@@ -31,6 +31,7 @@ function mountWhaleBongoWidget(options) {
   var initialSnapshot = desktopMode && window.__DSH_WHALE_INITIAL_SNAPSHOT ? window.__DSH_WHALE_INITIAL_SNAPSHOT : null
   var pageReturnTransition = !desktopMode && Boolean(window.__dshWhaleBongoReturningFromDesktop)
   var desktopEnterTransition = desktopMode && Boolean(window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION)
+  var desktopDisplayEnter = desktopMode && window.__DSH_WHALE_DESKTOP_DISPLAY_ENTER ? window.__DSH_WHALE_DESKTOP_DISPLAY_ENTER : null
   var desktopInputAnchor = desktopMode && window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR ? window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR : null
   var modeHoldTimer = 0
   var modeHoldKind = ''
@@ -410,6 +411,29 @@ function mountWhaleBongoWidget(options) {
     @keyframes dsnw-mode-enter {
       0% { opacity: 0; transform: scale(.94); }
       100% { opacity: 1; transform: scale(1); }
+    }
+    #dsh-whale-bongo.is-display-entering .dsnw-reveal-shell {
+      animation-duration: .38s;
+      animation-timing-function: cubic-bezier(.18, .9, .25, 1.18);
+      animation-fill-mode: both;
+    }
+    #dsh-whale-bongo.is-display-enter-left .dsnw-reveal-shell {
+      animation-name: dsnw-display-enter-left;
+    }
+    #dsh-whale-bongo.is-display-enter-right .dsnw-reveal-shell {
+      animation-name: dsnw-display-enter-right;
+    }
+    @keyframes dsnw-display-enter-left {
+      0% { opacity: 1; transform: translateX(-30px) scaleX(.76) scaleY(1.06); }
+      60% { opacity: 1; transform: translateX(7px) scaleX(1.06) scaleY(.96); }
+      80% { opacity: 1; transform: translateX(-2px) scaleX(.99) scaleY(1.01); }
+      100% { opacity: 1; transform: translateX(0) scaleX(1) scaleY(1); }
+    }
+    @keyframes dsnw-display-enter-right {
+      0% { opacity: 1; transform: translateX(30px) scaleX(.76) scaleY(1.06); }
+      60% { opacity: 1; transform: translateX(-7px) scaleX(1.06) scaleY(.96); }
+      80% { opacity: 1; transform: translateX(2px) scaleX(.99) scaleY(1.01); }
+      100% { opacity: 1; transform: translateX(0) scaleX(1) scaleY(1); }
     }
     #dsh-whale-bongo .dsnw-move-shell {
       position: absolute;
@@ -3942,6 +3966,14 @@ function mountWhaleBongoWidget(options) {
     applyVolume()
     applySize()
     applyAll()
+    if (desktopDisplayEnter && revealShell) {
+      var enterFrom = desktopDisplayEnter.from === 'right' ? 'right' : 'left'
+      root.classList.add('is-display-entering', 'is-display-enter-' + enterFrom)
+      later(function () {
+        root.classList.remove('is-display-entering', 'is-display-enter-left', 'is-display-enter-right')
+      }, 500)
+      delete window.__DSH_WHALE_DESKTOP_DISPLAY_ENTER
+    }
     syncMenu()
     var enterTransition = pageReturnTransition || desktopEnterTransition
     if (enterTransition) root.style.visibility = 'hidden'

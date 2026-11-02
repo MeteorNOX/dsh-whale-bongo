@@ -47,7 +47,8 @@ function applySnapshot(snapshot) {
   snapshot = Object.assign({}, snapshot, { cfg: nextCfg })
   window.__DSH_WHALE_INITIAL_SNAPSHOT = snapshot
   if (snapshot.inputAnchor) window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR = snapshot.inputAnchor
-  window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION = Boolean(snapshot.transitionToDesktop)
+  window.__DSH_WHALE_DESKTOP_ENTER_TRANSITION = Boolean(snapshot.transitionToDesktop) && !snapshot.displayEnter
+  window.__DSH_WHALE_DESKTOP_DISPLAY_ENTER = snapshot.displayEnter || null
   try {
     localStorage.setItem(STORE, JSON.stringify(nextCfg))
     if (snapshot.image) localStorage.setItem(IMAGE_STORE, snapshot.image)
