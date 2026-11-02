@@ -1652,8 +1652,8 @@ function mountWhaleBongoWidget(options) {
   var moveSquashV = 0
   var moveSquashArmed = false
   var bodyStretch = 0
-  var followSquash = 0
-  var followSquashV = 0
+  var followLean = 0
+  var followLeanV = 0
   var lastDesktopFollowX = null
   var lastProbeCard = null
   var lastProbeLeft = 0
@@ -2329,43 +2329,47 @@ function mountWhaleBongoWidget(options) {
 
   function applyMoveShellTransform(q) {
     if (!moveShell) return
-    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28) * (1 + followSquash)
+    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
     var scaleY = (1 - moveSquash) * (1 + bodyStretch)
-    if (Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005) {
-      moveShell.style.transform = 'scale(' + scaleX.toFixed(4) + ',' + scaleY.toFixed(4) + ')'
-    } else {
+    var hasScale = Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005
+    var hasLean = Math.abs(followLean) > 0.01
+    if (!hasScale && !hasLean) {
       moveShell.style.transform = ''
+      return
     }
+    var scale = hasScale ? 'scale(' + scaleX.toFixed(4) + ',' + scaleY.toFixed(4) + ') ' : ''
+    moveShell.style.transform = scale + 'skewX(' + followLean.toFixed(3) + 'deg)'
   }
 
   function resetFollowBounce() {
-    followSquash = 0
-    followSquashV = 0
+    followLean = 0
+    followLeanV = 0
     lastDesktopFollowX = null
     applyMoveShellTransform(moveBounceRatio())
   }
 
   // Window following is a direct placement, so it bypasses the position
-  // spring. Pulse only horizontal squash for that motion; scaleY stays 1 so
-  // there is no vertical overshoot.
+  // spring. Move the bottom-anchored shell as if the top still carries the
+  // previous screen's inertia: the base stays planted and the body leans
+  // horizontally, then springs back. No vertical component is applied.
   function pulseFollowBounce(dx) {
     var q = moveBounceRatio()
-    followSquashV += clamp(Number(dx) * (0.18 + 0.12 * q), -2.2, 2.2)
+    followLeanV += clamp(Number(dx) * (2.2 + 0.6 * q), -90, 90)
   }
 
   function stepFollowBounce(dt, q) {
-    if (Math.abs(followSquash) <= 0.0005 && Math.abs(followSquashV) <= 0.01) {
-      followSquash = 0
-      followSquashV = 0
+    if (Math.abs(followLean) <= 0.01 && Math.abs(followLeanV) <= 0.05) {
+      followLean = 0
+      followLeanV = 0
       return
     }
     var stiffness = 150 + 70 * q
-    var damping = 13 - 2 * q
-    followSquashV += (-followSquash * stiffness - followSquashV * damping) * dt
-    followSquash = clamp(followSquash + followSquashV * dt, -0.09, 0.09)
-    if (Math.abs(followSquash) < 0.0005 && Math.abs(followSquashV) < 0.01) {
-      followSquash = 0
-      followSquashV = 0
+    var damping = 10 - 2 * q
+    followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
+    followLean = clamp(followLean + followLeanV * dt, -8, 8)
+    if (Math.abs(followLean) < 0.01 && Math.abs(followLeanV) < 0.05) {
+      followLean = 0
+      followLeanV = 0
     }
   }
 
@@ -2550,6 +2554,7 @@ function mountWhaleBongoWidget(options) {
     moveSquashV = 0
     moveSquashArmed = false
     bodyStretch = 0
+    resetFollowBounce()
     if (moveShell) moveShell.style.transform = ''
     root.style.display = 'none'
     lastPlaceKey = ''
@@ -4231,6 +4236,7 @@ function mountWhaleBongoWidget(options) {
         moveSquashV = 0
         moveSquashArmed = false
         bodyStretch = 0
+        resetFollowBounce()
         if (moveShell) moveShell.style.transform = ''
       }
       return
