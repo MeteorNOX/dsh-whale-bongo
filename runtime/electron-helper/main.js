@@ -19,22 +19,28 @@ try {
 
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = electron
 const path = require('node:path')
+const fs = require('node:fs')
 const http = require('node:http')
 const { spawn } = require('node:child_process')
 const { windowsToOverlayDip } = require('./window-dip')
 
 const HOST_PID = Number(process.env.DSH_WHALE_HOST_PID || 0)
 const HOST_POLL_MS = 2000
+const SOFTWARE_RENDER = process.env.DSH_WHALE_SOFTWARE_RENDER === '1' ||
+  process.env.DSH_WHALE_DISABLE_GPU === '1'
+const TARGET_FRAME_RATE = Math.min(120, Math.max(30,
+  Number(process.env.DSH_WHALE_FRAME_RATE) || 60))
 
 let win = null
 let pendingConfig = null
 let latestConfig = null
 let hostGone = false
-let keyChild = null
-let keyBuffer = ''
+let nativeChild = null
+let nativeBuffer = ''
+let nativeRestartTimer = 0
+let nativeWindowsActive = false
+let nativeKeysActive = false
 let globalKeysActive = false
-let windowsChild = null
-let windowsBuffer = ''
 let latestWindows = []
 let latestWindowsRaw = []
 let snappedHwnd = ''
@@ -46,12 +52,10 @@ let handoffSequence = 0
 let resettingBounds = false
 let tray = null
 let returnFallbackTimer = 0
-let mouseChild = null
-let mouseBuffer = ''
 let mouseFollowOffset = null
 let mouseFollowStarted = false
 
-if (process.env.DSH_WHALE_SOFTWARE_RENDER === '1') {
+if (SOFTWARE_RENDER) {
   app.disableHardwareAcceleration()
 }
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
@@ -263,7 +267,7 @@ function createOverlay(display, options) {
   bw.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   bw.setOpacity(0)
   bw.webContents.setBackgroundThrottling(false)
-  try { bw.webContents.setFrameRate(60) } catch {}
+  try { bw.webContents.setFrameRate(TARGET_FRAME_RATE) } catch {}
   bw.setIgnoreMouseEvents(true, { forward: true })
   bw.webContents.on('did-fail-load', (_e, code, desc, url) => {
     process.stderr.write('[whale helper] did-fail-load ' + code + ' ' + desc + ' ' + url + String.fromCharCode(10))
@@ -629,6 +633,7 @@ function stop() {
   stopGlobalKeys()
   stopDesktopWindows()
   stopMouseFollow()
+  stopNativeHelper()
   destroyTray()
   try { if (bridgeServer) bridgeServer.close() } catch {}
   win = null
@@ -774,190 +779,235 @@ function handleGlobalKeyLine(line) {
   if (win && !win.isDestroyed()) win.webContents.send('whale:key', payload)
 }
 
-function startMouseFollow() {
-  if (process.platform !== 'win32' || mouseChild || mouseFollowStarted) return
-  mouseFollowStarted = true
+function nativeHelperPath() {
+  return path.join(__dirname, 'whale-native-helper.exe')
+}
+
+function sendNative(command) {
+  if (!nativeChild || !nativeChild.stdin || nativeChild.stdin.destroyed) return false
   try {
-    mouseChild = spawn('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', path.join(__dirname, 'mouse-follow.ps1'),
-    ], {
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  } catch (error) {
-    mouseChild = null
-    process.stderr.write('[whale helper] mouse follow failed: ' + String(error) + String.fromCharCode(10))
-    return
-  }
-  mouseChild.stdout.setEncoding('utf8')
-  mouseChild.stdout.on('data', (chunk) => {
-    mouseBuffer += chunk
-    let index
-    while ((index = mouseBuffer.indexOf(String.fromCharCode(10))) !== -1) {
-      const line = mouseBuffer.slice(0, index).trim()
-      mouseBuffer = mouseBuffer.slice(index + 1)
-      const parts = line.split('|')
-      if (parts.length !== 3) continue
-      const left = parts[0] === '1'
-      const screenX = Number(parts[1])
-      const screenY = Number(parts[2])
-      if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) continue
-      const bounds = win && !win.isDestroyed() ? win.getBounds() : { x: 0, y: 0 }
-      if (win && !win.isDestroyed()) {
-        const follow = {
-          left: left,
-          x: screenX - bounds.x,
-          y: screenY - bounds.y,
-        }
-        if (mouseFollowOffset) {
-          follow.offsetX = mouseFollowOffset.x
-          follow.offsetY = mouseFollowOffset.y
-        }
-        win.webContents.send('whale:mouse-follow', follow)
-      }
-      if (!left) {
-        mouseFollowOffset = null
-        stopMouseFollow()
-      }
-    }
-  })
-  mouseChild.stderr.setEncoding('utf8')
-  mouseChild.stderr.on('data', (chunk) => {
-    const text = String(chunk).trim()
-    if (text) process.stderr.write('[whale helper] mouse error: ' + text.slice(0, 500) + String.fromCharCode(10))
-  })
-  mouseChild.once('exit', () => {
-    mouseChild = null
-    mouseBuffer = ''
-  })
-  if (win && !win.isDestroyed()) {
-    try {
-      const point = screen.getCursorScreenPoint()
-      const bounds = win.getBounds()
-      const follow = {
-        left: true,
-        x: point.x - bounds.x,
-        y: point.y - bounds.y,
-      }
-      if (mouseFollowOffset) {
-        follow.offsetX = mouseFollowOffset.x
-        follow.offsetY = mouseFollowOffset.y
-      }
-      win.webContents.send('whale:mouse-follow', follow)
-    } catch {}
+    nativeChild.stdin.write(command + String.fromCharCode(10))
+    return true
+  } catch {
+    return false
   }
 }
 
-function stopMouseFollow() {
-  mouseFollowStarted = false
-  if (!mouseChild) return
-  try { mouseChild.kill() } catch {}
-  mouseChild = null
-  mouseBuffer = ''
+function handleNativeWindows(list) {
+  if (!nativeWindowsActive) return
+  if (!Array.isArray(list)) return
+  latestWindowsRaw = list
+  if (handoffPromise) return
+  // Switch displays before publishing a list that no longer contains the
+  // snapped hwnd. The new overlay receives the unfiltered raw list.
+  if (followSnappedWindow()) return
+  const entry = activeEntry()
+  if (!entry) return
+  latestWindows = toOverlayDipFor(entry, latestWindowsRaw)
+  try { entry.win.webContents.send('whale:windows', latestWindows) } catch {}
 }
 
-function startDesktopWindows() {
-  if (process.platform !== 'win32' || windowsChild) return
+function handleNativeKey(message) {
+  if (!nativeKeysActive) return
+  const vk = Number(message && message.vk)
+  if (!Number.isInteger(vk)) return
+  // Mouse buttons, modifiers and lock keys are not typing input.
+  if (vk < 8 || vk === 16 || vk === 17 || vk === 18 || vk === 20 ||
+      vk === 91 || vk === 92 || vk === 144 || vk === 145) return
+  const down = message.down === 1 || message.down === true
+  const code = vkCode(vk)
+  const payload = {
+    action: down ? 'down' : 'up',
+    key: code,
+    code: code,
+    ctrlKey: message.ctrl === 1 || message.ctrl === true,
+    altKey: message.alt === 1 || message.alt === true,
+    shiftKey: message.shift === 1 || message.shift === true,
+    metaKey: message.meta === 1 || message.meta === true,
+  }
+  const entry = activeEntry()
+  if (entry && entry.win && !entry.win.isDestroyed()) {
+    entry.win.webContents.send('whale:key', payload)
+  }
+}
+
+function handleNativeMouse(message) {
+  if (!mouseFollowStarted) return
+  const entry = activeEntry()
+  if (!entry || !entry.win || entry.win.isDestroyed()) return
+  const screenX = Number(message.x)
+  const screenY = Number(message.y)
+  if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return
+  const left = message.left === 1 || message.left === true
+  const bounds = entry.win.getBounds()
+  const follow = {
+    left: left,
+    x: screenX - bounds.x,
+    y: screenY - bounds.y,
+  }
+  if (mouseFollowOffset) {
+    follow.offsetX = mouseFollowOffset.x
+    follow.offsetY = mouseFollowOffset.y
+  }
+  entry.win.webContents.send('whale:mouse-follow', follow)
+  if (!left) {
+    mouseFollowOffset = null
+    stopMouseFollow()
+  }
+}
+
+function handleNativeMessage(message) {
+  if (!message || typeof message !== 'object') return
+  if (message.type === 'windows') {
+    handleNativeWindows(message.list)
+  } else if (message.type === 'key') {
+    handleNativeKey(message)
+  } else if (message.type === 'mouse') {
+    handleNativeMouse(message)
+  } else if (message.type === 'error') {
+    process.stderr.write('[whale native] ' + String(message.message || '').slice(0, 500) + String.fromCharCode(10))
+  }
+}
+
+function startNativeHelper() {
+  if (process.platform !== 'win32' || nativeChild) return Boolean(nativeChild)
+  const exe = nativeHelperPath()
+  if (!fs.existsSync(exe)) {
+    process.stderr.write('[whale helper] native helper missing: ' + exe + String.fromCharCode(10))
+    return false
+  }
+  let child
   try {
-    windowsChild = spawn('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', path.join(__dirname, 'desktop-windows.ps1'),
-    ], {
+    child = spawn(exe, [], {
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, DSH_WHALE_HELPER_PID: String(process.pid) },
     })
   } catch (error) {
-    windowsChild = null
-    process.stderr.write('[whale helper] windows watcher failed: ' + String(error) + String.fromCharCode(10))
-    return
+    process.stderr.write('[whale helper] native helper failed: ' + String(error) + String.fromCharCode(10))
+    return false
   }
-  windowsChild.stdout.setEncoding('utf8')
-  windowsChild.stdout.on('data', (chunk) => {
-    windowsBuffer += chunk
+  nativeChild = child
+  nativeChild.stdout.setEncoding('utf8')
+  nativeChild.stdout.on('data', (chunk) => {
+    nativeBuffer += chunk
     let index
-    while ((index = windowsBuffer.indexOf(String.fromCharCode(10))) !== -1) {
-      const line = windowsBuffer.slice(0, index).trim()
-      windowsBuffer = windowsBuffer.slice(index + 1)
+    while ((index = nativeBuffer.indexOf(String.fromCharCode(10))) !== -1) {
+      const line = nativeBuffer.slice(0, index).trim()
+      nativeBuffer = nativeBuffer.slice(index + 1)
       if (!line) continue
-      let list
-      try { list = JSON.parse(line) } catch { continue }
-      if (!Array.isArray(list)) continue
-      latestWindowsRaw = list
-      if (handoffPromise) continue
-      // Switch displays before publishing a list that no longer contains the
-      // snapped hwnd. The new overlay receives the unfiltered raw list.
-      if (followSnappedWindow()) continue
-      const entry = activeEntry()
-      if (!entry) continue
-      latestWindows = toOverlayDipFor(entry, latestWindowsRaw)
-      try { entry.win.webContents.send('whale:windows', latestWindows) } catch {}
+      let message
+      try { message = JSON.parse(line) } catch { continue }
+      handleNativeMessage(message)
     }
   })
-  windowsChild.stderr.setEncoding('utf8')
-  windowsChild.stderr.on('data', (chunk) => {
+  nativeChild.stderr.setEncoding('utf8')
+  nativeChild.stderr.on('data', (chunk) => {
     const text = String(chunk).trim()
-    if (text) process.stderr.write('[whale helper] windows error: ' + text.slice(0, 500) + String.fromCharCode(10))
+    if (text) process.stderr.write('[whale native] ' + text.slice(0, 500) + String.fromCharCode(10))
   })
-  windowsChild.once('exit', () => {
-    windowsChild = null
+  nativeChild.once('exit', (code) => {
+    if (nativeChild !== child) return
+    nativeChild = null
+    nativeBuffer = ''
+    const restartWindows = nativeWindowsActive
+    const restartKeys = nativeKeysActive
+    nativeWindowsActive = false
+    nativeKeysActive = false
+    globalKeysActive = false
+    mouseFollowStarted = false
+    mouseFollowOffset = null
+    if (hostGone || (!restartWindows && !restartKeys)) return
+    if (nativeRestartTimer) return
+    nativeRestartTimer = setTimeout(() => {
+      nativeRestartTimer = 0
+      if (hostGone) return
+      if (restartWindows) startDesktopWindows()
+      if (restartKeys) startGlobalKeys()
+    }, 1000)
   })
+  nativeChild.stdin.on('error', () => {})
+  return true
+}
+
+function stopNativeHelper() {
+  if (nativeRestartTimer) {
+    clearTimeout(nativeRestartTimer)
+    nativeRestartTimer = 0
+  }
+  if (!nativeChild) return
+  const child = nativeChild
+  nativeChild = null
+  nativeBuffer = ''
+  nativeWindowsActive = false
+  nativeKeysActive = false
+  globalKeysActive = false
+  mouseFollowStarted = false
+  try { child.kill() } catch {}
+}
+
+function startMouseFollow() {
+  if (process.platform !== 'win32' || mouseFollowStarted) return
+  const entry = activeEntry()
+  if (!entry || !entry.win || entry.win.isDestroyed()) return
+  if (!startNativeHelper()) return
+  mouseFollowStarted = true
+  sendNative('mouse:start')
+  try {
+    const point = screen.getCursorScreenPoint()
+    const bounds = entry.win.getBounds()
+    const follow = {
+      left: true,
+      x: point.x - bounds.x,
+      y: point.y - bounds.y,
+    }
+    if (mouseFollowOffset) {
+      follow.offsetX = mouseFollowOffset.x
+      follow.offsetY = mouseFollowOffset.y
+    }
+    entry.win.webContents.send('whale:mouse-follow', follow)
+  } catch {}
+}
+
+function stopMouseFollow() {
+  if (!mouseFollowStarted) return
+  mouseFollowStarted = false
+  sendNative('mouse:stop')
+}
+
+function startDesktopWindows() {
+  if (process.platform !== 'win32' || nativeWindowsActive) return
+  if (!startNativeHelper()) return
+  nativeWindowsActive = true
+  sendNative('windows:start')
 }
 
 function stopDesktopWindows() {
-  if (!windowsChild) return
-  try { windowsChild.kill() } catch {}
-  windowsChild = null
-  windowsBuffer = ''
+  if (!nativeWindowsActive) return
+  nativeWindowsActive = false
+  sendNative('windows:stop')
 }
 
 function startGlobalKeys() {
-  if (process.platform !== 'win32' || keyChild) return
-  try {
-    keyChild = spawn('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy', 'Bypass',
-      '-File', path.join(__dirname, 'global-keys.ps1'),
-    ], {
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-  } catch (error) {
-    keyChild = null
-    process.stderr.write('[whale helper] global key hook failed: ' + String(error) + String.fromCharCode(10))
-    return
-  }
+  if (process.platform !== 'win32' || nativeKeysActive) return
+  if (!startNativeHelper()) return
+  nativeKeysActive = true
   globalKeysActive = true
-  if (win && !win.isDestroyed()) win.webContents.send('whale:global-keys')
-  keyChild.stdout.setEncoding('utf8')
-  keyChild.stdout.on('data', (chunk) => {
-    keyBuffer += chunk
-    let index
-    while ((index = keyBuffer.indexOf(String.fromCharCode(10))) !== -1) {
-      const line = keyBuffer.slice(0, index).trim()
-      keyBuffer = keyBuffer.slice(index + 1)
-      if (line) handleGlobalKeyLine(line)
-    }
-  })
-  keyChild.stderr.setEncoding('utf8')
-  keyChild.stderr.on('data', (chunk) => {
-    const text = String(chunk).trim()
-    if (text) process.stderr.write('[whale helper] global key error: ' + text.slice(0, 500) + String.fromCharCode(10))
-  })
-  keyChild.once('exit', () => {
-    keyChild = null
-    globalKeysActive = false
-  })
+  sendNative('keys:start')
+  const entry = activeEntry()
+  if (entry && entry.win && !entry.win.isDestroyed()) {
+    entry.win.webContents.send('whale:global-keys')
+  }
 }
 
 function stopGlobalKeys() {
-  if (!keyChild) return
-  try { keyChild.kill() } catch {}
-  keyChild = null
-  keyBuffer = ''
+  if (!nativeKeysActive) {
+    globalKeysActive = false
+    return
+  }
+  nativeKeysActive = false
+  globalKeysActive = false
+  sendNative('keys:stop')
 }
 
 function entryForEvent(event) {
@@ -1059,9 +1109,9 @@ app.whenReady().then(() => {
 
 })
 
-app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); destroyTray() })
-app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); destroyTray() })
-process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); destroyTray() })
+app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray() })
+app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray() })
+process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray() })
 
 app.on('window-all-closed', () => {
   app.quit()

@@ -32,7 +32,10 @@
      assets/
      locale/
      runtime/electron-helper/
+      whale-native-helper.exe
+      native/WhaleNativeHelper.cs
      scripts/ensure-electron.mjs
+     scripts/build-native-helper.mjs
      icon.png
      README.md
    ```

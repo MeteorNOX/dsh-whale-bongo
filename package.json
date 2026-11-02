@@ -28,6 +28,7 @@
     "electron-runtime.js",
     "runtime/electron-helper",
     "scripts/ensure-electron.mjs",
+    "scripts/build-native-helper.mjs",
     "global-keys-host.js"
   ],
   "dsh": {
@@ -68,7 +69,8 @@
     "dsh": ">=0.1.0-rc.1"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js && node --check runtime/electron-helper/main.js && node --check runtime/electron-helper/preload.js && node --check runtime/electron-helper/desktop-renderer.js && node --check runtime/electron-helper/window-dip.js",
+    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js && node --check runtime/electron-helper/main.js && node --check runtime/electron-helper/preload.js && node --check runtime/electron-helper/desktop-renderer.js && node --check runtime/electron-helper/window-dip.js && node --check global-keys-host.js",
+    "build:native": "node scripts/build-native-helper.mjs",
     "ensure:electron": "node scripts/ensure-electron.mjs"
   }
 }

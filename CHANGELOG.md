@@ -11,6 +11,8 @@
 
 - 「过滤快捷键与修饰键」默认关闭；仍可在设置中手动开启。
 - 「偏移方式」默认改为「真实键位(左右分管)」，按左右手和真实键位列决定手部角度；仍可在设置中切换。
+- 桌面 helper 的窗口枚举、全局键盘和鼠标跟随合并到一个原生进程 `whale-native-helper.exe`，替代两个常驻 PowerShell sidecar；Host 的全局键盘补发仍保留原有 PowerShell 监控，避免未验证的按键路径影响输入法。
+- 增加可选的 `DSH_WHALE_SOFTWARE_RENDER=1`（软件合成）和 `DSH_WHALE_FRAME_RATE=30`（30–120，默认 60）性能排查开关；默认仍使用 GPU 和 60 帧。
 
 ## v0.3.2
 

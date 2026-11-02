@@ -135,6 +135,8 @@
 4. 在插件列表启用，挂件会即时挂载；如果 Host 路由尚未加载，刷新一次页面；
 5. 之后在插件列表启用/关闭会即时显示或移除挂件，无需重启 DSH。
 
+原生 sidecar 源码在 `runtime/electron-helper/native/WhaleNativeHelper.cs`，发布包内已附带编译好的 `whale-native-helper.exe`。修改后可在 Windows 上运行 `npm run build:native` 重新编译（使用 .NET Framework 自带的 `csc.exe`）。
+
 ### npm（暂不可用）
 
 npm 账号仍未解封，以下内容仅作发布后参考：
@@ -207,7 +209,8 @@ v0.3.0 新增：挂件可以从 DSH 页面里“跳出来”，作为一个透�
 - 桌面菜单和客户端菜单使用同一套设置；
 - 设置、图片、音效和当前打字节奏会同步；
 - 桌面模式使用全局键盘监听，在 DSH 或其他应用里打字都会触发动作；
-- DSH 客户端内也通过 Host 全局键盘流补发按键，搜狗输入法等拦截页面 keydown 时仍能驱动挂件；
+- 桌面 helper 的窗口枚举、全局键盘和鼠标跟随由同一个原生进程 `whale-native-helper.exe` 负责，不再常驻两个 PowerShell sidecar；
+- DSH 客户端内也通过 Host 全局键盘流补发按键，搜狗输入法等拦截页面 keydown 时仍能驱动挂件；Host 侧继续保持原有 PowerShell 监控，不切换到尚未完成实键验证的原生按键路径；
 - 桌面/客户端切换手势：客户端拖到窗口右下角保持 0.5 秒进入桌面；桌面拖到输入框中心吸附点保持 0.5 秒回到客户端；
 - 桌面窗口边缘吸附：拖动挂件靠近所有可见顶层窗口的上/下边缘时会吸附；
 - 横向采用和输入框一致的中段比例、左右按距离策略；
@@ -223,6 +226,15 @@ v0.3.0 新增：挂件可以从 DSH 页面里“跳出来”，作为一个透�
 - 跟随吸附窗口横向移动时，挂件底部保持原位，上半身像有惯性一样向运动反方向摆动后回弹；强度跟随「Q 弹程度」滑块，竖直方向不会上下过冲；
 - 桌面模式不显示吸附点。
 - 想回到客户端模式，在桌面挂件菜单里把「显示位置」改回「客户端」。
+
+性能排查（可选环境变量）：
+
+```text
+DSH_WHALE_SOFTWARE_RENDER=1   关闭 GPU 加速，改用软件合成
+DSH_WHALE_FRAME_RATE=30       覆盖层目标帧率，范围 30–120，默认 60
+```
+
+默认保持 GPU 加速和 60 帧；软件合成能降低一些内存，但会牺牲透明窗口的合成流畅度，不建议日常开启。
 
 桌面模式需要 Electron。第一次切换到「桌面」时，如果本机还没有运行时，页面下方会出现准备卡片：
 
@@ -357,6 +369,9 @@ dsh-whale-bongo/
   assets/dsh-whale-bongo-icon.png  # 图片素材（版权归原作者）
   assets/portrait.png   # 图片素材（版权归原作者）
   assets/sounds/        # 音效素材（版权归原作者）+ CC0 许可
+  runtime/electron-helper/ # Electron 透明覆盖层与原生 sidecar
+  scripts/ensure-electron.mjs     # 零依赖下载 Electron
+  scripts/build-native-helper.mjs # 编译 whale-native-helper.exe
   icon.png              # 插件列表图标（版权归原作者）
   locale/               # 中英文标题
   LICENSE
