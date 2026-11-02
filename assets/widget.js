@@ -144,7 +144,7 @@ function mountWhaleBongoWidget(options) {
     imageScalePct: 100,
     imageXPct: 0,
     imageYPct: 0,
-    imageQBounceLevel: 5,
+    imageQBounceLevel: 10,
     handWidthPct: 14,
     handAspectPct: 81,
     handSpreadPct: 35,
@@ -262,7 +262,7 @@ function mountWhaleBongoWidget(options) {
       out.imageQBounceLevel = numberOr(savedCfg.imageQBouncePct, 250) / 50
     }
     delete out.imageQBouncePct
-    out.imageQBounceLevel = clamp(numberOr(out.imageQBounceLevel, 5), 0, 10)
+    out.imageQBounceLevel = clamp(numberOr(out.imageQBounceLevel, 10), 0, 15)
     out.handWidthPct = clamp(numberOr(out.handWidthPct, 14), 8, 25)
     out.handAspectPct = clamp(numberOr(out.handAspectPct, 81), 60, 120)
     out.handSpreadPct = clamp(numberOr(out.handSpreadPct, 35), 10, 40)
@@ -1353,7 +1353,7 @@ function mountWhaleBongoWidget(options) {
     { key: 'imageScalePct', group: 'image', label: '图片大小', min: 50, max: 150, step: 1, def: 100 },
     { key: 'imageXPct', group: 'image', label: '水平位置', min: -30, max: 30, step: 1, def: 0 },
     { key: 'imageYPct', group: 'image', label: '垂直位置', min: -30, max: 30, step: 1, def: 0 },
-    { key: 'imageQBounceLevel', group: 'motion', label: 'Q 弹程度', min: 0, max: 10, step: 0.1, def: 5 },
+    { key: 'imageQBounceLevel', group: 'motion', label: 'Q 弹程度', min: 0, max: 15, step: 0.1, def: 10 },
     { key: 'flipSplitPct', group: 'flip', label: '分割线位置', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     { key: 'handTypingAngleDeg', group: 'typing', label: '角度偏移', min: 0, max: 60, step: 0.5, def: 30, unit: '°' },
     { key: 'handOutlinePct', group: 'hand', label: '轮廓粗细', min: 0, max: 250, step: 5, def: 100, unit: '%' },
@@ -2324,7 +2324,7 @@ function mountWhaleBongoWidget(options) {
   var MOVE_START_RANGE = 1.4
 
   function moveBounceRatio() {
-    return clamp(numberOr(cfg.imageQBounceLevel, 5) / 10, 0, 1)
+    return clamp(numberOr(cfg.imageQBounceLevel, 10) / 15, 0, 1)
   }
 
   function applyMoveShellTransform(q) {
