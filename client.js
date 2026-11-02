@@ -1789,8 +1789,17 @@ function mountWhaleBongoWidget(options) {
       Math.abs(hand.squash.value) < 0.03 &&
       Math.abs(hand.y.velocity) < 0.5
   }
+  function pressQBounceStrength() {
+    var level = clamp(numberOr(cfg.imageQBounceLevel, 10), 0, 15)
+    var strength = level / 3
+    // The top of the 0-15 range is deliberately stronger than the old
+    // 0-10 maximum; keep 10 as the comfortable reference point.
+    if (level > 10) strength += (level - 10) * 0.5
+    return strength
+  }
+
   function kickImage() {
-    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * (cfg.imageQBounceLevel / 3)
+    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * pressQBounceStrength()
   }
 
   function renderImageMotion() {
@@ -1903,7 +1912,7 @@ function mountWhaleBongoWidget(options) {
       }
     }
     pointerPress = { downAt: now, hands: pressed, mode: mode }
-    imageSquash.target = clamp(0.03 * (cfg.imageQBounceLevel / 3), 0, 0.14)
+    imageSquash.target = clamp(0.03 * pressQBounceStrength(), 0, 0.14)
     playHit()
     render()
   }
@@ -2342,7 +2351,12 @@ function mountWhaleBongoWidget(options) {
   var MOVE_START_RANGE = 1.4
 
   function moveBounceRatio() {
-    return clamp(numberOr(cfg.imageQBounceLevel, 10) / 15, 0, 1)
+    var level = clamp(numberOr(cfg.imageQBounceLevel, 10), 0, 15)
+    var q = level / 15
+    // Above 10, let the slider exceed the old maximum instead of flattening
+    // at 1.0. Level 15 reaches 1.35x the previous full-strength follow.
+    if (level > 10) q += (level - 10) * 0.07
+    return q
   }
 
   function applyMoveShellTransform(q) {
