@@ -172,8 +172,8 @@ function mountWhaleBongoWidget(options) {
     clickPressMode: 'squash',
     flipMode: 'auto',
     flipSplitPct: 50,
-    filterShortcutKeys: true,
-    typingAngleMode: 'random',
+    filterShortcutKeys: false,
+    typingAngleMode: 'position-split',
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -296,7 +296,7 @@ function mountWhaleBongoWidget(options) {
     out.flipMode = out.flipMode === 'custom' || out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
-    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'random'
+    out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
     out.handTypingAngleDeg = clamp(numberOr(out.handTypingAngleDeg, 30), 0, 60)
@@ -1252,7 +1252,7 @@ function mountWhaleBongoWidget(options) {
             '<span class="dsnw-behavior-label">偏移方式</span>' +
             '<div class="dsnw-select" data-select="typingAngleMode">' +
               '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
-                '<span class="dsnw-select-label" data-select-label>随机角度</span>' +
+                '<span class="dsnw-select-label" data-select-label>真实键位(左右分管)</span>' +
                 '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
               '</button>' +
               '<div class="dsnw-select-popover" role="listbox" aria-label="打字时手手角度偏移方式">' +
@@ -3202,7 +3202,7 @@ function mountWhaleBongoWidget(options) {
   }
   if (typingAngleModeSelect) {
     initSelect(typingAngleModeSelect, function (value) {
-      cfg.typingAngleMode = value === 'off' || value === 'random' || value === 'position' || value === 'position-split' ? value : 'random'
+      cfg.typingAngleMode = value === 'off' || value === 'random' || value === 'position' || value === 'position-split' ? value : 'position-split'
       saveCfg()
       if (cfg.typingAngleMode === 'position' || cfg.typingAngleMode === 'position-split') loadKeyPositions()
       syncSettings()
