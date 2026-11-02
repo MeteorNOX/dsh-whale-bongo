@@ -2,15 +2,12 @@
   <img src="assets/dsh-whale-bongo-icon.png" width="260" alt="dsh-whale-bongo 图标">
   <h1>dsh-whale-bongo</h1>
   <p><strong>QQ 弹弹的类 bongo 手手挂件</strong></p>
-  <p><code>v0.3.2</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
+  <p><code>v0.3.3</code> · <code>dsh-bongo-fish</code> 的独立重置版本</p>
   <p><code>DSH</code> <code>Web Bundle</code> <code>No Build</code> <code>MIT Code</code></p>
 </div>
 
 > 是 `dsh-bongo-fish` 的独立重置版本；参考其注入方式与交互思路。  
 > 不是官方分支，也不代表原作者发布。
-
-> [!WARNING]
-> **npm 包暂未发布。** 作者 npm 账号目前仍处于冻结状态，解封时间未定；请先使用 GitHub Release 的 zip/tgz，或直接安装本地目录。
 
 ## 目录
 
@@ -118,7 +115,7 @@
 ### 从 GitHub Release 安装
 
 1. 打开 [GitHub Releases](https://github.com/MeteorNOX/dsh-whale-bongo/releases)；
-2. 下载最新 Release 中的 `dsh-whale-bongo-0.3.2-package.zip` 或 `dsh-whale-bongo-0.3.2.tgz`；
+2. 下载最新 Release 中的 `dsh-whale-bongo-0.3.3-package.zip` 或 `dsh-whale-bongo-0.3.3.tgz`；
 3. 在 DSH「插件 → 添加插件 → 安装本地 bundle」中选择解压后的目录，或选择 `.tgz`；
 4. 在插件列表启用；正常情况下挂件会即时出现。若 Host 路由尚未加载，刷新一次页面即可。
 
@@ -137,17 +134,15 @@
 
 原生 sidecar 源码在 `runtime/electron-helper/native/WhaleNativeHelper.cs`，发布包内已附带编译好的 `whale-native-helper.exe`。修改后可在 Windows 上运行 `npm run build:native` 重新编译（使用 .NET Framework 自带的 `csc.exe`）。
 
-### npm（暂不可用）
+### npm
 
-npm 账号仍未解封，以下内容仅作发布后参考：
 
 ```text
 dsh-whale-bongo
 ```
 
 ```bash
-# 仅 npm 发布后可用；当前未发布，会 404
-dsh plugin --profile web add dsh-whale-bongo@0.3.2
+dsh plugin --profile web add dsh-whale-bongo@0.3.3
 ```
 
 > [!TIP]
