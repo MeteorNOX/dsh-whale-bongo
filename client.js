@@ -2644,6 +2644,38 @@ function mountWhaleBongoWidget(options) {
     if (widgetDisposed) return
     if (mouseFollowing) return
     if (desktopPageActive) { root.style.display = 'none'; return }
+    var snap = cfg.snap
+    // Window-following is the hot path: native sampling can arrive close to
+    // the display rate. Do not measure the composer card or touch its
+    // observer on every sample; the desktop windows list already has the
+    // rectangle we need.
+    if (hasShownWidget && snap && snap.ref === 'desktop-window') {
+      var followed = findDesktopWindow(snap.hwnd)
+      if (followed) {
+        desktopSnapMissingAt = 0
+        var followedSize = cfg.size
+        var followedImageBottom = imageBottomNorm * followedSize
+        var followedVw = window.innerWidth
+        var followedVh = window.innerHeight
+        var followedX = clamp(anchorCenterX(snap.anchorX, followed) - followedSize / 2,
+          4, Math.max(4, followedVw - followedSize - 4))
+        var followedMinY = snap.edge === 'top' ? 4 - followedImageBottom : 4
+        var followedY = clamp(
+          (snap.edge === 'bottom' ? followed.bottom : followed.top) - followedImageBottom,
+          followedMinY, Math.max(followedMinY, followedVh - followedImageBottom))
+        curX = followedX
+        curY = followedY
+        applyFlip()
+        var followedKey = followedX.toFixed(2) + ',' + followedY.toFixed(2) + ',' + followedSize
+        if (followedKey !== lastPlaceKey || root.style.display === 'none') {
+          lastPlaceKey = followedKey
+          root.style.display = ''
+          root.style.transform = 'none'
+          setMoveImmediate(followedX, followedY)
+        }
+        return
+      }
+    }
     var card = cardEl()
     if (!card) {
       placeFallback()
@@ -2660,7 +2692,7 @@ function mountWhaleBongoWidget(options) {
     var vw = window.innerWidth
     var vh = window.innerHeight
     var imageBottom = imageBottomNorm * size
-    var snap = cfg.snap
+    snap = cfg.snap
     var x, y
     if (snap && snap.ref === 'desktop-window') {
       var desktopRect = findDesktopWindow(snap.hwnd)
@@ -4393,6 +4425,10 @@ function mountWhaleBongoWidget(options) {
       var followDy = previousFollowY === null ? 0 : curY - previousFollowY
       if (Math.abs(followDx) > 0.2 || Math.abs(followDy) > 0.2) {
         pulseFollowBounce(followDx, followDy)
+        // Advance both springs once in the sample frame, so horizontal skew
+        // and vertical stretch start settling together instead of one axis
+        // appearing a frame later.
+        stepFollowBounce(1 / 120, moveBounceRatio())
         applyMoveShellTransform(moveBounceRatio())
       }
     }
