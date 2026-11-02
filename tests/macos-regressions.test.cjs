@@ -188,7 +188,9 @@ function motion() {
   Object.assign(c, {
     widgetDisposed:false, mouseFollowing:false, desktopPageActive:false,
     desktopInputAnchor:{x:0,y:0}, drag:null, desktopSnapMissingAt:0,
-    lastSnapTargetHwnd:'', lastDesktopFollowX:null, lastDesktopFollowY:null, moveShell:{style:{}}, root:{style:{},classList:{add(){}}},
+    lastSnapTargetHwnd:'', lastDesktopFollowX:null, lastDesktopFollowY:null,
+    desktopFollowFrame:0, lastFollowWindowRect:null,
+    moveShell:{style:{}}, root:{style:{},classList:{add(){}}},
     followLean:0, followLeanV:0, followStretch:0, followStretchV:0, moveSquash:0, moveSquashV:0, moveSquashArmed:false,
     bodyStretch:0, springActive:false, springAnchorX:400, springAnchorY:300,
     springTargetAnchorX:400, springTargetAnchorY:300, springVX:0, springVY:0,
@@ -201,7 +203,7 @@ function motion() {
   c.cfg.imageQBounceLevel=5
   vm.runInContext(['findDesktopWindow','anchorCenterX','moveBounceRatio','applyMoveShellTransform',
     'resetFollowBounce','pulseFollowBounce','stepFollowBounce','setMoveImmediate','retargetMove','stepMove',
-    'onHitPointerMove','setDesktopWindows'].map(fn).join('\n'),c)
+    'onHitPointerMove','applyDesktopWindowFollow','scheduleDesktopWindowFollow','setDesktopWindows'].map(fn).join('\n'),c)
   return c
 }
 

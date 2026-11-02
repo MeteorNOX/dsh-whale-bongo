@@ -1669,6 +1669,8 @@ function mountWhaleBongoWidget(options) {
   var followStretchV = 0
   var lastDesktopFollowX = null
   var lastDesktopFollowY = null
+  var desktopFollowFrame = 0
+  var lastFollowWindowRect = null
   var lastProbeCard = null
   var lastProbeLeft = 0
   var lastProbeTop = 0
@@ -2362,6 +2364,11 @@ function mountWhaleBongoWidget(options) {
     followStretchV = 0
     lastDesktopFollowX = null
     lastDesktopFollowY = null
+    lastFollowWindowRect = null
+    if (desktopFollowFrame) {
+      try { window.cancelAnimationFrame(desktopFollowFrame) } catch (e) {}
+      desktopFollowFrame = 0
+    }
     applyMoveShellTransform(moveBounceRatio())
   }
 
@@ -4330,8 +4337,79 @@ function mountWhaleBongoWidget(options) {
     window.whaleDesktop.setSnapTarget(hwnd ? { hwnd: hwnd } : null)
   }
 
+  function applyDesktopWindowFollow() {
+    if (widgetDisposed || !desktopMode || mouseFollowing || drag) return
+    if (!cfg.snap || cfg.snap.ref !== 'desktop-window') {
+      desktopSnapMissingAt = 0
+      lastDesktopFollowX = null
+      lastDesktopFollowY = null
+      lastFollowWindowRect = null
+      return
+    }
+    var attachedWindow = findDesktopWindow(cfg.snap.hwnd)
+    if (!attachedWindow) {
+      // The window may have just crossed to another monitor. The helper
+      // rehomes the overlay as soon as it sees the new raw rectangle; keep
+      // the attachment during that handoff instead of collapsing it to the
+      // old screen edge.
+      if (!desktopSnapMissingAt) desktopSnapMissingAt = Date.now()
+      if (Date.now() - desktopSnapMissingAt < 2000) {
+        lastDesktopFollowX = null
+        lastDesktopFollowY = null
+        lastFollowWindowRect = null
+        syncDesktopSnapTarget()
+        return
+      }
+      cfg.snap = { ref: 'viewport', x: curX, y: curY }
+      saveCfg()
+      desktopSnapMissingAt = 0
+      lastFollowWindowRect = null
+      lastPlaceKey = ''
+      place(false)
+      return
+    }
+    desktopSnapMissingAt = 0
+    var previousWindow = lastFollowWindowRect
+    if (previousWindow &&
+        previousWindow.left === attachedWindow.left && previousWindow.top === attachedWindow.top &&
+        previousWindow.right === attachedWindow.right && previousWindow.bottom === attachedWindow.bottom) return
+    lastFollowWindowRect = {
+      left: attachedWindow.left,
+      top: attachedWindow.top,
+      right: attachedWindow.right,
+      bottom: attachedWindow.bottom,
+    }
+    lastPlaceKey = ''
+    // A new CSS transition on every native sample never catches a fast
+    // moving window. Pin the base to each sample instead.
+    root.style.transition = ''
+    var previousFollowX = lastDesktopFollowX
+    var previousFollowY = lastDesktopFollowY
+    place(false)
+    lastDesktopFollowX = curX
+    lastDesktopFollowY = curY
+    if (previousFollowX !== null || previousFollowY !== null) {
+      var followDx = previousFollowX === null ? 0 : curX - previousFollowX
+      var followDy = previousFollowY === null ? 0 : curY - previousFollowY
+      if (Math.abs(followDx) > 0.2 || Math.abs(followDy) > 0.2) {
+        pulseFollowBounce(followDx, followDy)
+        applyMoveShellTransform(moveBounceRatio())
+      }
+    }
+  }
+
+  function scheduleDesktopWindowFollow() {
+    if (desktopFollowFrame) return
+    if (typeof window.requestAnimationFrame !== 'function') {
+      applyDesktopWindowFollow()
+      return
+    }
+    desktopFollowFrame = window.requestAnimationFrame(function () {
+      desktopFollowFrame = 0
+      applyDesktopWindowFollow()
+    })
+  }
   function setDesktopWindows(list) {
-    var previousWindow = cfg.snap && cfg.snap.ref === 'desktop-window' ? findDesktopWindow(cfg.snap.hwnd) : null
     var next = []
     if (Array.isArray(list)) {
       for (var i = 0; i < list.length; i++) {
@@ -4370,48 +4448,16 @@ function mountWhaleBongoWidget(options) {
       }
     }
     if (drag) return
-    if (cfg.snap && cfg.snap.ref === 'desktop-window') {
-      var attachedWindow = findDesktopWindow(cfg.snap.hwnd)
-      if (!attachedWindow) {
-        // The window may have just crossed to another monitor. The helper
-        // rehomes the overlay as soon as it sees the new raw rectangle; keep
-        // the attachment during that handoff instead of collapsing it to the
-        // old screen edge.
-        if (!desktopSnapMissingAt) desktopSnapMissingAt = Date.now()
-        if (Date.now() - desktopSnapMissingAt < 2000) {
-          lastDesktopFollowX = null
-          lastDesktopFollowY = null
-          return
-        }
-        cfg.snap = { ref: 'viewport', x: curX, y: curY }
-        saveCfg()
-      }
-      desktopSnapMissingAt = 0
-      if (previousWindow && attachedWindow &&
-          previousWindow.left === attachedWindow.left && previousWindow.top === attachedWindow.top &&
-          previousWindow.right === attachedWindow.right && previousWindow.bottom === attachedWindow.bottom) return
-      lastPlaceKey = ''
-      // A new CSS transition on every native sample never catches a fast
-      // moving window. Pin the base to each sample instead.
-      root.style.transition = ''
-      var previousFollowX = lastDesktopFollowX
-      var previousFollowY = lastDesktopFollowY
-      place(false)
-      lastDesktopFollowX = curX
-      lastDesktopFollowY = curY
-      if (previousFollowX !== null || previousFollowY !== null) {
-        var followDx = previousFollowX === null ? 0 : curX - previousFollowX
-        var followDy = previousFollowY === null ? 0 : curY - previousFollowY
-        if (Math.abs(followDx) > 0.2 || Math.abs(followDy) > 0.2) {
-          pulseFollowBounce(followDx, followDy)
-          applyMoveShellTransform(moveBounceRatio())
-        }
-      }
-    } else {
+    if (!cfg.snap || cfg.snap.ref !== 'desktop-window') {
       desktopSnapMissingAt = 0
       lastDesktopFollowX = null
       lastDesktopFollowY = null
+      lastFollowWindowRect = null
+      return
     }
+    // Native window sampling is faster than the display. Coalesce placement
+    // to one compositor frame so left/top are not rewritten at 80+ Hz.
+    scheduleDesktopWindowFollow()
   }
 
   function handleGlobalKeyPayload(payload) {
@@ -5177,6 +5223,10 @@ function mountWhaleBongoWidget(options) {
     if (placeFrame) {
       try { window.cancelAnimationFrame(placeFrame) } catch (e) {}
       placeFrame = 0
+    }
+    if (desktopFollowFrame) {
+      try { window.cancelAnimationFrame(desktopFollowFrame) } catch (e) {}
+      desktopFollowFrame = 0
     }
 
     try { closeMenu() } catch (e) {}
