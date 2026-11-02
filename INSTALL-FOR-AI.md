@@ -27,6 +27,7 @@
      index.js
      client.js
      desktop.js
+     electron-runtime.js
      global-keys-host.js
      assets/
      locale/

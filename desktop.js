@@ -7,63 +7,15 @@
 // finishing its load on Windows).
 
 import { spawn } from 'node:child_process'
-import { existsSync, readdirSync, statSync } from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { createElectronPreparer, findElectron } from './electron-runtime.js'
 
 const HELPER_MAIN = path.join('runtime', 'electron-helper', 'main.js')
 const WINDOW_WIDTH = 620
 const WINDOW_HEIGHT = 780
 
-function electronIn(directory) {
-  if (!directory) return null
-  try {
-    if (existsSync(directory) && statSync(directory).isFile()) return directory
-  } catch {}
-  const names = process.platform === 'win32'
-    ? ['electron.exe']
-    : process.platform === 'darwin'
-      ? ['Electron', path.join('Electron.app', 'Contents', 'MacOS', 'Electron')]
-      : ['electron']
-  for (const name of names) {
-    const candidate = path.join(directory, name)
-    try {
-      if (existsSync(candidate) && statSync(candidate).isFile()) return candidate
-    } catch {}
-  }
-  return null
-}
-
-function electronExecutable() {
-  const explicit = process.env.DSH_WHALE_ELECTRON || process.env.DSH_PET_ELECTRON
-  const direct = electronIn(explicit)
-  if (direct) return direct
-  const home = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
-  const roots = [
-    path.join(home, 'electron-whale'),
-    path.join(home, 'electron'),
-  ]
-  for (const root of roots) {
-    const directRoot = electronIn(root)
-    if (directRoot) return directRoot
-    const current = electronIn(path.join(root, 'current'))
-    if (current) return current
-    let entries = []
-    try {
-      entries = readdirSync(root, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name)
-        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-    } catch {}
-    for (const entry of entries) {
-      const found = electronIn(path.join(root, entry))
-      if (found) return found
-    }
-  }
-  return null
-}
-
 export function createDesktopSupervisor({ pkgRoot, log = () => {}, onRequestAnchor = () => {} }) {
+  const runtime = createElectronPreparer({ log })
   let child = null
   let desired = false
   let mode = 'web'
@@ -83,7 +35,7 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {}, onRequestAnch
     return {
       mode,
       running: Boolean(child),
-      available: Boolean(electronExecutable()),
+      available: Boolean(findElectron()),
       width: WINDOW_WIDTH,
       height: WINDOW_HEIGHT,
       error: lastError,
@@ -150,11 +102,11 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {}, onRequestAnch
   }
 
   function spawnHelper() {
-    const electron = electronExecutable()
+    const electron = findElectron()
     if (!electron) {
       desired = false
       mode = 'web'
-      lastError = 'Electron not found. Run node scripts/ensure-electron.mjs, set DSH_WHALE_ELECTRON, or install Electron under ~/.dsh/electron-whale/<version>.'
+      lastError = '未找到 Electron 运行时，可以点击下方按钮自动准备。'
       return state()
     }
     const env = { ...process.env, DSH_WHALE_HOST_PID: String(process.pid) }
@@ -288,6 +240,7 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {}, onRequestAnch
   function dispose() {
     desired = false
     stopping = true
+    try { runtime.dispose() } catch {}
     if (restartTimer) {
       clearTimeout(restartTimer)
       restartTimer = null
@@ -309,6 +262,10 @@ export function createDesktopSupervisor({ pkgRoot, log = () => {}, onRequestAnch
     inputAnchor,
     key,
     keys,
+    prepare: () => runtime.start(),
+    prepareState: () => runtime.state(),
+    cancelPrepare: () => runtime.cancel(),
+    waitForPrepare: () => runtime.wait(),
     dispose,
     getSnapshot: () => snapshot,
   }

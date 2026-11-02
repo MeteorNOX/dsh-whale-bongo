@@ -25,6 +25,7 @@
     "LICENSE",
     "CHANGELOG.md",
     "desktop.js",
+    "electron-runtime.js",
     "runtime/electron-helper",
     "scripts/ensure-electron.mjs",
     "global-keys-host.js"
@@ -67,7 +68,7 @@
     "dsh": ">=0.1.0-rc.1"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check assets/widget.js",
+    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js",
     "ensure:electron": "node scripts/ensure-electron.mjs"
   }
 }

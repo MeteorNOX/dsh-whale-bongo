@@ -39,6 +39,10 @@ function mountWhaleBongoWidget(options) {
   var clientSnapIndicator = null
   var desktopErrorToast = null
   var desktopErrorTimer = 0
+  var desktopPreparePoll = 0
+  var desktopPrepareBusy = false
+  var desktopPrepareAutoStarted = false
+  var desktopPrepareUi = null
 
   var widgetDisposed = false
   var widgetCleanups = []
@@ -4286,29 +4290,286 @@ function mountWhaleBongoWidget(options) {
     desktopPollTimer = 0
   }
 
-  function hideDesktopError() {
+  function stopDesktopPreparePoll() {
+    if (!desktopPreparePoll) return
+    try { window.clearInterval(desktopPreparePoll) } catch (e) {}
+    desktopPreparePoll = 0
+  }
+
+  function formatDesktopMb(bytes) {
+    var value = Number(bytes) || 0
+    var mb = value / 1048576
+    return (mb >= 100 ? Math.round(mb) : mb.toFixed(1)) + ' MB'
+  }
+
+  function desktopPrepareButton(label, primary) {
+    var button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = label
+    button.style.cssText = 'appearance:none;border:1px solid rgba(255,180,170,.32);border-radius:7px;padding:5px 9px;font:11px/1.3 system-ui,sans-serif;cursor:pointer;background:rgba(255,255,255,.05);color:#f1d8d3;' +
+      (primary ? 'border-color:rgba(126,229,202,.46);background:rgba(90,210,178,.16);color:#bff7e9;' : '')
+    return button
+  }
+
+  function desktopPrepareText(state) {
+    var phase = state && state.state ? state.state : 'idle'
+    var source = state && state.source ? ' · ' + state.source : ''
+    if (phase === 'downloading') {
+      var percent = Number(state.percent) || 0
+      if (state.total > 0) {
+        return '正在下载 Electron ' + state.version + ' · ' + percent + '% · ' +
+          formatDesktopMb(state.received) + ' / ' + formatDesktopMb(state.total) + source
+      }
+      return '正在下载 Electron ' + state.version + ' · ' + formatDesktopMb(state.received) + source
+    }
+    if (phase === 'extracting') return '正在解压 Electron ' + state.version + '…'
+    if (phase === 'ready') return 'Electron ' + (state.version || '') + ' 已准备完成。'
+    if (phase === 'cancelled') return state.error || '已取消准备桌面运行时。'
+    if (phase === 'failed') return state.error || 'Electron 运行时准备失败。'
+    return 'Electron 运行时尚未准备。'
+  }
+
+  function desktopPrepareFailed(message) {
+    if (!desktopPrepareUi) return
+    desktopPrepareBusy = false
+    stopDesktopPreparePoll()
+    desktopPrepareUi.primary.style.display = ''
+    desktopPrepareUi.primary.disabled = false
+    desktopPrepareUi.primary.textContent = '重试'
+    desktopPrepareUi.cancel.style.display = 'none'
+    desktopPrepareUi.progress.style.display = 'none'
+    desktopPrepareUi.detail.style.display = 'block'
+    desktopPrepareUi.detail.textContent = message
+  }
+
+  function applyDesktopPrepareState(state) {
+    if (!desktopErrorToast || !desktopPrepareUi) return
+    var ui = desktopPrepareUi
+    var phase = state && state.state ? state.state : 'idle'
+    if (phase === 'downloading' || phase === 'extracting') {
+      desktopPrepareBusy = true
+      ui.primary.style.display = 'none'
+      ui.cancel.style.display = ''
+      ui.cancel.disabled = false
+      ui.cancel.textContent = phase === 'extracting' ? '取消解压' : '取消下载'
+      ui.progress.style.display = 'block'
+      ui.detail.style.display = 'block'
+      ui.detail.textContent = desktopPrepareText(state)
+      var percent = phase === 'extracting' ? 100 : Math.max(0, Math.min(100, Number(state.percent) || 0))
+      ui.fill.style.width = percent + '%'
+      ui.fill.style.background = 'linear-gradient(90deg,#5fd8b8,#9af0d8)'
+      return
+    }
+    if (phase === 'ready') {
+      desktopPrepareBusy = false
+      stopDesktopPreparePoll()
+      ui.primary.style.display = 'none'
+      ui.cancel.style.display = 'none'
+      ui.progress.style.display = 'block'
+      ui.fill.style.width = '100%'
+      ui.fill.style.background = 'linear-gradient(90deg,#5fd8b8,#9af0d8)'
+      ui.detail.style.display = 'block'
+      ui.detail.textContent = '运行时已就绪，正在进入桌面模式…'
+      if (!desktopPrepareAutoStarted && !widgetDisposed) {
+        desktopPrepareAutoStarted = true
+        window.setTimeout(function () {
+          if (desktopErrorToast !== ui.toast || widgetDisposed) return
+          hideDesktopError(false)
+          cfg.displayMode = 'desktop'
+          saveCfg()
+          desktopStarted = false
+          startDesktopMode()
+        }, 350)
+      }
+      return
+    }
+    if (phase === 'failed' || phase === 'cancelled') {
+      desktopPrepareFailed(desktopPrepareText(state))
+      ui.primary.textContent = phase === 'cancelled' ? '重新准备' : '重试'
+      return
+    }
+    desktopPrepareBusy = false
+    ui.primary.style.display = ''
+    ui.primary.disabled = false
+    ui.primary.textContent = '准备桌面运行时（约 138 MB）'
+    ui.cancel.style.display = 'none'
+    ui.progress.style.display = 'none'
+    ui.detail.style.display = 'none'
+  }
+
+  function startDesktopPreparePoll(toast) {
+    stopDesktopPreparePoll()
+    desktopPreparePoll = window.setInterval(function () {
+      if (!desktopErrorToast || desktopErrorToast !== toast) {
+        stopDesktopPreparePoll()
+        return
+      }
+      fetch(BASE + '/desktop/prepare', { cache: 'no-store' })
+        .then(function (response) { return response.json() })
+        .then(function (state) {
+          if (desktopErrorToast === toast) applyDesktopPrepareState(state)
+        })
+        .catch(function () {
+          if (desktopErrorToast === toast && desktopPrepareUi && desktopPrepareBusy) {
+            desktopPrepareUi.detail.textContent = '暂时无法获取下载进度，正在重试…'
+          }
+        })
+    }, 600)
+  }
+
+  function beginDesktopPrepare(toast) {
+    if (desktopPrepareBusy || !desktopPrepareUi) return
+    desktopPrepareBusy = true
+    desktopPrepareAutoStarted = false
+    var ui = desktopPrepareUi
+    ui.primary.disabled = true
+    ui.primary.textContent = '正在连接…'
+    ui.progress.style.display = 'block'
+    ui.fill.style.width = '0%'
+    ui.detail.style.display = 'block'
+    ui.detail.textContent = '正在连接下载服务器…'
+    fetch(BASE + '/desktop/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then(function (response) { return response.json() })
+      .then(function (state) {
+        if (desktopErrorToast !== toast) return
+        applyDesktopPrepareState(state)
+        if (state && (state.state === 'downloading' || state.state === 'extracting')) {
+          startDesktopPreparePoll(toast)
+        }
+      })
+      .catch(function () {
+        if (desktopErrorToast === toast) desktopPrepareFailed('无法连接下载服务，请稍后重试。')
+      })
+  }
+
+  function cancelDesktopPrepare() {
+    if (!desktopPrepareUi) return
+    desktopPrepareUi.cancel.disabled = true
+    desktopPrepareUi.cancel.textContent = '正在取消…'
+    fetch(BASE + '/desktop/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancel: true }),
+    }).then(function (response) { return response.json() })
+      .then(function (state) {
+        if (desktopErrorToast) applyDesktopPrepareState(state)
+      })
+      .catch(function () {
+        if (desktopPrepareUi) {
+          desktopPrepareUi.cancel.disabled = false
+          desktopPrepareUi.cancel.textContent = '取消下载'
+          desktopPrepareUi.detail.textContent = '取消失败，请重试。'
+        }
+      })
+  }
+
+  function hideDesktopError(cancelPrepare) {
+    stopDesktopPreparePoll()
+    desktopPrepareBusy = false
+    desktopPrepareAutoStarted = false
+    desktopPrepareUi = null
     if (desktopErrorTimer) {
       try { window.clearTimeout(desktopErrorTimer) } catch (e) {}
       desktopErrorTimer = 0
+    }
+    if (cancelPrepare) {
+      try {
+        fetch(BASE + '/desktop/prepare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cancel: true }),
+        }).catch(function () {})
+      } catch (e) {}
     }
     if (!desktopErrorToast) return
     try { desktopErrorToast.remove() } catch (e) {}
     desktopErrorToast = null
   }
 
-  function showDesktopError(message) {
-    hideDesktopError()
+  function showDesktopError(message, options) {
+    hideDesktopError(false)
+    options = options || {}
+    var canPrepare = Boolean(options.canPrepare)
     var text = message ? String(message) : 'Electron 运行时不可用'
     var toast = document.createElement('div')
-    toast.setAttribute('role', 'status')
-    toast.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483647;max-width:min(520px,calc(100vw - 32px));padding:9px 13px;border:1px solid rgba(255,160,150,.28);border-radius:9px;background:rgba(38,20,24,.94);color:#ffd9d4;font:12px/1.45 system-ui,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.34);pointer-events:none;'
-    toast.textContent = '桌面模式无法启动：' + text
+    toast.setAttribute('role', canPrepare ? 'alertdialog' : 'status')
+    toast.style.cssText = 'position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:2147483647;width:min(430px,calc(100vw - 32px));padding:10px 12px;border:1px solid rgba(255,160,150,.28);border-radius:10px;background:rgba(38,20,24,.97);color:#ffd9d4;font:12px/1.45 system-ui,sans-serif;box-shadow:0 10px 34px rgba(0,0,0,.38);pointer-events:auto;display:flex;flex-direction:column;gap:7px;'
+
+    var head = document.createElement('div')
+    head.style.cssText = 'display:flex;align-items:flex-start;gap:8px;'
+    var label = document.createElement('div')
+    label.style.cssText = 'flex:1;min-width:0;'
+    label.textContent = '桌面模式无法启动：' + text
+    var close = document.createElement('button')
+    close.type = 'button'
+    close.textContent = '×'
+    close.title = '关闭'
+    close.style.cssText = 'appearance:none;border:0;background:transparent;color:#d5b4af;font:16px/1 system-ui,sans-serif;cursor:pointer;padding:0 2px;flex:none;'
+    close.onclick = function () { hideDesktopError(true) }
+    head.appendChild(label)
+    head.appendChild(close)
+    toast.appendChild(head)
+
+    var detail = document.createElement('div')
+    detail.style.cssText = 'display:none;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;color:#d8c1bd;white-space:pre-wrap;word-break:break-word;'
+    toast.appendChild(detail)
+
+    var progress = document.createElement('div')
+    progress.style.cssText = 'display:none;height:5px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden;'
+    var fill = document.createElement('div')
+    fill.style.cssText = 'height:100%;width:0%;background:linear-gradient(90deg,#5fd8b8,#9af0d8);transition:width .2s linear;'
+    progress.appendChild(fill)
+    toast.appendChild(progress)
+
+    var actions = document.createElement('div')
+    actions.style.cssText = 'display:flex;align-items:center;justify-content:flex-end;gap:7px;'
+    var primary = null
+    var cancel = null
+    if (canPrepare) {
+      primary = desktopPrepareButton('准备桌面运行时（约 138 MB）', true)
+      primary.onclick = function () { beginDesktopPrepare(toast) }
+      cancel = desktopPrepareButton('取消下载', false)
+      cancel.style.display = 'none'
+      cancel.onclick = function () { cancelDesktopPrepare() }
+      actions.appendChild(cancel)
+      actions.appendChild(primary)
+      toast.appendChild(actions)
+    }
+
     document.body.appendChild(toast)
     desktopErrorToast = toast
-    desktopErrorTimer = window.setTimeout(function () {
-      desktopErrorTimer = 0
-      if (desktopErrorToast === toast) hideDesktopError()
-    }, 8000)
+    desktopPrepareUi = canPrepare ? {
+      toast: toast,
+      detail: detail,
+      progress: progress,
+      fill: fill,
+      primary: primary,
+      cancel: cancel,
+    } : null
+
+    if (!canPrepare) {
+      desktopErrorTimer = window.setTimeout(function () {
+        desktopErrorTimer = 0
+        if (desktopErrorToast === toast) hideDesktopError(false)
+      }, 8000)
+      return
+    }
+
+    fetch(BASE + '/desktop/prepare', { cache: 'no-store' })
+      .then(function (response) { return response.json() })
+      .then(function (state) {
+        if (desktopErrorToast !== toast || !state) return
+        if (state.state && state.state !== 'idle') {
+          applyDesktopPrepareState(state)
+          if (state.state === 'downloading' || state.state === 'extracting') {
+            startDesktopPreparePoll(toast)
+          }
+        }
+      })
+      .catch(function () {})
   }
 
   function showWebWidget() {
@@ -4427,7 +4688,7 @@ function mountWhaleBongoWidget(options) {
             desktopStarted = false
             saveCfg()
             showWebWidget()
-            showDesktopError(reason)
+            showDesktopError(reason, { canPrepare: Boolean(state && state.available === false) })
             return
           }
           startDesktopPoll()

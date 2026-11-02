@@ -253,6 +253,28 @@ export default {
 
       route({
         kind: 'exact',
+        path: BASE + '/desktop/prepare',
+        handler(req, res) {
+          if (req.method === 'GET') {
+            json(res, { ok: true, ...desktop.prepareState() })
+            return
+          }
+          if (req.method !== 'POST') {
+            text(res, 405, 'method not allowed')
+            return
+          }
+          readJsonBody(req).then((body) => {
+            if (body && body.cancel) {
+              json(res, { ok: true, ...desktop.cancelPrepare() })
+              return
+            }
+            json(res, { ok: true, ...desktop.prepare() })
+          }).catch((error) => text(res, 400, error && error.message ? error.message : String(error)))
+        },
+      })
+
+      route({
+        kind: 'exact',
         path: BASE + '/desktop/start',
         handler(req, res) {
           readJsonBody(req).then((body) => {

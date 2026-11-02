@@ -5,6 +5,17 @@
 > [!WARNING]
 > npm 包暂未发布；请使用 GitHub Release 的 zip/tgz，或本地目录安装。
 
+## 未发布
+
+### 新增
+
+- 桌面模式支持一键准备 Electron：首次切到桌面且本机没有可用运行时时，失败提示里会出现「准备桌面运行时」按钮，自动下载约 138 MB 的 Electron，不需要再手动打开终端。
+- 准备过程显示下载来源、进度、已下载大小和解压状态，可随时取消；完成后自动校验 SHA-256、原子安装并进入桌面模式。
+- 默认固定使用经验证的 Electron `43.3.0`，优先从 npmmirror 下载，失败后回退 GitHub；`DSH_WHALE_ELECTRON_VERSION=latest` 可切换为最新版。
+- 准备失败或取消时保持客户端模式，显示中文原因和重试入口，不会留下半成品或损坏的安装目录。
+- 自动识别系统 `HTTPS_PROXY` / `https_proxy`（HTTP CONNECT 代理），支持代理 Basic Auth、重定向和 `NO_PROXY`；暂不支持 SOCKS 代理。
+- 已有安装、`DSH_WHALE_ELECTRON`、`DSH_WHALE_ELECTRON_DIR` 和自动扫描到的运行时直接复用，不会重复下载。
+
 ## v0.3.1
 
 ### 修复
