@@ -546,6 +546,22 @@ function recallWidget() {
   activateDisplay(target, { recall: true })
 }
 
+function returnToClient() {
+  // The page polls /desktop/status and rehydrates this snapshot when the host
+  // reports mode 'web'. Mark the destination explicitly so the widget returns
+  // to the composer instead of reusing its old desktop position.
+  const snapshot = baseSnapshot() || { cfg: {} }
+  snapshot.cfg = Object.assign({}, snapshot.cfg, {
+    displayMode: 'web',
+    returnToComposerCenter: true,
+  })
+  pendingConfig = snapshot
+  latestConfig = snapshot
+  writeLine({ type: 'stop', snapshot })
+  // Let stdout reach the host before quitting the helper.
+  setTimeout(stop, 120)
+}
+
 function createTray() {
   if (tray) return
   try {
@@ -556,6 +572,8 @@ function createTray() {
     tray.setToolTip('DSH 桌宠')
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: '召回挂件到当前屏幕', click: recallWidget },
+      { type: 'separator' },
+      { label: '回到客户端内部', click: returnToClient },
     ]))
     tray.on('click', recallWidget)
   } catch (error) {
@@ -958,6 +976,7 @@ app.whenReady().then(() => {
   screen.on('display-removed', handleDisplayChange)
   screen.on('display-metrics-changed', handleDisplayChange)
   screen.on('display-added', handleDisplayChange)
+
 
   ipcMain.on('whale:ready', (event) => {
     const entry = entryForEvent(event)
