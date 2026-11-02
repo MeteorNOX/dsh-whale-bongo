@@ -2351,10 +2351,12 @@ function mountWhaleBongoWidget(options) {
   // Window following is a direct placement, so it bypasses the position
   // spring. Move the bottom-anchored shell as if the top still carries the
   // previous screen's inertia: the base stays planted and the body leans
-  // horizontally, then springs back. No vertical component is applied.
+  // horizontally, then springs back. Strength and angle cap follow the
+  // Q-bounce slider; no vertical component is applied.
   function pulseFollowBounce(dx) {
     var q = moveBounceRatio()
-    followLeanV += clamp(Number(dx) * (2.2 + 0.6 * q), -90, 90)
+    var maxImpulse = 160 * q
+    followLeanV += clamp(Number(dx) * 4 * q, -maxImpulse, maxImpulse)
   }
 
   function stepFollowBounce(dt, q) {
@@ -2366,7 +2368,8 @@ function mountWhaleBongoWidget(options) {
     var stiffness = 150 + 70 * q
     var damping = 10 - 2 * q
     followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
-    followLean = clamp(followLean + followLeanV * dt, -8, 8)
+    var leanLimit = 8 * q
+    followLean = clamp(followLean + followLeanV * dt, -leanLimit, leanLimit)
     if (Math.abs(followLean) < 0.01 && Math.abs(followLeanV) < 0.05) {
       followLean = 0
       followLeanV = 0
