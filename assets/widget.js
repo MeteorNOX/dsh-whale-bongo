@@ -1647,7 +1647,10 @@ function mountWhaleBongoWidget(options) {
   var bodyStretch = 0
   var followLean = 0
   var followLeanV = 0
+  var followStretch = 0
+  var followStretchV = 0
   var lastDesktopFollowX = null
+  var lastDesktopFollowY = null
   var lastProbeCard = null
   var lastProbeLeft = 0
   var lastProbeTop = 0
@@ -2323,7 +2326,7 @@ function mountWhaleBongoWidget(options) {
   function applyMoveShellTransform(q) {
     if (!moveShell) return
     var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
-    var scaleY = (1 - moveSquash) * (1 + bodyStretch)
+    var scaleY = (1 - moveSquash) * (1 + bodyStretch) * (1 + followStretch)
     var hasScale = Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005
     var hasLean = Math.abs(followLean) > 0.01
     if (!hasScale && !hasLean) {
@@ -2337,35 +2340,49 @@ function mountWhaleBongoWidget(options) {
   function resetFollowBounce() {
     followLean = 0
     followLeanV = 0
+    followStretch = 0
+    followStretchV = 0
     lastDesktopFollowX = null
+    lastDesktopFollowY = null
     applyMoveShellTransform(moveBounceRatio())
   }
 
   // Window following is a direct placement, so it bypasses the position
   // spring. Move the bottom-anchored shell as if the top still carries the
   // previous screen's inertia: the base stays planted and the body leans
-  // horizontally, then springs back. Strength and angle cap follow the
-  // Q-bounce slider; no vertical component is applied.
-  function pulseFollowBounce(dx) {
+  // horizontally, while a smaller vertical stretch/squash adds the same
+  // bottom-anchored inertia. Strength follows the Q-bounce slider.
+  function pulseFollowBounce(dx, dy) {
     var q = moveBounceRatio()
     var maxImpulse = 260 * q
     followLeanV += clamp(Number(dx) * 6.5 * q, -maxImpulse, maxImpulse)
+    // Vertical inertia has half the horizontal strength. A downward window
+    // move leaves the top behind and stretches the body; an upward move
+    // compresses it, with the bottom pinned by transform-origin.
+    var deltaY = Number(dy) || 0
+    followStretchV += clamp(deltaY * 3.25 * q, -maxImpulse / 2, maxImpulse / 2)
   }
 
   function stepFollowBounce(dt, q) {
-    if (Math.abs(followLean) <= 0.01 && Math.abs(followLeanV) <= 0.05) {
-      followLean = 0
-      followLeanV = 0
-      return
-    }
     var stiffness = 420 + 180 * q
     var damping = 10 - 2 * q
-    followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
-    var leanLimit = 9 * q
-    followLean = clamp(followLean + followLeanV * dt, -leanLimit, leanLimit)
-    if (Math.abs(followLean) < 0.01 && Math.abs(followLeanV) < 0.05) {
-      followLean = 0
-      followLeanV = 0
+    if (Math.abs(followLean) > 0.01 || Math.abs(followLeanV) > 0.05) {
+      followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
+      var leanLimit = 9 * q
+      followLean = clamp(followLean + followLeanV * dt, -leanLimit, leanLimit)
+      if (Math.abs(followLean) < 0.01 && Math.abs(followLeanV) < 0.05) {
+        followLean = 0
+        followLeanV = 0
+      }
+    }
+    if (Math.abs(followStretch) > 0.0005 || Math.abs(followStretchV) > 0.001) {
+      followStretchV += (-followStretch * stiffness - followStretchV * damping) * dt
+      var stretchLimit = 0.045 * q
+      followStretch = clamp(followStretch + followStretchV * dt, -stretchLimit, stretchLimit)
+      if (Math.abs(followStretch) < 0.0005 && Math.abs(followStretchV) < 0.001) {
+        followStretch = 0
+        followStretchV = 0
+      }
     }
   }
 
@@ -4345,6 +4362,7 @@ function mountWhaleBongoWidget(options) {
         if (!desktopSnapMissingAt) desktopSnapMissingAt = Date.now()
         if (Date.now() - desktopSnapMissingAt < 2000) {
           lastDesktopFollowX = null
+          lastDesktopFollowY = null
           return
         }
         cfg.snap = { ref: 'viewport', x: curX, y: curY }
@@ -4359,18 +4377,22 @@ function mountWhaleBongoWidget(options) {
       // moving window. Pin the base to each sample instead.
       root.style.transition = ''
       var previousFollowX = lastDesktopFollowX
+      var previousFollowY = lastDesktopFollowY
       place(false)
       lastDesktopFollowX = curX
-      if (previousFollowX !== null) {
-        var followDx = curX - previousFollowX
-        if (Math.abs(followDx) > 0.2) {
-          pulseFollowBounce(followDx)
+      lastDesktopFollowY = curY
+      if (previousFollowX !== null || previousFollowY !== null) {
+        var followDx = previousFollowX === null ? 0 : curX - previousFollowX
+        var followDy = previousFollowY === null ? 0 : curY - previousFollowY
+        if (Math.abs(followDx) > 0.2 || Math.abs(followDy) > 0.2) {
+          pulseFollowBounce(followDx, followDy)
           applyMoveShellTransform(moveBounceRatio())
         }
       }
     } else {
       desktopSnapMissingAt = 0
       lastDesktopFollowX = null
+      lastDesktopFollowY = null
     }
   }
 

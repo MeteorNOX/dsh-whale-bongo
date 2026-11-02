@@ -199,47 +199,145 @@ class WhaleNativeHelper
         }
     }
 
+    private static volatile bool ctrlDown = false;
+    private static volatile bool altDown = false;
+    private static volatile bool shiftDown = false;
+    private static volatile bool metaDown = false;
+
     private static void KeysLoop()
     {
         bool[] previous = new bool[256];
-        bool initialized = false;
+        bool registered = false;
+        IntPtr hwnd = CreateWindowEx(0, "STATIC", "", 0x80000000, 0, 0, 0, 0,
+            new IntPtr(-3), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+        if (hwnd == IntPtr.Zero)
+        {
+            WriteLine("{\"type\":\"error\",\"message\":\"raw input window creation failed: " +
+                Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture) + "\"}");
+            return;
+        }
+
+        RAWINPUTDEVICE[] devices = new RAWINPUTDEVICE[1];
+        devices[0].usUsagePage = 0x01;
+        devices[0].usUsage = 0x06;
+        devices[0].dwFlags = 0x00000100;
+        devices[0].hwndTarget = hwnd;
+
         while (running)
         {
             if (!keysEnabled)
             {
-                initialized = false;
+                if (registered)
+                {
+                    devices[0].dwFlags = 0x00000001;
+                    devices[0].hwndTarget = IntPtr.Zero;
+                    RegisterRawInputDevices(devices, 1, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
+                    registered = false;
+                }
                 Thread.Sleep(30);
                 continue;
             }
-            if (!initialized || keysReset)
+
+            if (keysReset)
             {
                 keysReset = false;
-                for (int key = 8; key <= 255; key++) previous[key] = IsDown(key);
-                initialized = true;
+                Array.Clear(previous, 0, previous.Length);
+                ctrlDown = false;
+                altDown = false;
+                shiftDown = false;
+                metaDown = false;
+            }
+
+            if (!registered)
+            {
+                devices[0].dwFlags = 0x00000100;
+                devices[0].hwndTarget = hwnd;
+                if (!RegisterRawInputDevices(devices, 1, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE))))
+                {
+                    WriteLine("{\"type\":\"error\",\"message\":\"RegisterRawInputDevices failed: " +
+                        Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture) + "\"}");
+                    Thread.Sleep(1000);
+                    continue;
+                }
+                registered = true;
             }
 
             try
             {
-                bool ctrl = IsDown(0x11);
-                bool alt = IsDown(0x12);
-                bool shift = IsDown(0x10);
-                bool meta = IsDown(0x5B) || IsDown(0x5C);
-                for (int key = 8; key <= 255; key++)
+                MSG msg;
+                while (PeekMessage(out msg, IntPtr.Zero, 0, 0, 0x0001))
                 {
-                    bool down = IsDown(key);
-                    if (down == previous[key]) continue;
-                    previous[key] = down;
-                    WriteLine(KeyJson(down, key, ctrl, alt, shift, meta));
+                    if (msg.message == 0x00FF) HandleRawInput(msg.lParam, previous);
+                    TranslateMessage(ref msg);
+                    DispatchMessage(ref msg);
                 }
             }
             catch (Exception error)
             {
                 WriteLine("{\"type\":\"error\",\"message\":\"" + Escape(error.Message) + "\"}");
-                initialized = false;
                 Thread.Sleep(500);
             }
-            Thread.Sleep(20);
+            Thread.Sleep(5);
         }
+
+        if (registered)
+        {
+            devices[0].dwFlags = 0x00000001;
+            devices[0].hwndTarget = IntPtr.Zero;
+            RegisterRawInputDevices(devices, 1, (uint)Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
+        }
+        if (hwnd != IntPtr.Zero) DestroyWindow(hwnd);
+    }
+
+    private static void HandleRawInput(IntPtr lParam, bool[] previous)
+    {
+        uint size = 0;
+        uint headerSize = (uint)Marshal.SizeOf(typeof(RAWINPUTHEADER));
+        GetRawInputData(lParam, 0x10000003, IntPtr.Zero, ref size, headerSize);
+        if (size == 0) return;
+        IntPtr buffer = Marshal.AllocHGlobal((int)size);
+        try
+        {
+            uint got = GetRawInputData(lParam, 0x10000003, buffer, ref size, headerSize);
+            if (got == 0 || got == uint.MaxValue) return;
+            RAWINPUT raw = (RAWINPUT)Marshal.PtrToStructure(buffer, typeof(RAWINPUT));
+            if (raw.header.dwType != 1) return;
+            int vk = raw.keyboard.VKey;
+            if (vk == 0 || vk == 0xFF)
+            {
+                uint mapped = MapVirtualKey(raw.keyboard.MakeCode, 3);
+                vk = (int)mapped;
+            }
+            if (vk <= 0 || vk > 255) return;
+            bool down = (raw.keyboard.Flags & 0x0001) == 0;
+            if (IsModifier(vk))
+            {
+                SetModifierState(vk, down);
+                return;
+            }
+            if (previous[vk] == down) return;
+            previous[vk] = down;
+            if (vk < 8 || vk == 20 || vk == 144 || vk == 145) return;
+            WriteLine(KeyJson(down, vk, ctrlDown, altDown, shiftDown, metaDown));
+        }
+        finally
+        {
+            Marshal.FreeHGlobal(buffer);
+        }
+    }
+
+    private static bool IsModifier(int vk)
+    {
+        return vk == 0x10 || vk == 0x11 || vk == 0x12 || vk == 0x5B || vk == 0x5C ||
+            vk == 0xA0 || vk == 0xA1 || vk == 0xA2 || vk == 0xA3 || vk == 0xA4 || vk == 0xA5;
+    }
+
+    private static void SetModifierState(int vk, bool down)
+    {
+        if (vk == 0x10 || vk == 0xA0 || vk == 0xA1) shiftDown = down;
+        else if (vk == 0x11 || vk == 0xA2 || vk == 0xA3) ctrlDown = down;
+        else if (vk == 0x12 || vk == 0xA4 || vk == 0xA5) altDown = down;
+        else if (vk == 0x5B || vk == 0x5C) metaDown = down;
     }
 
     private static void MouseLoop()
@@ -413,6 +511,54 @@ class WhaleNativeHelper
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
     [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTDEVICE
+    {
+        public ushort usUsagePage;
+        public ushort usUsage;
+        public uint dwFlags;
+        public IntPtr hwndTarget;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTHEADER
+    {
+        public int dwType;
+        public int dwSize;
+        public IntPtr hDevice;
+        public IntPtr wParam;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWKEYBOARD
+    {
+        public ushort MakeCode;
+        public ushort Flags;
+        public ushort Reserved;
+        public ushort VKey;
+        public uint Message;
+        public uint ExtraInformation;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUT
+    {
+        public RAWINPUTHEADER header;
+        public RAWKEYBOARD keyboard;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public UIntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT pt;
+        public uint lPrivate;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     private struct RECT
     {
         public int Left;
@@ -448,6 +594,23 @@ class WhaleNativeHelper
     private static extern int DwmGetWindowAttributeInt(IntPtr hWnd, int attribute, out int value, int size);
     [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
     private static extern int DwmGetWindowAttributeRect(IntPtr hWnd, int attribute, out RECT rect, int size);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateWindowEx(uint exStyle, string className, string windowName,
+        uint style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
+    [DllImport("user32.dll")]
+    private static extern bool DestroyWindow(IntPtr hWnd);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool RegisterRawInputDevices(RAWINPUTDEVICE[] devices, uint count, uint size);
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint GetRawInputData(IntPtr hRawInput, uint command, IntPtr data, ref uint size, uint headerSize);
+    [DllImport("user32.dll")]
+    private static extern uint MapVirtualKey(uint code, uint mapType);
+    [DllImport("user32.dll")]
+    private static extern bool PeekMessage(out MSG message, IntPtr hWnd, uint min, uint max, uint remove);
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref MSG message);
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage(ref MSG message);
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll")]

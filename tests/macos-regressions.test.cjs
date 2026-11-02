@@ -188,8 +188,8 @@ function motion() {
   Object.assign(c, {
     widgetDisposed:false, mouseFollowing:false, desktopPageActive:false,
     desktopInputAnchor:{x:0,y:0}, drag:null, desktopSnapMissingAt:0,
-    lastSnapTargetHwnd:'', lastDesktopFollowX:null, moveShell:{style:{}}, root:{style:{},classList:{add(){}}},
-    followLean:0, followLeanV:0, moveSquash:0, moveSquashV:0, moveSquashArmed:false,
+    lastSnapTargetHwnd:'', lastDesktopFollowX:null, lastDesktopFollowY:null, moveShell:{style:{}}, root:{style:{},classList:{add(){}}},
+    followLean:0, followLeanV:0, followStretch:0, followStretchV:0, moveSquash:0, moveSquashV:0, moveSquashArmed:false,
     bodyStretch:0, springActive:false, springAnchorX:400, springAnchorY:300,
     springTargetAnchorX:400, springTargetAnchorY:300, springVX:0, springVY:0,
     MOVE_STIFFNESS_BASE:240, MOVE_STIFFNESS_RANGE:60, MOVE_DAMPING_BASE:36,
@@ -249,6 +249,8 @@ test('fast window following pins the base, sways in both directions, and returns
   const previousVelocity=c.followLeanV
   c.setDesktopWindows([rect(0,350)]) // Vertical movement follows without a new sideways impulse.
   assert.equal(c.curY,250);assert.equal(c.followLeanV,previousVelocity)
+  assert.ok(c.followStretchV>0)
+  c.stepMove(1/60);assert.ok(c.followStretch>0)
   for(let i=0;i<600;i++)c.stepMove(1/120)
   assert.equal(c.moveShell.style.transform,'');assert.equal(c.cfg.snap.hwnd,'mac:42')
 })
