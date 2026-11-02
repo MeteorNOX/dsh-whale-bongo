@@ -176,6 +176,8 @@ function mountWhaleBongoWidget(options) {
   }
   var reduceMotion = prefersReducedMotion()
 
+  var cfgNeedsAnchorMigration = false
+
   function readCfg() {
     var out = JSON.parse(JSON.stringify(DEFAULTS))
     var savedCfg = null
@@ -197,6 +199,7 @@ function mountWhaleBongoWidget(options) {
       out.snap = { ref: 'card', edge: 'top', x: null }
     } else if (snap.ref === 'desktop-window') {
       var winAnchor = snap.anchorX
+      var winAnchorSpace = snap.anchorSpace
       out.snap = {
         ref: 'desktop-window',
         hwnd: typeof snap.hwnd === 'string' ? snap.hwnd : String(snap.hwnd || ''),
@@ -204,12 +207,23 @@ function mountWhaleBongoWidget(options) {
       }
       if (!out.snap.hwnd) out.snap = { ref: 'card', edge: 'top', x: null }
       else if (winAnchor && (winAnchor.mode === 'ratio' || winAnchor.mode === 'left' || winAnchor.mode === 'right') && isFinite(Number(winAnchor.value))) {
+        var winAnchorValue = numberOr(winAnchor.value, 0)
+        // Desktop window rectangles used to be stored in physical pixels.
+        // At non-100% scaling the left/right offsets must be converted once;
+        // ratios are scale-independent. Vertical placement is fixed in the
+        // helper, so it does not need migration.
+        if (desktopMode && winAnchorSpace !== 'dip' && winAnchor.mode !== 'ratio') {
+          cfgNeedsAnchorMigration = true
+          var desktopScale = numberOr(window.devicePixelRatio, 1)
+          if (desktopScale > 0 && Math.abs(desktopScale - 1) > 0.01) winAnchorValue = winAnchorValue / desktopScale
+        }
         out.snap.anchorX = {
           mode: winAnchor.mode,
           value: winAnchor.mode === 'ratio'
-            ? clamp(numberOr(winAnchor.value, 0.5), 0, 1)
-            : clamp(numberOr(winAnchor.value, 0), -4000, 4000),
+            ? clamp(winAnchorValue, 0, 1)
+            : clamp(winAnchorValue, -4000, 4000),
         }
+        out.snap.anchorSpace = 'dip'
       }
     } else if (snap.ref === 'viewport') {
       out.snap = { ref: 'viewport', x: clamp(numberOr(snap.x, 24), 4, 4000), y: clamp(numberOr(snap.y, 120), 4, 4000) }
@@ -311,6 +325,9 @@ function mountWhaleBongoWidget(options) {
     try { localStorage.setItem(STORE, JSON.stringify(cfg)) } catch (e) {}
     notifyDesktopChanged()
   }
+  // Persist legacy desktop anchors once, so repeated restarts cannot divide
+  // them by the DPI scale more than once.
+  if (cfgNeedsAnchorMigration) saveCfg()
   function saveImage() {
     try {
       if (imageData) localStorage.setItem(IMAGE_STORE, imageData)
@@ -2548,6 +2565,7 @@ function mountWhaleBongoWidget(options) {
         else legacyX = snap.x === null || snap.x === undefined ? r.right - size - 8 : snap.x
         anchorX = makeHorizontalAnchor(legacyX, r, size)
         snap.anchorX = anchorX
+        snap.anchorSpace = 'dip'
         saveCfg()
       }
       x = anchorCenterX(anchorX, r) - size / 2
@@ -2568,7 +2586,12 @@ function mountWhaleBongoWidget(options) {
     }
     x = clamp(x, 4, Math.max(4, vw - size - 4))
     // 吸附/对齐以图片底部为基准；菜单按钮始终留在视口内。
-    y = clamp(y, 4, Math.max(4, vh - imageBottom))
+    // A top-snapped window can sit closer to the screen top than the pet is
+    // tall. Let the pet extend above the viewport in that case so its bottom
+    // still meets the window edge instead of overlapping the window.
+    var minY = 4
+    if (desktopMode && snap && snap.ref === 'desktop-window' && snap.edge === 'top') minY = 4 - imageBottom
+    y = clamp(y, minY, Math.max(minY, vh - imageBottom))
     curX = x
     curY = y
     applyFlip()
@@ -2671,6 +2694,7 @@ function mountWhaleBongoWidget(options) {
             hwnd: String(desktopBest.rect.hwnd),
             edge: desktopBest.edge,
             anchorX: makeHorizontalAnchor(x, desktopBest.rect, size),
+            anchorSpace: 'dip',
           }
         } else {
           cfg.snap = { ref: 'viewport', x: desktopBest.x, y: desktopBest.y }

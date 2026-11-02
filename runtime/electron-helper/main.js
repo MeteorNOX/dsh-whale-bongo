@@ -21,6 +21,7 @@ const { app, BrowserWindow, ipcMain, screen } = electron
 const path = require('node:path')
 const http = require('node:http')
 const { spawn } = require('node:child_process')
+const { windowsToOverlayDip } = require('./window-dip')
 
 const HOST_PID = Number(process.env.DSH_WHALE_HOST_PID || 0)
 const HOST_POLL_MS = 2000
@@ -90,6 +91,29 @@ if (Number.isInteger(HOST_PID) && HOST_PID > 0) {
 
 function workArea() {
   return screen.getPrimaryDisplay().workArea
+}
+
+function toOverlayDip(list) {
+  const area = workArea()
+  const bounds = win && !win.isDestroyed()
+    ? win.getContentBounds()
+    : { x: area.x, y: area.y, width: area.width, height: area.height }
+  const display = typeof screen.getDisplayMatching === 'function'
+    ? screen.getDisplayMatching(bounds)
+    : screen.getPrimaryDisplay()
+  return windowsToOverlayDip(list, {
+    origin: { x: bounds.x, y: bounds.y },
+    width: bounds.width,
+    height: bounds.height,
+    scaleFactor: display.scaleFactor,
+    // screenToDipRect converts a physical screen rectangle using the DPI of
+    // the display the rectangle belongs to. Passing null here is deliberate:
+    // the overlay itself is only on the primary display, but the candidate
+    // windows may span mixed-DPI monitors.
+    toDipRect: typeof screen.screenToDipRect === 'function'
+      ? (rect) => screen.screenToDipRect(null, rect)
+      : null,
+  })
 }
 
 function createWindow() {
@@ -391,8 +415,8 @@ function startDesktopWindows() {
       let list
       try { list = JSON.parse(line) } catch { continue }
       if (!Array.isArray(list)) continue
-      latestWindows = list
-      if (win && !win.isDestroyed()) win.webContents.send('whale:windows', list)
+      latestWindows = toOverlayDip(list)
+      if (win && !win.isDestroyed()) win.webContents.send('whale:windows', latestWindows)
     }
   })
   windowsChild.stderr.setEncoding('utf8')
