@@ -3653,13 +3653,16 @@ function mountWhaleBongoWidget(options) {
     fadeOutThen(startDesktopMode)
   }
 
-  function switchDesktopToPage(event) {
-    if (!desktopMode) return
+  function leaveDesktopForClient(event) {
+    if (!desktopMode || modeFading) return
     clearModeHold()
     hideClientSnapIndicator()
     drag = null
     cancelPointerPress()
-    try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
+    hideSnapDots()
+    if (event && event.pointerId !== undefined) {
+      try { hitbox.releasePointerCapture(event.pointerId) } catch (e) {}
+    }
     cfg.displayMode = 'web'
     cfg.returnToComposerCenter = true
     saveCfg()
@@ -3668,6 +3671,10 @@ function mountWhaleBongoWidget(options) {
         window.whaleDesktop.stopDesktop({ cfg: cfg, image: imageData, sound: soundData })
       } catch (e) {}
     })
+  }
+
+  function switchDesktopToPage(event) {
+    leaveDesktopForClient(event)
   }
 
   function evaluateModeHold(event) {
@@ -4470,6 +4477,7 @@ function mountWhaleBongoWidget(options) {
       setDesktopDisplay: function (info) { setDesktopDisplay(info) },
       setDesktopDisplaySwitch: function (payload) { setDesktopDisplaySwitch(payload) },
       recall: function () { recallDesktopWidget() },
+      returnToClient: function () { leaveDesktopForClient(null) },
       setDesktopInputAnchor: function (anchor) { desktopInputAnchor = anchor || null },
       setMouseFollow: function (payload) { setMouseFollow(payload) },
     }

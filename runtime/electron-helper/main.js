@@ -45,6 +45,7 @@ let handoffPromise = null
 let handoffSequence = 0
 let resettingBounds = false
 let tray = null
+let returnFallbackTimer = 0
 let mouseChild = null
 let mouseBuffer = ''
 let mouseFollowOffset = null
@@ -546,10 +547,7 @@ function recallWidget() {
   activateDisplay(target, { recall: true })
 }
 
-function returnToClient() {
-  // The page polls /desktop/status and rehydrates this snapshot when the host
-  // reports mode 'web'. Mark the destination explicitly so the widget returns
-  // to the composer instead of reusing its old desktop position.
+function forceReturnToClient() {
   const snapshot = baseSnapshot() || { cfg: {} }
   snapshot.cfg = Object.assign({}, snapshot.cfg, {
     displayMode: 'web',
@@ -560,6 +558,30 @@ function returnToClient() {
   writeLine({ type: 'stop', snapshot })
   // Let stdout reach the host before quitting the helper.
   setTimeout(stop, 120)
+}
+
+function returnToClient() {
+  const entry = activeEntry()
+  if (!entry) {
+    forceReturnToClient()
+    return
+  }
+  if (returnFallbackTimer) {
+    clearTimeout(returnFallbackTimer)
+    returnFallbackTimer = 0
+  }
+  try {
+    entry.win.webContents.send('whale:return-client')
+  } catch {
+    forceReturnToClient()
+    return
+  }
+  // Reuse the widget's manual drag-to-input return animation. If the renderer
+  // cannot respond, fall back to the direct snapshot/stop path.
+  returnFallbackTimer = setTimeout(() => {
+    returnFallbackTimer = 0
+    if (activeEntry()) forceReturnToClient()
+  }, 900)
 }
 
 function createTray() {
@@ -600,6 +622,10 @@ function sendConfig(snapshot) {
 
 function stop() {
   hostGone = true
+  if (returnFallbackTimer) {
+    clearTimeout(returnFallbackTimer)
+    returnFallbackTimer = 0
+  }
   stopGlobalKeys()
   stopDesktopWindows()
   stopMouseFollow()

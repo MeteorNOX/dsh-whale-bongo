@@ -28,6 +28,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onRecall(callback) {
     ipcRenderer.on('whale:recall', () => callback())
   },
+  onReturnClient(callback) {
+    ipcRenderer.on('whale:return-client', () => callback())
+  },
   requestDisplay(payload) {
     ipcRenderer.send('whale:request-display', payload || {})
   },

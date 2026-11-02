@@ -139,6 +139,11 @@ bridge.onRecall(() => {
   try { api?.recall?.() } catch {}
 })
 
+bridge.onReturnClient(() => {
+  const api = window.__dshWhaleBongoDesktopInput
+  try { api?.returnToClient?.() } catch {}
+})
+
 bridge.onReleaseAll(() => {
   const api = window.__dshWhaleBongoDesktopInput
   try { api?.releaseAll?.() } catch {}
