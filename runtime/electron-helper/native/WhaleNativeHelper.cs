@@ -208,14 +208,17 @@ class WhaleNativeHelper
     {
         bool[] previous = new bool[256];
         bool registered = false;
-        IntPtr hwnd = CreateWindowEx(0, "STATIC", "", 0x80000000, 0, 0, 0, 0,
-            new IntPtr(-3), IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+        // Raw Input is not delivered to message-only or hidden windows on Windows.
+        // Keep this tool window visible but off-screen; WS_EX_TOOLWINDOW hides it from Alt-Tab.
+        IntPtr hwnd = CreateWindowEx(0x00000080, "STATIC", "", 0x00CF0000, -2000, -2000, 100, 100,
+            IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
         if (hwnd == IntPtr.Zero)
         {
             WriteLine("{\"type\":\"error\",\"message\":\"raw input window creation failed: " +
                 Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture) + "\"}");
             return;
         }
+        ShowWindow(hwnd, 5);
 
         RAWINPUTDEVICE[] devices = new RAWINPUTDEVICE[1];
         devices[0].usUsagePage = 0x01;
@@ -599,6 +602,8 @@ class WhaleNativeHelper
         uint style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
     [DllImport("user32.dll")]
     private static extern bool DestroyWindow(IntPtr hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int command);
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool RegisterRawInputDevices(RAWINPUTDEVICE[] devices, uint count, uint size);
     [DllImport("user32.dll", SetLastError = true)]
