@@ -209,7 +209,7 @@ v0.3.0 新增：挂件可以从 DSH 页面里“跳出来”，作为一个透�
 - 桌面菜单和客户端菜单使用同一套设置；
 - 设置、图片、音效和当前打字节奏会同步；
 - 桌面模式使用全局键盘监听，在 DSH 或其他应用里打字都会触发动作（Windows；macOS 桌面模式使用 DSH 页面按键）；
-- 桌面 helper 的窗口枚举、全局键盘和鼠标跟随由原生进程 `whale-native-helper.exe` 负责（Windows，键盘使用 Raw Input）；macOS 使用 Quartz 原生采样器；
+- 桌面 helper 的窗口枚举和鼠标跟随由原生进程 `whale-native-helper.exe` 负责（Windows）；全局键盘暂时继续使用已验证的 PowerShell `global-keys.ps1`，因为 Raw Input 在该桌面会话中收不到物理按键；macOS 使用 Quartz 原生采样器；
 - DSH 客户端内也通过 Host 全局键盘流补发按键，搜狗输入法等拦截页面 keydown 时仍能驱动挂件；Host 侧继续保持原有 PowerShell 监控；
 - macOS 桌面模式需要安装 Xcode Command Line Tools（`xcrun clang`）；首次启用会在私有临时目录编译采样器，不申请屏幕录制或辅助功能权限；
 - 桌面/客户端切换手势：客户端拖到窗口右下角保持 0.5 秒进入桌面；桌面拖到输入框中心吸附点保持 0.5 秒回到客户端；
