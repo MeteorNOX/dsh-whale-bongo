@@ -23,6 +23,7 @@ const fs = require('node:fs')
 const http = require('node:http')
 const { spawn } = require('node:child_process')
 const { windowsToOverlayDip } = require('./window-dip')
+const { createMacOSMonitor } = require('./macos-monitor')
 
 const HOST_PID = Number(process.env.DSH_WHALE_HOST_PID || 0)
 const HOST_POLL_MS = 2000
@@ -56,6 +57,13 @@ let tray = null
 let returnFallbackTimer = 0
 let mouseFollowOffset = null
 let mouseFollowStarted = false
+const macMonitor = createMacOSMonitor({
+  onSample(sample) {
+    if (Array.isArray(sample.windows)) publishDesktopWindows(sample.windows)
+    if (sample.mouse && mouseFollowStarted) publishMouseFollow(sample.mouse)
+  },
+  onError(message) { writeLine({ type: 'error', message }) },
+})
 
 if (SOFTWARE_RENDER) {
   app.disableHardwareAcceleration()
@@ -153,11 +161,13 @@ function toOverlayDipFor(entry, list) {
     width: bounds.width,
     height: bounds.height,
     scaleFactor: display.scaleFactor,
-    // A candidate window may live on a display with a different DPI. Passing
-    // null lets Electron pick the scale of the display containing the rect.
-    toDipRect: typeof screen.screenToDipRect === 'function'
-      ? (rect) => screen.screenToDipRect(null, rect)
-      : null,
+    // macOS window bounds are already logical points. Multiplying or letting
+    // Electron scale them again would offset every snap on Retina displays.
+    toDipRect: process.platform === 'darwin'
+      ? (rect) => rect
+      : (typeof screen.screenToDipRect === 'function'
+        ? (rect) => screen.screenToDipRect(null, rect)
+        : null),
   })
 }
 
@@ -186,7 +196,7 @@ function displayForPhysicalRect(item) {
   const physical = { x: left, y: top, width: right - left, height: bottom - top }
   let dip = physical
   try {
-    if (typeof screen.screenToDipRect === 'function') {
+    if (process.platform !== 'darwin' && typeof screen.screenToDipRect === 'function') {
       dip = screen.screenToDipRect(null, physical) || physical
     }
   } catch {}
@@ -759,28 +769,6 @@ function vkCode(vk) {
   return VK_CODE_MAP[vk] || ('VK_' + vk)
 }
 
-function handleGlobalKeyLine(line) {
-  const parts = line.trim().split('|')
-  if (parts.length !== 6) return
-  const down = parts[0] === '1'
-  const vk = Number(parts[1])
-  if (!Number.isInteger(vk)) return
-  // Mouse buttons, modifiers and lock keys are not typing input.
-  if (vk < 8 || vk === 16 || vk === 17 || vk === 18 || vk === 20 ||
-      vk === 91 || vk === 92 || vk === 144 || vk === 145) return
-  const code = vkCode(vk)
-  const payload = {
-    action: down ? 'down' : 'up',
-    key: code,
-    code: code,
-    ctrlKey: parts[2] === '1',
-    altKey: parts[3] === '1',
-    shiftKey: parts[4] === '1',
-    metaKey: parts[5] === '1',
-  }
-  if (win && !win.isDestroyed()) win.webContents.send('whale:key', payload)
-}
-
 function nativeHelperPath() {
   return path.join(__dirname, 'whale-native-helper.exe')
 }
@@ -795,8 +783,7 @@ function sendNative(command) {
   }
 }
 
-function handleNativeWindows(list) {
-  if (!nativeWindowsActive) return
+function publishDesktopWindows(list) {
   if (!Array.isArray(list)) return
   latestWindowsRaw = list
   if (handoffPromise) return
@@ -807,6 +794,11 @@ function handleNativeWindows(list) {
   if (!entry) return
   latestWindows = toOverlayDipFor(entry, latestWindowsRaw)
   try { entry.win.webContents.send('whale:windows', latestWindows) } catch {}
+}
+
+function handleNativeWindows(list) {
+  if (!nativeWindowsActive) return
+  publishDesktopWindows(list)
 }
 
 function handleNativeKey(message) {
@@ -949,6 +941,12 @@ function stopNativeHelper() {
 }
 
 function startMouseFollow() {
+  if (process.platform === 'darwin') {
+    mouseFollowStarted = true
+    // Wait for a fresh sampler frame: the cached button state may predate
+    // pointerdown.
+    return
+  }
   if (process.platform !== 'win32' || mouseFollowStarted) return
   const entry = activeEntry()
   if (!entry || !entry.win || entry.win.isDestroyed()) return
@@ -974,10 +972,39 @@ function startMouseFollow() {
 function stopMouseFollow() {
   if (!mouseFollowStarted) return
   mouseFollowStarted = false
-  sendNative('mouse:stop')
+  if (process.platform === 'win32') sendNative('mouse:stop')
+}
+
+function publishMouseFollow(mouse) {
+  if (!mouseFollowStarted) return
+  const entry = activeEntry()
+  if (!entry || !entry.win || entry.win.isDestroyed()) return
+  const screenX = Number(mouse.x)
+  const screenY = Number(mouse.y)
+  if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return
+  const left = mouse.left === 1 || mouse.left === true
+  const bounds = entry.win.getContentBounds()
+  const follow = {
+    left: left,
+    x: screenX - bounds.x,
+    y: screenY - bounds.y,
+  }
+  if (mouseFollowOffset) {
+    follow.offsetX = mouseFollowOffset.x
+    follow.offsetY = mouseFollowOffset.y
+  }
+  try { entry.win.webContents.send('whale:mouse-follow', follow) } catch {}
+  if (!left) {
+    mouseFollowOffset = null
+    stopMouseFollow()
+  }
 }
 
 function startDesktopWindows() {
+  if (process.platform === 'darwin') {
+    macMonitor.start()
+    return
+  }
   if (process.platform !== 'win32' || nativeWindowsActive) return
   if (!startNativeHelper()) return
   nativeWindowsActive = true
@@ -985,6 +1012,7 @@ function startDesktopWindows() {
 }
 
 function stopDesktopWindows() {
+  if (macMonitor) macMonitor.stop()
   if (!nativeWindowsActive) return
   nativeWindowsActive = false
   sendNative('windows:stop')

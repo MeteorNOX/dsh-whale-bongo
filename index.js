@@ -132,11 +132,19 @@ export default {
       const keyMonitor = createGlobalKeyMonitor({
         pkgRoot: PKG_ROOT,
         onKey: broadcastKey,
+        onStatus: (status) => {
+          const line = 'event: status' + String.fromCharCode(10) + 'data: ' + JSON.stringify(status) + nl
+          for (const client of Array.from(keyClients)) {
+            try { client.write(line) } catch { keyClients.delete(client) }
+          }
+        },
         log: (message) => console.warn('[dsh-whale-bongo] ' + message),
       })
       const heartbeat = setInterval(() => {
+        const status = keyMonitor.state()
+        const line = 'event: status' + String.fromCharCode(10) + 'data: ' + JSON.stringify(status) + nl
         for (const client of Array.from(keyClients)) {
-          try { client.write(': ping' + nl) } catch { keyClients.delete(client) }
+          try { client.write(line) } catch { keyClients.delete(client) }
         }
       }, 15000)
       heartbeat.unref?.()
@@ -164,6 +172,7 @@ export default {
             'X-Accel-Buffering': 'no',
           })
           res.write(': connected' + nl)
+          res.write('event: status' + String.fromCharCode(10) + 'data: ' + JSON.stringify(keyMonitor.state()) + nl)
           keyClients.add(res)
           const remove = () => keyClients.delete(res)
           req.on('close', remove)

@@ -191,6 +191,7 @@ curl http://127.0.0.1:<DSH端口>/dsh-whale-bongo/health
 - 第一次切到「桌面」且本机没有 Electron 时，页面下方会出现「准备桌面运行时」卡片；点击后自动下载约 138 MB 的 Electron，显示进度并可取消，完成后校验 SHA-256、原子安装并自动进入桌面模式。
 - 运行时准备失败或取消时会留在客户端模式，显示中文原因和重试入口，不会留下半成品；已有安装或 `DSH_WHALE_ELECTRON` / `DSH_WHALE_ELECTRON_DIR` 会直接复用。
 - 下载默认固定 Electron `43.3.0`，优先 npmmirror、失败回退 GitHub；支持 `HTTPS_PROXY` / `https_proxy`（HTTP CONNECT）和 `NO_PROXY`，暂不支持 SOCKS 代理。
+- macOS 桌面模式还需要 Xcode Command Line Tools：首次启用会用 `xcrun clang` 把 `runtime/electron-helper/desktop-macos.m` 编译到私有临时目录。若 `xcrun` 不可用，桌面模式会报错并留在客户端模式；先运行 `xcode-select --install`。
 
 如果 health 正常但挂件不出现：
 1. 确认当前是**对话页**（不是设置页、插件页）。

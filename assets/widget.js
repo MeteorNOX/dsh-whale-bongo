@@ -367,6 +367,7 @@ function mountWhaleBongoWidget(options) {
       height: 140px;
       pointer-events: none;
       z-index: 2147482000;
+      -webkit-app-region: initial;
       --dsnw-skin: #FFEDE6;
       --dsnw-ink: #1C285E;
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -524,14 +525,21 @@ function mountWhaleBongoWidget(options) {
       pointer-events: auto;
       cursor: grab;
       touch-action: none;
+      -webkit-app-region: no-drag;
     }
     #dsh-whale-bongo.is-drag .dsnw-hitbox { cursor: grabbing; }
     #dsh-whale-bongo .dsnw-snap-dots {
       position: fixed;
-      inset: 0;
+      left: 0;
+      top: 0;
+      width: 0;
+      height: 0;
+      overflow: visible;
       z-index: 7;
       pointer-events: none;
+      -webkit-app-region: initial;
     }
+    #dsh-whale-bongo .dsnw-snap-dots:empty { display: none; }
     #dsh-whale-bongo .dsnw-snap-dot {
       position: fixed;
       width: 8px;
@@ -573,6 +581,7 @@ function mountWhaleBongoWidget(options) {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+      -webkit-app-region: no-drag;
       transition: opacity .2s ease, visibility 0s linear .2s;
     }
     #dsh-whale-bongo.is-button-visible .dsnw-menu-btn,
@@ -597,6 +606,7 @@ function mountWhaleBongoWidget(options) {
       color: var(--dsw-alias-label-primary, #eee);
       box-shadow: 0 14px 42px rgba(0, 0, 0, .28);
       pointer-events: auto;
+      -webkit-app-region: no-drag;
       font-size: 12px;
       line-height: 1.5;
       overscroll-behavior: contain;
@@ -733,6 +743,7 @@ function mountWhaleBongoWidget(options) {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+      -webkit-app-region: no-drag;
       transform: translateY(-3px) scale(.985);
       transform-origin: top left;
       transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
@@ -2431,8 +2442,10 @@ function mountWhaleBongoWidget(options) {
       var vh = window.innerHeight
       var maxLeft = Math.max(0, vw - size)
       var maxTop = Math.max(0, vh - imageBottomNorm * size)
+      var minTop = desktopMode && cfg.snap && cfg.snap.ref === 'desktop-window' && cfg.snap.edge === 'top'
+        ? 4 - imageBottomNorm * size : 0
       root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
-      root.style.top = clamp(springAnchorY - size, 0, maxTop).toFixed(2) + 'px'
+      root.style.top = clamp(springAnchorY - size, minTop, maxTop).toFixed(2) + 'px'
 
       var restX = Math.abs(errXAfter)
       var restY = Math.abs(errYAfter)
@@ -2444,7 +2457,7 @@ function mountWhaleBongoWidget(options) {
         springActive = false
         moveSquashArmed = false
         root.style.left = clamp(springAnchorX - size / 2, 0, maxLeft).toFixed(2) + 'px'
-        root.style.top = clamp(springAnchorY - size, 0, maxTop).toFixed(2) + 'px'
+        root.style.top = clamp(springAnchorY - size, minTop, maxTop).toFixed(2) + 'px'
       }
     }
 
@@ -2785,6 +2798,7 @@ function mountWhaleBongoWidget(options) {
       } else {
         cfg.snap = { ref: 'viewport', x: x, y: y }
       }
+      syncDesktopSnapTarget()
       finish()
       return
     }
@@ -3762,7 +3776,7 @@ function mountWhaleBongoWidget(options) {
     var size = cfg.size
     var imageBottom = imageBottomNorm * size
     curX = clamp(drag.ox + dx, 4, window.innerWidth - size - 4)
-    curY = clamp(drag.oy + dy, 4, window.innerHeight - imageBottom)
+    curY = clamp(drag.oy + dy, desktopMode ? 4 - imageBottom : 4, window.innerHeight - imageBottom)
     requestDesktopDisplayAtEdge(event, dx, dy)
     applyFlip()
     cfg.snap = { ref: 'viewport', x: curX, y: curY }
@@ -3935,7 +3949,11 @@ function mountWhaleBongoWidget(options) {
 
   function onKeyDown(event) {
     if (!event.isTrusted) return
-    if (!event.__whaleGlobal && (desktopMode || window.__DSH_WHALE_PAGE_GLOBAL_KEYS)) return
+    if (!event.__whaleGlobal && (desktopMode ? window.__DSH_WHALE_GLOBAL_KEYS : window.__DSH_WHALE_PAGE_GLOBAL_KEYS)) return
+    if (!desktopMode && desktopPageActive) {
+      if (!event.repeat) postDesktopKey('down', event)
+      return
+    }
     if (!widgetVisible()) return
     if (event.key === 'Escape' && menuOpen) {
       if (activeSelect) closeAllSelects(true)
@@ -3960,7 +3978,11 @@ function mountWhaleBongoWidget(options) {
     beginInput(id, hands[handIndex], sameKey, code)
   }
   function onKeyUp(event) {
-    if (!event.__whaleGlobal && (desktopMode || window.__DSH_WHALE_PAGE_GLOBAL_KEYS)) return
+    if (!event.__whaleGlobal && (desktopMode ? window.__DSH_WHALE_GLOBAL_KEYS : window.__DSH_WHALE_PAGE_GLOBAL_KEYS)) return
+    if (!desktopMode && desktopPageActive) {
+      postDesktopKey('up', event)
+      return
+    }
     var code = event.code || event.key
     if (!code) return
     endInput('key:' + code)
@@ -4274,6 +4296,7 @@ function mountWhaleBongoWidget(options) {
   }
 
   function setDesktopWindows(list) {
+    var previousWindow = cfg.snap && cfg.snap.ref === 'desktop-window' ? findDesktopWindow(cfg.snap.hwnd) : null
     var next = []
     if (Array.isArray(list)) {
       for (var i = 0; i < list.length; i++) {
@@ -4313,7 +4336,8 @@ function mountWhaleBongoWidget(options) {
     }
     if (drag) return
     if (cfg.snap && cfg.snap.ref === 'desktop-window') {
-      if (!findDesktopWindow(cfg.snap.hwnd)) {
+      var attachedWindow = findDesktopWindow(cfg.snap.hwnd)
+      if (!attachedWindow) {
         // The window may have just crossed to another monitor. The helper
         // rehomes the overlay as soon as it sees the new raw rectangle; keep
         // the attachment during that handoff instead of collapsing it to the
@@ -4327,11 +4351,13 @@ function mountWhaleBongoWidget(options) {
         saveCfg()
       }
       desktopSnapMissingAt = 0
+      if (previousWindow && attachedWindow &&
+          previousWindow.left === attachedWindow.left && previousWindow.top === attachedWindow.top &&
+          previousWindow.right === attachedWindow.right && previousWindow.bottom === attachedWindow.bottom) return
       lastPlaceKey = ''
-      // Window following is a live attachment, not a snap transition. A very
-      // short CSS interpolation bridges the 30–60Hz window samples without
-      // the lag of the client position spring.
-      root.style.transition = 'left 45ms linear, top 45ms linear'
+      // A new CSS transition on every native sample never catches a fast
+      // moving window. Pin the base to each sample instead.
+      root.style.transition = ''
       var previousFollowX = lastDesktopFollowX
       place(false)
       lastDesktopFollowX = curX
@@ -4372,8 +4398,19 @@ function mountWhaleBongoWidget(options) {
     try {
       globalKeySource = new window.EventSource(BASE + '/key-stream')
       globalKeySource.onopen = function () {
-        window.__DSH_WHALE_PAGE_GLOBAL_KEYS = true
+        // An open SSE connection only means the Host is reachable. Native
+        // keyboard support is announced separately; macOS must keep using
+        // trusted page events instead of suppressing them here.
+        window.__DSH_WHALE_PAGE_GLOBAL_KEYS = false
       }
+      globalKeySource.addEventListener('status', function (message) {
+        try {
+          var status = JSON.parse(message.data)
+          var wasGlobal = window.__DSH_WHALE_PAGE_GLOBAL_KEYS
+          window.__DSH_WHALE_PAGE_GLOBAL_KEYS = status.supported === true && status.active === true
+          if (wasGlobal && !window.__DSH_WHALE_PAGE_GLOBAL_KEYS) releaseAll()
+        } catch (e) { window.__DSH_WHALE_PAGE_GLOBAL_KEYS = false }
+      })
       globalKeySource.onerror = function () {
         window.__DSH_WHALE_PAGE_GLOBAL_KEYS = false
       }
@@ -4381,6 +4418,7 @@ function mountWhaleBongoWidget(options) {
         try { handleGlobalKeyPayload(JSON.parse(message.data)) } catch (e) {}
       }
     } catch (e) {
+      window.__DSH_WHALE_PAGE_GLOBAL_KEYS = false
       globalKeySource = null
     }
   }
@@ -4389,6 +4427,7 @@ function mountWhaleBongoWidget(options) {
     if (!globalKeySource) return
     try { globalKeySource.close() } catch (e) {}
     globalKeySource = null
+    window.__DSH_WHALE_PAGE_GLOBAL_KEYS = false
   }
 
   function setMouseFollow(payload) {
@@ -4400,7 +4439,8 @@ function mountWhaleBongoWidget(options) {
       if (!isFinite(offsetX)) offsetX = size / 2
       if (!isFinite(offsetY)) offsetY = size / 2
       var x = clamp(Number(payload.x) - offsetX, 4, Math.max(4, window.innerWidth - size - 4))
-      var y = clamp(Number(payload.y) - offsetY, 4, Math.max(4, window.innerHeight - size - 4))
+      var imageBottom = imageBottomNorm * size
+      var y = clamp(Number(payload.y) - offsetY, 4 - imageBottom, Math.max(4, window.innerHeight - imageBottom))
       if (!isFinite(x) || !isFinite(y)) return
       mouseFollowing = true
       drag = null
@@ -4415,9 +4455,20 @@ function mountWhaleBongoWidget(options) {
       applyFlip()
       resetFollowBounce()
       setMoveImmediate(x, y)
-    } else {
+    }
+    if (!payload.left) {
+      if (isFinite(Number(payload.x)) && isFinite(Number(payload.y))) {
+        var releaseSize = cfg.size
+        var releaseOffsetX = Number(payload.offsetX)
+        var releaseOffsetY = Number(payload.offsetY)
+        if (!isFinite(releaseOffsetX)) releaseOffsetX = releaseSize / 2
+        if (!isFinite(releaseOffsetY)) releaseOffsetY = releaseSize / 2
+        curX = clamp(Number(payload.x) - releaseOffsetX, 4, Math.max(4, window.innerWidth - releaseSize - 4))
+        curY = clamp(Number(payload.y) - releaseOffsetY, 4 - imageBottomNorm * releaseSize, Math.max(4, window.innerHeight - imageBottomNorm * releaseSize))
+      }
       mouseFollowing = false
-      cfg.snap = { ref: 'viewport', x: curX, y: curY }
+      // Finish the cross-window drag with the same edge snapping as pointerup.
+      magnetize(curX, curY)
       saveCfg()
       applyFlip()
       lastPlaceKey = ''

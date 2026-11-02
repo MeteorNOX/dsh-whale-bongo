@@ -18,6 +18,9 @@ foreach ($k in $keys) {
   $prev[$k] = (([DshWhaleKeyState]::GetAsyncKeyState($k) -band 0x8000) -ne 0)
 }
 
+[Console]::Out.WriteLine('ready')
+[Console]::Out.Flush()
+
 while ($true) {
   $ctrl = (([DshWhaleKeyState]::GetAsyncKeyState(0x11) -band 0x8000) -ne 0)
   $alt = (([DshWhaleKeyState]::GetAsyncKeyState(0x12) -band 0x8000) -ne 0)

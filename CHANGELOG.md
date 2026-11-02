@@ -14,6 +14,14 @@
 - 桌面 helper 的窗口枚举和鼠标跟随合并到原生进程 `whale-native-helper.exe`；全局键盘暂时保留原有 PowerShell sidecar，避免原生按键采样未通过实键验证时丢失输入。
 - 增加可选的 `DSH_WHALE_SOFTWARE_RENDER=1`（软件合成）和 `DSH_WHALE_FRAME_RATE=30`（30–120，默认 60）性能排查开关；默认仍使用 GPU 和 60 帧。
 
+### 修复
+
+- 修复 macOS 桌面模式无法吸附窗口：新增 Quartz 原生采样器 `desktop-macos.m`，由 `macos-monitor.js` 通过 `xcrun clang` 编译到私有缓存；窗口和鼠标使用逻辑坐标，Retina 屏幕不再做二次缩放。需要安装 Xcode Command Line Tools。
+- 修复 macOS 页面打字被全局键盘流误拦截：SSE 连接建立不再等同于原生键盘可用，Host 通过 `status` 事件报告 `supported/active`；只有两者都为真时才停用页面按键，断线、退出或重连会自动释放并回退。
+- 修复桌面挂件挡住 DSH 窗口拖动：根节点恢复 `-webkit-app-region: initial`，只有挂件拖动区、菜单和下拉浮层使用 `no-drag`；吸附点层改为零尺寸，避免透明层覆盖整个窗口。
+- 修复 macOS 的窗口跟随和松手吸附：窗口采样直接落位，去掉每个采样叠加的 CSS 过渡；松手时使用最后一次鼠标坐标并执行边缘吸附；顶部吸附允许挂件上缘超出视口，保证图片底边贴住窗口。
+- 新增 `tests/macos-regressions.test.cjs`（21 项），覆盖页面按键、SSE 状态回退、Retina 坐标、窗口吸附、鼠标松手、Windows DPI 和跟随动画。
+
 ## v0.3.2
 
 ### 新增与修复

@@ -27,14 +27,30 @@ function vkCode(vk) {
   return VK_CODE_MAP[vk] || ('VK_' + vk)
 }
 
-export function createGlobalKeyMonitor({ pkgRoot, onKey, log = () => {} }) {
+export function createGlobalKeyMonitor({ pkgRoot, onKey, onStatus = () => {}, log = () => {} }) {
   let child = null
   let buffer = ''
   let restartTimer = null
   let stopped = false
   let failures = 0
+  let active = false
+
+  function state() {
+    return { supported: process.platform === 'win32', active }
+  }
+
+  function setActive(value) {
+    if (active === value) return
+    active = value
+    try { onStatus(state()) } catch (error) { log('global key status: ' + String(error)) }
+  }
 
   function handleLine(line) {
+    if (line.trim() === 'ready') {
+      failures = 0
+      setActive(true)
+      return
+    }
     const parts = line.trim().split('|')
     if (parts.length !== 6) return
     const down = parts[0] === '1'
@@ -74,8 +90,10 @@ export function createGlobalKeyMonitor({ pkgRoot, onKey, log = () => {} }) {
       log('global key monitor failed: ' + String(error))
       return
     }
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk) => {
+    const proc = child
+    proc.stdout.setEncoding('utf8')
+    proc.stdout.on('data', (chunk) => {
+      if (child !== proc || stopped) return
       buffer += chunk
       let index
       while ((index = buffer.indexOf('\n')) !== -1) {
@@ -89,7 +107,15 @@ export function createGlobalKeyMonitor({ pkgRoot, onKey, log = () => {} }) {
       const text = String(chunk).trim()
       if (text) log('global key stderr: ' + text.slice(0, 500))
     })
-    child.once('exit', () => {
+    proc.once('error', () => {
+      if (child === proc) {
+        child = null
+        setActive(false)
+      }
+    })
+    proc.once('close', () => {
+      if (child !== proc) return
+      setActive(false)
       child = null
       buffer = ''
       if (stopped) return
@@ -106,10 +132,12 @@ export function createGlobalKeyMonitor({ pkgRoot, onKey, log = () => {} }) {
   function start() {
     stopped = false
     spawnMonitor()
+    if (process.platform !== 'win32') setActive(false)
   }
 
   function stop() {
     stopped = true
+    setActive(false)
     if (restartTimer) {
       clearTimeout(restartTimer)
       restartTimer = null
@@ -121,5 +149,5 @@ export function createGlobalKeyMonitor({ pkgRoot, onKey, log = () => {} }) {
     buffer = ''
   }
 
-  return { start, stop }
+  return { start, stop, state }
 }
