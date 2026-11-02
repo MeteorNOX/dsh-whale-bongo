@@ -2418,14 +2418,14 @@ function mountWhaleBongoWidget(options) {
 
   function stepFollowBounce(dt, q) {
     var stiffness = 420 + 180 * q
-    // q=0.5 used to give zero damping, leaving both axes ringing for seconds.
-    // Keep a visible overshoot but let the motion settle with the window.
-    var damping = 10 - 0.8 * q
+    // Keep enough damping to settle with the window, but leave a visible
+    // overshoot; lower damping feels springier instead of rigid.
+    var damping = 8 - 0.6 * q
     // Vertical is capped in scale space (6% at q=5), not angle space. Use a
     // slightly faster spring so the body recovers as soon as the window stops,
     // instead of staying tall for the whole horizontal oscillation.
     var stretchStiffness = 520 + 220 * q
-    var stretchDamping = 12 - 0.8 * q
+    var stretchDamping = 10 - 0.6 * q
     if (Math.abs(followLean) > 0.01 || Math.abs(followLeanV) > 0.05) {
       followLeanV += (-followLean * stiffness - followLeanV * damping) * dt
       var leanLimit = 9 * q
