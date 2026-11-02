@@ -1652,6 +1652,9 @@ function mountWhaleBongoWidget(options) {
   var moveSquashV = 0
   var moveSquashArmed = false
   var bodyStretch = 0
+  var followSquash = 0
+  var followSquashV = 0
+  var lastDesktopFollowX = null
   var lastProbeCard = null
   var lastProbeLeft = 0
   var lastProbeTop = 0
@@ -2324,6 +2327,48 @@ function mountWhaleBongoWidget(options) {
     return clamp(numberOr(cfg.imageQBounceLevel, 5) / 10, 0, 1)
   }
 
+  function applyMoveShellTransform(q) {
+    if (!moveShell) return
+    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28) * (1 + followSquash)
+    var scaleY = (1 - moveSquash) * (1 + bodyStretch)
+    if (Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005) {
+      moveShell.style.transform = 'scale(' + scaleX.toFixed(4) + ',' + scaleY.toFixed(4) + ')'
+    } else {
+      moveShell.style.transform = ''
+    }
+  }
+
+  function resetFollowBounce() {
+    followSquash = 0
+    followSquashV = 0
+    lastDesktopFollowX = null
+    applyMoveShellTransform(moveBounceRatio())
+  }
+
+  // Window following is a direct placement, so it bypasses the position
+  // spring. Pulse only horizontal squash for that motion; scaleY stays 1 so
+  // there is no vertical overshoot.
+  function pulseFollowBounce(dx) {
+    var q = moveBounceRatio()
+    followSquashV += clamp(Number(dx) * (0.18 + 0.12 * q), -2.2, 2.2)
+  }
+
+  function stepFollowBounce(dt, q) {
+    if (Math.abs(followSquash) <= 0.0005 && Math.abs(followSquashV) <= 0.01) {
+      followSquash = 0
+      followSquashV = 0
+      return
+    }
+    var stiffness = 150 + 70 * q
+    var damping = 13 - 2 * q
+    followSquashV += (-followSquash * stiffness - followSquashV * damping) * dt
+    followSquash = clamp(followSquash + followSquashV * dt, -0.09, 0.09)
+    if (Math.abs(followSquash) < 0.0005 && Math.abs(followSquashV) < 0.01) {
+      followSquash = 0
+      followSquashV = 0
+    }
+  }
+
   function setMoveImmediate(x, y) {
     var size = cfg.size
     // 位置弹簧与落地挤压共用同一个底部中心锚点。
@@ -2338,7 +2383,7 @@ function mountWhaleBongoWidget(options) {
     moveSquashV = 0
     moveSquashArmed = false
     bodyStretch = 0
-    if (moveShell) moveShell.style.transform = ''
+    applyMoveShellTransform(moveBounceRatio())
     root.style.left = x.toFixed(2) + 'px'
     root.style.top = y.toFixed(2) + 'px'
   }
@@ -2431,15 +2476,8 @@ function mountWhaleBongoWidget(options) {
       }
     }
 
-    if (moveShell) {
-      var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
-      var scaleY = (1 - moveSquash) * (1 + bodyStretch)
-      if (Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005) {
-        moveShell.style.transform = 'scale(' + scaleX.toFixed(4) + ',' + scaleY.toFixed(4) + ')'
-      } else {
-        moveShell.style.transform = ''
-      }
-    }
+    stepFollowBounce(dt, q)
+    applyMoveShellTransform(q)
   }
 
   function rememberCardRect(card, rect) {
@@ -3695,6 +3733,7 @@ function mountWhaleBongoWidget(options) {
     clearModeHold()
     root.style.transition = ''
     hideSnapDots()
+    resetFollowBounce()
     if (springActive) {
       curX = springAnchorX - cfg.size / 2
       curY = springAnchorY - cfg.size
@@ -4222,6 +4261,7 @@ function mountWhaleBongoWidget(options) {
     cfg.snap = { ref: 'viewport', x: x, y: y }
     saveCfg()
     lastPlaceKey = ''
+    resetFollowBounce()
     root.style.display = ''
     place(false)
     applyFlip()
@@ -4281,7 +4321,10 @@ function mountWhaleBongoWidget(options) {
         // the attachment during that handoff instead of collapsing it to the
         // old screen edge.
         if (!desktopSnapMissingAt) desktopSnapMissingAt = Date.now()
-        if (Date.now() - desktopSnapMissingAt < 2000) return
+        if (Date.now() - desktopSnapMissingAt < 2000) {
+          lastDesktopFollowX = null
+          return
+        }
         cfg.snap = { ref: 'viewport', x: curX, y: curY }
         saveCfg()
       }
@@ -4291,9 +4334,19 @@ function mountWhaleBongoWidget(options) {
       // short CSS interpolation bridges the 30–60Hz window samples without
       // the lag of the client position spring.
       root.style.transition = 'left 45ms linear, top 45ms linear'
+      var previousFollowX = lastDesktopFollowX
       place(false)
+      lastDesktopFollowX = curX
+      if (previousFollowX !== null) {
+        var followDx = curX - previousFollowX
+        if (Math.abs(followDx) > 0.2) {
+          pulseFollowBounce(followDx)
+          applyMoveShellTransform(moveBounceRatio())
+        }
+      }
     } else {
       desktopSnapMissingAt = 0
+      lastDesktopFollowX = null
     }
   }
 
@@ -4362,6 +4415,7 @@ function mountWhaleBongoWidget(options) {
       lastPlaceKey = ''
       root.style.display = ''
       applyFlip()
+      resetFollowBounce()
       setMoveImmediate(x, y)
     } else {
       mouseFollowing = false
