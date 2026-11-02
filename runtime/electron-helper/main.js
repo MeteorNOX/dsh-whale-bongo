@@ -271,12 +271,23 @@ function rehomeTo(display, options) {
   const target = display || currentDisplay()
   if (!target) return false
   const area = target.workArea
-  const same = activeDisplay && activeDisplay.id === target.id
+  const bounds = win.getContentBounds()
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }
+  // activeDisplay is only a cached intent. The native window may have been
+  // moved by the OS, so derive the actual monitor from its bounds as well.
+  // Otherwise a stale cache can treat secondary->primary as a same-display
+  // recall and skip the fade while the window is still on the other monitor.
+  const actualDisplay = typeof screen.getDisplayNearestPoint === 'function'
+    ? screen.getDisplayNearestPoint(center)
+    : target
+  const same = Boolean(activeDisplay) &&
+    activeDisplay.id === target.id &&
+    actualDisplay.id === target.id
   const force = Boolean(options && options.force)
   const recall = Boolean(options && options.recall)
   if (same && !force && !recall) return false
   if (displaySwitchPending) return true
-  const switching = !same
+  const switching = actualDisplay.id !== target.id
   const commit = () => {
     activeDisplay = target
     rehoming = true

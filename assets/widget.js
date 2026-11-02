@@ -4099,8 +4099,15 @@ function mountWhaleBongoWidget(options) {
       // instead of jumping by the width of the old screen.
       var pointer = info && info.pointer
       if (pointer && isFinite(Number(pointer.x)) && isFinite(Number(pointer.y))) {
-        var vw = window.innerWidth
-        var vh = window.innerHeight
+        // innerWidth/innerHeight can still describe the old monitor when the
+        // display notification arrives, especially when expanding from a
+        // scaled secondary display back to the primary. Clamp in the target
+        // display's DIP space instead of the stale viewport, otherwise the pet
+        // is pinned to the old-sized edge before the resize settles.
+        var targetWidth = Number(info.bounds && info.bounds.width)
+        var targetHeight = Number(info.bounds && info.bounds.height)
+        var vw = isFinite(targetWidth) && targetWidth > 0 ? targetWidth : window.innerWidth
+        var vh = isFinite(targetHeight) && targetHeight > 0 ? targetHeight : window.innerHeight
         var size = cfg.size
         var imageBottom = imageBottomNorm * size
         var grabX = drag.x - drag.ox
