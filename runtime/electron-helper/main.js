@@ -17,7 +17,7 @@ try {
   process.exit(3)
 }
 
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage } = electron
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, desktopCapturer, session } = electron
 const path = require('node:path')
 const fs = require('node:fs')
 const http = require('node:http')
@@ -55,6 +55,7 @@ let handoffSequence = 0
 let resettingBounds = false
 let tray = null
 let returnFallbackTimer = 0
+let audioCaptureHandlerInstalled = false
 let mouseFollowOffset = null
 let mouseFollowStarted = false
 const macMonitor = createMacOSMonitor({
@@ -259,6 +260,7 @@ function createOverlay(display, options) {
       nodeIntegration: false,
       sandbox: false,
       backgroundThrottling: false,
+      autoplayPolicy: 'no-user-gesture-required',
     },
   })
   const entry = {
@@ -347,6 +349,9 @@ function activateEntry(entry, options) {
   if (!entry || !entry.win || entry.win.isDestroyed()) return false
   const old = activeEntry()
   if (old === entry) return false
+  if (old && old.win && !old.win.isDestroyed()) {
+    try { old.win.webContents.send('whale:audio-beat', { enabled: false, platform: process.platform }) } catch {}
+  }
   activeEntryRef = entry
   activeDisplay = entry.display
   win = entry.win
@@ -372,6 +377,7 @@ function activateEntry(entry, options) {
   }, 24)
   sendDisplayTo(entry)
   sendWindowsTo(entry)
+  sendAudioBeatState(entry)
   if (!(options && options.silent)) writeLine({ type: 'active-display', id: entry.id })
   return true
 }
@@ -453,6 +459,52 @@ function buildSnapshot(target, options) {
 function sendConfigTo(entry, snapshot) {
   if (!entry || !entry.win || entry.win.isDestroyed()) return
   try { entry.win.webContents.send('whale:config', snapshot) } catch {}
+}
+
+function audioBeatEnabled() {
+  const cfg = latestConfig && latestConfig.cfg
+  return !cfg || cfg.audioBeat !== false
+}
+
+function sendAudioBeatState(entry) {
+  if (!entry || entry !== activeEntry() || !entry.win || entry.win.isDestroyed()) return
+  try {
+    entry.win.webContents.send('whale:audio-beat', {
+      enabled: audioBeatEnabled(),
+      platform: process.platform,
+    })
+  } catch {}
+}
+
+function setupAudioCapture() {
+  if (audioCaptureHandlerInstalled) return
+  if (!session || !desktopCapturer || typeof session.defaultSession.setDisplayMediaRequestHandler !== 'function') return
+  audioCaptureHandlerInstalled = true
+  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 0, height: 0 },
+        fetchWindowIcons: false,
+      })
+      const primaryId = String(screen.getPrimaryDisplay().id)
+      const source = sources.find((item) => String(item.display_id) === primaryId) || sources[0]
+      if (!source) {
+        callback({})
+        return
+      }
+      const payload = { video: source }
+      // Electron loopback capture is supported on Windows and recent macOS.
+      // On unsupported platforms the renderer reports a clean error instead
+      // of silently pretending the feature works.
+      if (process.platform === 'win32' || process.platform === 'darwin') payload.audio = 'loopback'
+      callback(payload)
+    } catch (error) {
+      process.stderr.write('[whale helper] display media request failed: ' +
+        String(error && error.message ? error.message : error) + String.fromCharCode(10))
+      callback({})
+    }
+  })
 }
 
 function activateDisplay(display, options) {
@@ -630,6 +682,7 @@ function sendConfig(snapshot) {
   pendingConfig = snapshot || null
   if (pendingConfig) latestConfig = pendingConfig
   sendConfigTo(activeEntry(), pendingConfig)
+  sendAudioBeatState(activeEntry())
   if (pendingConfig && pendingConfig.followMouse && activeEntry()) {
     mouseFollowOffset = null
     startMouseFollow()
@@ -1133,6 +1186,7 @@ function handleDisplayChange() {
 }
 
 app.whenReady().then(() => {
+  setupAudioCapture()
   createWindow()
   createTray()
   startBridge()
@@ -1156,6 +1210,7 @@ app.whenReady().then(() => {
       }
       sendWindowsTo(entry)
       sendDisplayTo(entry)
+      sendAudioBeatState(entry)
       writeLine({ type: 'ready' })
     }
   })
@@ -1184,6 +1239,7 @@ app.whenReady().then(() => {
     if (!entry || entry !== activeEntry()) return
     pendingConfig = snapshot || null
     latestConfig = pendingConfig
+    sendAudioBeatState(entry)
     writeLine({ type: 'config', snapshot: pendingConfig })
   })
   ipcMain.on('whale:request-anchor', (event) => {

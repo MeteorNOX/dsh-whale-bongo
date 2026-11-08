@@ -9,6 +9,63 @@ let mounted = false
 let configTimer = 0
 let pendingSnapshot = null
 let interactive = false
+let audioBeatDetector = null
+let audioBeatWanted = false
+let audioBeatStatus = 'stopped'
+let audioBeatError = ''
+
+function audioBeatApi() {
+  return window.__dshWhaleBongoDesktopInput || null
+}
+
+function publishAudioBeatStatus(state, detail) {
+  audioBeatStatus = state || 'stopped'
+  audioBeatError = detail || ''
+  window.__DSH_WHALE_AUDIO_BEAT_STATUS = { state: audioBeatStatus, error: audioBeatError }
+  const api = audioBeatApi()
+  try { api?.setAudioBeatStatus?.(audioBeatStatus, audioBeatError) } catch {}
+}
+
+function stopAudioBeat() {
+  audioBeatWanted = false
+  if (audioBeatDetector) {
+    try { audioBeatDetector.stop() } catch {}
+  }
+  const api = audioBeatApi()
+  try { api?.setAudioBeatEnabled?.(false) } catch {}
+}
+
+function startAudioBeat() {
+  if (!audioBeatWanted || !window.createWhaleAudioBeat) return
+  if (!audioBeatDetector) {
+    audioBeatDetector = window.createWhaleAudioBeat({
+      onBeat(payload) {
+        if (!audioBeatWanted) return
+        const strength = payload && isFinite(payload.strength) ? payload.strength : 0.5
+        window.__DSH_WHALE_AUDIO_BEAT = payload
+        const api = audioBeatApi()
+        try { api?.beat?.(strength) } catch {}
+      },
+      onStatus(payload) {
+        publishAudioBeatStatus(payload && payload.state, payload && payload.error)
+      },
+    })
+  }
+  const api = audioBeatApi()
+  try { api?.setAudioBeatEnabled?.(true) } catch {}
+  audioBeatDetector.start()
+}
+
+function applyAudioBeatState(payload) {
+  const enabled = !payload || payload.enabled !== false
+  window.__DSH_WHALE_AUDIO_BEAT_ENABLED = enabled
+  if (!enabled) {
+    stopAudioBeat()
+    return
+  }
+  audioBeatWanted = true
+  startAudioBeat()
+}
 
 function readSnapshot() {
   let cfg = null
@@ -66,6 +123,11 @@ function applySnapshot(snapshot) {
     window.__dshWhaleBongoDesktopInput = null
     const dispose = window.mountWhaleBongoWidget({ desktop: true })
     window.__dshWhaleBongoDesktopDispose = dispose
+    try {
+      const api = audioBeatApi()
+      api?.setAudioBeatEnabled?.(audioBeatWanted)
+      api?.setAudioBeatStatus?.(audioBeatStatus, audioBeatError)
+    } catch {}
     try { bridge.rendererMounted() } catch {}
   } catch (error) {
     try {
@@ -104,6 +166,10 @@ bridge.onBlur(() => {
 
 bridge.onGlobalKeys(() => {
   window.__DSH_WHALE_GLOBAL_KEYS = true
+})
+
+bridge.onAudioBeat((payload) => {
+  applyAudioBeatState(payload || {})
 })
 
 bridge.onMouseFollow((payload) => {
@@ -159,6 +225,7 @@ bridge.onKey((payload) => {
 })
 
 window.addEventListener('beforeunload', () => {
+  try { audioBeatDetector?.stop?.() } catch {}
   try {
     window.__dshWhaleBongoDesktopDispose?.()
   } catch {}

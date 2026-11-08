@@ -156,6 +156,7 @@ function mountWhaleBongoWidget(options) {
     flipSplitPct: 50,
     filterShortcutKeys: false,
     typingAngleMode: 'position-split',
+    audioBeat: true,
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -278,6 +279,7 @@ function mountWhaleBongoWidget(options) {
     out.flipMode = out.flipMode === 'custom' || out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
+    out.audioBeat = out.audioBeat !== false
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
@@ -1104,6 +1106,8 @@ function mountWhaleBongoWidget(options) {
       line-height: 1.4;
       word-break: break-all;
     }
+    #dsh-whale-bongo .dsnw-image-name.is-active { color: var(--dsw-alias-brand-primary, #4d6bfe); }
+    #dsh-whale-bongo .dsnw-image-name.is-error { color: #ff8a80; }
     #dsh-whale-bongo button:focus-visible,
     #dsh-whale-bongo input:focus-visible {
       outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe);
@@ -1240,6 +1244,12 @@ function mountWhaleBongoWidget(options) {
             '<input type="checkbox" data-filter-shortcuts>' +
             '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
           '</label>' +
+          '<label class="dsnw-toggle-row">' +
+            '<span class="dsnw-toggle-label">桌面模式随系统声音律动</span>' +
+            '<input type="checkbox" data-audio-beat>' +
+            '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
+          '</label>' +
+          '<p class="dsnw-image-name" data-audio-beat-status>桌面模式默认开启</p>' +
           '<div class="dsnw-subhead">打字时手手角度偏移</div>' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">偏移方式</span>' +
@@ -1285,6 +1295,8 @@ function mountWhaleBongoWidget(options) {
   var flipModeSelect = root.querySelector('[data-select="flipMode"]')
   var typingAngleModeSelect = root.querySelector('[data-select="typingAngleMode"]')
   var filterShortcutsInput = root.querySelector('[data-filter-shortcuts]')
+  var audioBeatInput = root.querySelector('[data-audio-beat]')
+  var audioBeatStatusEl = root.querySelector('[data-audio-beat-status]')
   var displayModeSelect = root.querySelector('[data-select="displayMode"]')
   var flipSettingList = root.querySelector('[data-setting-list="flip"]')
   var menuScroll = root.querySelector('.dsnw-menu-scroll')
@@ -1454,6 +1466,20 @@ function mountWhaleBongoWidget(options) {
     return { min: 0, max: 100, def: 0 }
   }
 
+  function syncAudioBeatStatus() {
+    if (!audioBeatStatusEl) return
+    var text = '桌面模式默认开启'
+    if (!cfg.audioBeat || !audioBeatEnabled) text = '已关闭'
+    else if (!desktopMode) text = '仅在桌面模式生效'
+    else if (audioBeatStatus === 'starting') text = '正在申请系统音频…'
+    else if (audioBeatStatus === 'active') text = '已连接系统音频'
+    else if (audioBeatStatus === 'error') text = audioBeatError || '系统音频不可用'
+    else text = '等待桌面音频'
+    audioBeatStatusEl.textContent = text
+    audioBeatStatusEl.classList.toggle('is-error', audioBeatStatus === 'error' && cfg.audioBeat)
+    audioBeatStatusEl.classList.toggle('is-active', audioBeatStatus === 'active' && cfg.audioBeat)
+  }
+
   function syncSettings() {
     for (var i = 0; i < SETTINGS.length; i++) {
       var item = SETTINGS[i]
@@ -1470,6 +1496,8 @@ function mountWhaleBongoWidget(options) {
     if (flipModeSelect) setSelectValue(flipModeSelect, cfg.flipMode)
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
     if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
+    if (audioBeatInput) audioBeatInput.checked = cfg.audioBeat !== false
+    syncAudioBeatStatus()
     if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
     if (flipSettingList) flipSettingList.hidden = cfg.flipMode !== 'custom'
@@ -1649,6 +1677,10 @@ function mountWhaleBongoWidget(options) {
   var followLeanV = 0
   var followStretch = 0
   var followStretchV = 0
+  var audioBeatPulse = 0
+  var audioBeatEnabled = true
+  var audioBeatStatus = 'stopped'
+  var audioBeatError = ''
   var lastDesktopFollowX = null
   var lastDesktopFollowY = null
   var desktopFollowFrame = 0
@@ -2341,10 +2373,27 @@ function mountWhaleBongoWidget(options) {
     return q
   }
 
+  function pulseAudioBeat(strength) {
+    if (!desktopMode || !cfg.audioBeat) return
+    var s = clamp(numberOr(strength, 0.5), 0.2, 1)
+    audioBeatPulse = Math.max(audioBeatPulse, 0.022 + 0.036 * s)
+  }
+
+  function stepAudioBeat(dt) {
+    if (audioBeatPulse <= 0.0002) {
+      audioBeatPulse = 0
+      return
+    }
+    // Fast attack, quick decay: the widget answers the beat but does not keep
+    // bobbing after the sound has passed.
+    audioBeatPulse *= Math.exp(-dt * 10)
+    if (audioBeatPulse < 0.0002) audioBeatPulse = 0
+  }
+
   function applyMoveShellTransform(q) {
     if (!moveShell) return
-    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
-    var scaleY = (1 - moveSquash) * (1 + bodyStretch) * (1 + followStretch)
+    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28) * (1 + audioBeatPulse * 0.25)
+    var scaleY = (1 - moveSquash) * (1 + bodyStretch) * (1 + followStretch) * (1 + audioBeatPulse)
     var hasScale = Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005
     var hasLean = Math.abs(followLean) > 0.01
     if (!hasScale && !hasLean) {
@@ -2591,6 +2640,7 @@ function mountWhaleBongoWidget(options) {
     }
 
     stepFollowBounce(dt, q)
+    stepAudioBeat(dt)
     applyMoveShellTransform(q)
   }
 
@@ -3360,6 +3410,13 @@ function mountWhaleBongoWidget(options) {
   if (filterShortcutsInput) {
     filterShortcutsInput.addEventListener('change', function () {
       cfg.filterShortcutKeys = Boolean(this.checked)
+      saveCfg()
+      syncSettings()
+    })
+  }
+  if (audioBeatInput) {
+    audioBeatInput.addEventListener('change', function () {
+      cfg.audioBeat = Boolean(this.checked)
       saveCfg()
       syncSettings()
     })
@@ -4357,6 +4414,17 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
+  function setAudioBeatEnabled(enabled) {
+    audioBeatEnabled = enabled !== false
+    syncAudioBeatStatus()
+  }
+
+  function setAudioBeatStatus(state, error) {
+    audioBeatStatus = state || 'stopped'
+    audioBeatError = error || ''
+    syncAudioBeatStatus()
+  }
+
   function setDesktopDisplay(info) {
     if (!desktopMode) return
     var previousDisplay = window.__DSH_WHALE_DESKTOP_DISPLAY
@@ -4735,6 +4803,9 @@ function mountWhaleBongoWidget(options) {
       setDesktopWindows: function (list) { setDesktopWindows(list) },
       setDesktopDisplay: function (info) { setDesktopDisplay(info) },
       setDesktopDisplaySwitch: function (payload) { setDesktopDisplaySwitch(payload) },
+      setAudioBeatEnabled: function (enabled) { setAudioBeatEnabled(enabled) },
+      setAudioBeatStatus: function (state, error) { setAudioBeatStatus(state, error) },
+      beat: function (strength) { pulseAudioBeat(strength) },
       recall: function () { recallDesktopWidget() },
       returnToClient: function () { leaveDesktopForClient(null) },
       setDesktopInputAnchor: function (anchor) { desktopInputAnchor = anchor || null },
@@ -4742,6 +4813,15 @@ function mountWhaleBongoWidget(options) {
     }
     window.__dshWhaleBongoDesktopInput = desktopInputApi
     if (window.__DSH_WHALE_DESKTOP_DISPLAY) setDesktopDisplay(window.__DSH_WHALE_DESKTOP_DISPLAY)
+    if (window.__DSH_WHALE_AUDIO_BEAT_STATUS) {
+      setAudioBeatStatus(
+        window.__DSH_WHALE_AUDIO_BEAT_STATUS.state,
+        window.__DSH_WHALE_AUDIO_BEAT_STATUS.error
+      )
+    }
+    if (typeof window.__DSH_WHALE_AUDIO_BEAT_ENABLED === 'boolean') {
+      setAudioBeatEnabled(window.__DSH_WHALE_AUDIO_BEAT_ENABLED)
+    }
   }
 
   function pageComposerAnchor() {
