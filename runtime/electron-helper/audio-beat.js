@@ -38,10 +38,13 @@
     var samples = null
     var timer = 0
     var baseline = 0
+    var riseBaseline = 0
+    var previousEnergy = 0
     var lastBeatAt = 0
     var startedAt = 0
     var beatCount = 0
     var lastEnergy = 0
+    var lastRise = 0
 
     function status(state, detail) {
       try {
@@ -74,7 +77,10 @@
       analyser = null
       samples = null
       baseline = 0
+      riseBaseline = 0
+      previousEnergy = 0
       lastEnergy = 0
+      lastRise = 0
     }
 
     function sample() {
@@ -93,18 +99,28 @@
       energy /= lastBin
       lastEnergy = energy
 
+      var rise = Math.max(0, energy - previousEnergy)
+      previousEnergy = energy
+      lastRise = rise
+
       var now = Date.now()
-      if (!baseline) baseline = energy
-      // Follow loud passages quickly and let quiet passages decay slowly, so
-      // the threshold adapts to both music and quiet desktop audio.
-      baseline += (energy - baseline) * (energy > baseline ? 0.12 : 0.02)
+      if (!baseline) {
+        baseline = energy
+        riseBaseline = rise
+      }
+      // Track the average bass level, but detect the leading edge of a kick
+      // or bass note. Absolute energy alone stays high through a loud chorus,
+      // so it would either miss beats or pulse continuously.
+      baseline += (energy - baseline) * (energy > baseline ? 0.08 : 0.02)
+      riseBaseline += (rise - riseBaseline) * (rise > riseBaseline ? 0.10 : 0.02)
       if (now - startedAt < 420) return
 
-      var threshold = Math.max(9, baseline * 1.38 + 6)
-      if (energy < threshold || now - lastBeatAt < 170) return
+      var noiseFloor = Math.max(6, baseline * 0.55)
+      var riseThreshold = Math.max(3, riseBaseline * 1.2 + 2)
+      if (rise < riseThreshold || energy < noiseFloor || now - lastBeatAt < 180) return
       lastBeatAt = now
       beatCount += 1
-      var strength = clamp((energy - threshold) / (threshold * 2 + 18), 0.25, 1)
+      var strength = clamp((rise - riseThreshold) / (riseThreshold * 2 + 8), 0.25, 1)
       try {
         if (typeof opts.onBeat === 'function') {
           opts.onBeat({ strength: strength, energy: energy, baseline: baseline, at: now })
@@ -191,6 +207,7 @@
         beats: beatCount,
         energy: lastEnergy,
         baseline: baseline,
+        rise: lastRise,
       }
     }
 
