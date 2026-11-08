@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whale Beat Lab</title>
+  <link rel="stylesheet" href="./beat-lab.css">
+</head>
+<body>
+  <header class="head">
+    <div>
+      <h1>Whale Beat Lab</h1>
+      <p>独立的节拍检测测试页，不属于插件。用同一份 <code>@audio/beat</code> 看计算时间、BPM 和节拍网格。</p>
+    </div>
+    <span class="badge">standalone</span>
+  </header>
+
+  <section class="panel controls">
+    <div class="control-row">
+      <button id="systemBtn" class="primary">采集系统声音</button>
+      <button id="micBtn">麦克风</button>
+      <button id="stopBtn" disabled>停止采集</button>
+      <button id="analyzeBtn" disabled>立即分析</button>
+      <button id="clearBtn">清空</button>
+    </div>
+    <div class="control-row">
+      <label>参考 BPM <input id="expectedBpm" type="number" min="30" max="240" step="0.1" value="120"></label>
+      <label>分析窗口
+        <select id="windowSeconds">
+          <option value="4">4 秒</option>
+          <option value="8" selected>8 秒</option>
+          <option value="12">12 秒</option>
+        </select>
+      </label>
+      <label>自动分析间隔
+        <select id="intervalMs">
+          <option value="1000">1.0 秒</option>
+          <option value="1800" selected>1.8 秒（插件同款）</option>
+          <option value="3000">3.0 秒</option>
+        </select>
+      </label>
+      <button id="clickBtn">生成 120 BPM 点击并分析</button>
+      <label class="file-label">音频文件 <input id="fileInput" type="file" accept="audio/*"></label>
+    </div>
+    <p id="status" class="status">等待采集系统声音、麦克风、测试点击或音频文件。</p>
+  </section>
+
+  <section class="cards">
+    <div class="card"><span>BPM</span><strong id="bpm">--</strong><small id="bpmSub">未分析</small></div>
+    <div class="card"><span>置信度</span><strong id="confidence">--</strong><small>0–1</small></div>
+    <div class="card"><span>计算耗时</span><strong id="compute">--</strong><small id="computeSub">detect() 同步调用</small></div>
+    <div class="card"><span>分析窗口</span><strong id="window">--</strong><small id="windowSub">实际送入检测器的音频</small></div>
+    <div class="card"><span>节拍数</span><strong id="beats">--</strong><small id="beatSub">网格点</small></div>
+    <div class="card"><span>参考误差</span><strong id="error">--</strong><small id="errorSub">与参考 BPM 比较</small></div>
+  </section>
+
+  <section class="panel visuals">
+    <div class="canvas-head">
+      <h2>波形与节拍网格</h2>
+      <span id="sourceLabel">无输入</span>
+    </div>
+    <canvas id="wave" width="1200" height="260"></canvas>
+    <div class="legend"><i class="wave-key"></i>波形 <i class="beat-key"></i>检测到的节拍</div>
+  </section>
+
+  <section class="panel results">
+    <div class="canvas-head">
+      <h2>分析记录</h2>
+      <span>每次调用独立计时</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>时间</th><th>来源</th><th>窗口</th><th>计算</th><th>BPM</th><th>置信度</th><th>节拍</th><th>参考误差</th></tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="9" class="empty">还没有分析记录</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    这个页面不会录音、保存或上传音频；浏览器关闭后缓冲即丢弃。
+    插件内使用 Worker 计算，所以这里的主线程数字是同一算法的计算量参考，不是插件 UI 的帧时间。
+  </footer>
+
+  <script src="../runtime/electron-helper/vendor/beat-detect.js"></script>
+  <script src="./beat-lab.js"></script>
+</body>
+</html>
