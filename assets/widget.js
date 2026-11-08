@@ -1353,6 +1353,16 @@ function mountWhaleBongoWidget(options) {
     if (desktopPageActive || !soundPool.length || cfg.volume <= 0) return
     var audio = soundPool[soundCursor % soundPool.length]
     soundCursor += 1
+    // The desktop helper captures system audio. Mask the detector around the
+    // widget's own click so its sound is never mistaken for a musical beat.
+    if (desktopMode && cfg.audioBeat && audioBeatEnabled &&
+        typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
+      var maskMs = 320
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        maskMs = Math.max(maskMs, audio.duration * 1000 + 120)
+      }
+      try { window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS(maskMs) } catch (e) {}
+    }
     try {
       audio.currentTime = 0
       audio.volume = clamp(cfg.volume / 100, 0, 1)
@@ -2377,31 +2387,10 @@ function mountWhaleBongoWidget(options) {
     return q
   }
 
-  function pressHandsForBeat(strength) {
-    var amount = clamp(numberOr(strength, 0.6), 0.2, 1)
-    for (var i = 0; i < hands.length; i++) {
-      var hand = hands[i]
-      if (hand.down || hand.seq || hand.keys.size > 0) continue
-      hand.manualSquash = false
-      hand.tap = 0
-      hand.downAt = nowMs()
-      setPressed(hand, true)
-      hand.tap = Math.min(1.25, hand.tap + 0.75 * amount)
-      hand.y.velocity = Math.max(0, hand.y.velocity) + 1.8 * amount
-      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 0.9 * amount
-      // Match the visual rhythm of a real pointer press without playing the
-      // click sound: both hands dip together, then the existing press spring
-      // releases them with a short overshoot.
-      releaseHand(hand, 80 + 40 * (1 - amount))
-    }
-    imageSquash.velocity += 0.22 * amount
-  }
-
   function pulseAudioBeat(strength) {
     if (!desktopMode || !cfg.audioBeat || !audioBeatEnabled) return
     var s = clamp(numberOr(strength, 0.5), 0.2, 1)
     audioBeatPulse = Math.max(audioBeatPulse, 0.016 + 0.028 * s)
-    pressHandsForBeat(s)
   }
 
   function stepAudioBeat(dt) {

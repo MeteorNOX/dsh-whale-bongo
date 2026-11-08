@@ -17,6 +17,8 @@
   var TICK_MS = 25
   var MIN_BPM = 60
   var MAX_BPM = 180
+  var SILENCE_RMS = 0.0025
+  var SILENCE_MS = 450
 
   function number(value, fallback) {
     var n = Number(value)
@@ -63,6 +65,9 @@
     var analysisPending = false
     var analysisId = 0
     var analysisDuration = 0
+    var lastSoundAt = 0
+    var currentRms = 0
+    var suppressUntil = 0
 
     function status(state, detail) {
       try {
@@ -75,6 +80,31 @@
           })
         }
       } catch (e) {}
+    }
+
+    function isAudible() {
+      return Boolean(lastSoundAt) && Date.now() - lastSoundAt < SILENCE_MS
+    }
+
+    function clearBeatGrid(notify) {
+      var hadGrid = Boolean(bpm || beatPeriod || nextBeatAt || lastGridAt)
+      bpm = 0
+      confidence = 0
+      beatPeriod = 0
+      nextBeatAt = 0
+      lastGridAt = 0
+      if (notify && hadGrid) status('active')
+    }
+
+    function suppress(ms) {
+      // The widget plays its own press/typing sound through the same system
+      // loopback. Ignore a short window around it so that sound is never
+      // mistaken for a musical beat.
+      var duration = clamp(number(ms, 320), 120, 1500)
+      suppressUntil = Math.max(suppressUntil, Date.now() + duration)
+      beatPeriod = 0
+      nextBeatAt = 0
+      lastGridAt = 0
     }
 
     function release() {
@@ -122,6 +152,9 @@
       beatPeriod = 0
       nextBeatAt = 0
       lastGridAt = 0
+      lastSoundAt = 0
+      currentRms = 0
+      suppressUntil = 0
     }
 
     function ensureRing(size) {
@@ -135,10 +168,20 @@
     function pushSamples(input) {
       if (!input || !input.length) return
       ensureRing(Math.ceil(context.sampleRate * WINDOW_SECONDS))
+      var sum = 0
       for (var i = 0; i < input.length; i++) {
-        ring[ringWrite] = input[i]
+        var value = input[i]
+        sum += value * value
+        ring[ringWrite] = value
         ringWrite = (ringWrite + 1) % ringSize
         if (ringFilled < ringSize) ringFilled++
+      }
+      currentRms = Math.sqrt(sum / input.length)
+      // A frozen/stale BPM grid must not keep animating after the music stops.
+      // Only treat genuinely audible samples as "sound present"; the short
+      // suppression window covers the widget's own click sound.
+      if (Date.now() >= suppressUntil && currentRms >= SILENCE_RMS) {
+        lastSoundAt = Date.now()
       }
     }
 
@@ -154,6 +197,10 @@
 
     function applyBeatResult(result, duration) {
       if (!running || !context) return
+      if (Date.now() < suppressUntil || !isAudible()) {
+        clearBeatGrid(true)
+        return
+      }
       if (!result || !(result.bpm > 0) || !result.beats || result.beats.length < 2) {
         if (lastGridAt && Date.now() - lastGridAt > 4200) {
           bpm = 0
@@ -225,9 +272,14 @@
     }
 
     function tick() {
-      if (!running || !context || !beatPeriod || !nextBeatAt || !lastGridAt) return
-      // Music stopped or the detector lost the grid: stop scheduling instead of
-      // pulsing forever on the last tempo.
+      if (!running || !context) return
+      if (Date.now() < suppressUntil || !isAudible()) {
+        clearBeatGrid(true)
+        return
+      }
+      if (!beatPeriod || !nextBeatAt || !lastGridAt) return
+      // The detector lost the grid while sound continued: stop scheduling
+      // instead of pulsing forever on the last tempo.
       if (Date.now() - lastGridAt > 5200) return
       var now = context.currentTime
       // A slow analysis can leave the grid slightly behind; skip stale beats
@@ -337,6 +389,10 @@
         nextBeatAt = 0
         lastBeatAt = 0
         lastGridAt = 0
+        lastSoundAt = 0
+        currentRms = 0
+        suppressUntil = 0
+        window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS = suppress
         timer = window.setInterval(tick, TICK_MS)
         analyzeTimer = window.setInterval(analyze, ANALYZE_MS)
         status('active')
