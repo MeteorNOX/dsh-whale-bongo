@@ -1690,7 +1690,7 @@ function mountWhaleBongoWidget(options) {
   var followLeanV = 0
   var followStretch = 0
   var followStretchV = 0
-  var audioBeatPulse = 0
+
   var audioBeatEnabled = true
   var audioBeatStatus = 'stopped'
   var audioBeatError = ''
@@ -1826,8 +1826,9 @@ function mountWhaleBongoWidget(options) {
     return strength
   }
 
-  function kickImage() {
-    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * pressQBounceStrength()
+  function kickImage(amount) {
+    var scale = amount === undefined ? 1 : clamp(numberOr(amount, 1), 0, 1)
+    imageSquash.velocity += (reduceMotion ? 0.10 : 0.90) * pressQBounceStrength() * scale
   }
 
   function renderImageMotion() {
@@ -2387,27 +2388,35 @@ function mountWhaleBongoWidget(options) {
     return q
   }
 
+  function pressHandsForBeat(strength) {
+    var amount = clamp(numberOr(strength, 0.6), 0.2, 1)
+    for (var i = 0; i < hands.length; i++) {
+      var hand = hands[i]
+      if (hand.down || hand.seq || hand.keys.size > 0) continue
+      hand.manualSquash = false
+      hand.tap = 0
+      hand.downAt = nowMs()
+      setPressed(hand, true)
+      hand.tap = Math.min(1.25, hand.tap + 0.65 * amount)
+      hand.y.velocity = Math.max(0, hand.y.velocity) + 2.0 * amount
+      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.0 * amount
+      // Short press, then let the normal spring snap back. This keeps the
+      // hands in time with the beat instead of floating back slowly.
+      releaseHand(hand, 50 + 25 * (1 - amount))
+    }
+  }
+
   function pulseAudioBeat(strength) {
     if (!desktopMode || !cfg.audioBeat || !audioBeatEnabled) return
     var s = clamp(numberOr(strength, 0.5), 0.2, 1)
-    audioBeatPulse = Math.max(audioBeatPulse, 0.016 + 0.028 * s)
-  }
-
-  function stepAudioBeat(dt) {
-    if (audioBeatPulse <= 0.0002) {
-      audioBeatPulse = 0
-      return
-    }
-    // Fast attack, quick decay: the widget answers the beat but does not keep
-    // bobbing after the sound has passed.
-    audioBeatPulse *= Math.exp(-dt * 10)
-    if (audioBeatPulse < 0.0002) audioBeatPulse = 0
+    kickImage(s)
+    pressHandsForBeat(s)
   }
 
   function applyMoveShellTransform(q) {
     if (!moveShell) return
-    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28) * (1 + audioBeatPulse * 0.25)
-    var scaleY = (1 - moveSquash) * (1 + bodyStretch) * (1 + followStretch) * (1 + audioBeatPulse)
+    var scaleX = (1 + moveSquash * (0.55 + 0.30 * q)) * (1 - bodyStretch * 0.28)
+    var scaleY = (1 - moveSquash) * (1 + bodyStretch) * (1 + followStretch)
     var hasScale = Math.abs(scaleX - 1) > 0.0005 || Math.abs(scaleY - 1) > 0.0005
     var hasLean = Math.abs(followLean) > 0.01
     if (!hasScale && !hasLean) {
@@ -2654,7 +2663,6 @@ function mountWhaleBongoWidget(options) {
     }
 
     stepFollowBounce(dt, q)
-    stepAudioBeat(dt)
     applyMoveShellTransform(q)
   }
 
