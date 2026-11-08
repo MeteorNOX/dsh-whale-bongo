@@ -1,12 +1,22 @@
-/* System-audio beat detector for the desktop helper.
+/* System-audio beat tracker for the desktop helper.
  *
  * Runs in the active overlay renderer. The main process grants a loopback
  * display-capture request; this module throws away the video track and keeps
- * only the system audio, then emits short beat events. Nothing is recorded,
- * stored, or sent outside this process.
+ * only the system audio. A rolling eight-second mono buffer is passed to the
+ * vendored MIT @audio/beat detector, which returns a tempo and a phase-aligned
+ * beat grid. The grid is scheduled against AudioContext time so the widget
+ * reacts to musical beats instead of individual bass-energy spikes.
+ *
+ * Nothing is recorded, stored, or sent outside this process.
  */
 (function () {
   'use strict'
+
+  var WINDOW_SECONDS = 8
+  var ANALYZE_MS = 1800
+  var TICK_MS = 25
+  var MIN_BPM = 60
+  var MAX_BPM = 180
 
   function number(value, fallback) {
     var n = Number(value)
@@ -34,22 +44,35 @@
     var stream = null
     var context = null
     var source = null
-    var analyser = null
-    var samples = null
+    var processor = null
+    var silentGain = null
     var timer = 0
-    var baseline = 0
-    var riseBaseline = 0
-    var previousEnergy = 0
-    var lastBeatAt = 0
-    var startedAt = 0
+    var analyzeTimer = 0
+    var ring = null
+    var ringSize = 0
+    var ringWrite = 0
+    var ringFilled = 0
     var beatCount = 0
-    var lastEnergy = 0
-    var lastRise = 0
+    var bpm = 0
+    var confidence = 0
+    var beatPeriod = 0
+    var nextBeatAt = 0
+    var lastBeatAt = 0
+    var lastGridAt = 0
+    var worker = null
+    var analysisPending = false
+    var analysisId = 0
+    var analysisDuration = 0
 
     function status(state, detail) {
       try {
         if (typeof opts.onStatus === 'function') {
-          opts.onStatus({ state: state, error: detail || '' })
+          opts.onStatus({
+            state: state,
+            error: detail || '',
+            bpm: bpm,
+            confidence: confidence,
+          })
         }
       } catch (e) {}
     }
@@ -58,6 +81,24 @@
       if (timer) {
         try { window.clearInterval(timer) } catch (e) {}
         timer = 0
+      }
+      if (analyzeTimer) {
+        try { window.clearInterval(analyzeTimer) } catch (e) {}
+        analyzeTimer = 0
+      }
+      if (worker) {
+        try { worker.terminate() } catch (e) {}
+        worker = null
+      }
+      analysisPending = false
+      if (processor) {
+        try { processor.disconnect() } catch (e) {}
+        processor.onaudioprocess = null
+        processor = null
+      }
+      if (silentGain) {
+        try { silentGain.disconnect() } catch (e) {}
+        silentGain = null
       }
       if (source) {
         try { source.disconnect() } catch (e) {}
@@ -74,58 +115,143 @@
         try { context.close() } catch (e) {}
         context = null
       }
-      analyser = null
-      samples = null
-      baseline = 0
-      riseBaseline = 0
-      previousEnergy = 0
-      lastEnergy = 0
-      lastRise = 0
+      ring = null
+      ringSize = 0
+      ringWrite = 0
+      ringFilled = 0
+      beatPeriod = 0
+      nextBeatAt = 0
+      lastGridAt = 0
     }
 
-    function sample() {
-      if (!running || !analyser || !context) return
-      try {
-        analyser.getByteFrequencyData(samples)
-      } catch (e) {
+    function ensureRing(size) {
+      if (ring && ringSize === size) return
+      ringSize = size
+      ring = new Float32Array(size)
+      ringWrite = 0
+      ringFilled = 0
+    }
+
+    function pushSamples(input) {
+      if (!input || !input.length) return
+      ensureRing(Math.ceil(context.sampleRate * WINDOW_SECONDS))
+      for (var i = 0; i < input.length; i++) {
+        ring[ringWrite] = input[i]
+        ringWrite = (ringWrite + 1) % ringSize
+        if (ringFilled < ringSize) ringFilled++
+      }
+    }
+
+    function readRing() {
+      var out = new Float32Array(ringFilled)
+      if (!ringFilled) return out
+      var start = (ringWrite - ringFilled + ringSize) % ringSize
+      var first = Math.min(ringFilled, ringSize - start)
+      out.set(ring.subarray(start, start + first), 0)
+      if (first < ringFilled) out.set(ring.subarray(0, ringFilled - first), first)
+      return out
+    }
+
+    function applyBeatResult(result, duration) {
+      if (!running || !context) return
+      if (!result || !(result.bpm > 0) || !result.beats || result.beats.length < 2) {
+        if (lastGridAt && Date.now() - lastGridAt > 4200) {
+          bpm = 0
+          confidence = 0
+          beatPeriod = 0
+          nextBeatAt = 0
+          lastGridAt = 0
+          status('active')
+        }
         return
       }
-      var hzPerBin = context.sampleRate / analyser.fftSize
-      // Kick drums and bass lines carry most of the beat. Stay below 220 Hz
-      // so speech and high-frequency clicks do not make the pet flicker.
-      var lastBin = Math.min(samples.length - 1, Math.max(1, Math.round(220 / hzPerBin)))
-      var energy = 0
-      for (var i = 1; i <= lastBin; i++) energy += samples[i]
-      energy /= lastBin
-      lastEnergy = energy
-
-      var rise = Math.max(0, energy - previousEnergy)
-      previousEnergy = energy
-      lastRise = rise
-
-      var now = Date.now()
-      if (!baseline) {
-        baseline = energy
-        riseBaseline = rise
+      var nextBpm = clamp(number(result.bpm, 0), MIN_BPM, MAX_BPM)
+      if (!nextBpm) return
+      var nextPeriod = 60 / nextBpm
+      var last = Number(result.beats[result.beats.length - 1]) || 0
+      var next = last + nextPeriod
+      // Detect can place the last grid point slightly before the end of the
+      // buffer. Move to the first grid point that is still in the future.
+      while (next < duration - 0.04) next += nextPeriod
+      var now = context.currentTime
+      var target = now + Math.max(0.08, next - duration)
+      // Do not let a stale grid schedule a beat in the past.
+      while (target < now + 0.06) target += nextPeriod
+      // Keep a small amount of phase continuity while the tempo is stable;
+      // re-anchoring on every analysis would make the pet jitter.
+      if (bpm && Math.abs(nextBpm - bpm) < 4 && nextBeatAt > now + 0.05) {
+        var drift = target - nextBeatAt
+        if (Math.abs(drift) < 0.10) target = nextBeatAt
       }
-      // Track the average bass level, but detect the leading edge of a kick
-      // or bass note. Absolute energy alone stays high through a loud chorus,
-      // so it would either miss beats or pulse continuously.
-      baseline += (energy - baseline) * (energy > baseline ? 0.08 : 0.02)
-      riseBaseline += (rise - riseBaseline) * (rise > riseBaseline ? 0.10 : 0.02)
-      if (now - startedAt < 420) return
+      bpm = nextBpm
+      confidence = clamp(number(result.confidence, 0), 0, 1)
+      lastGridAt = Date.now()
+      beatPeriod = nextPeriod
+      nextBeatAt = target
+      status('active')
+    }
 
-      var noiseFloor = Math.max(6, baseline * 0.55)
-      var riseThreshold = Math.max(3, riseBaseline * 1.2 + 2)
-      if (rise < riseThreshold || energy < noiseFloor || now - lastBeatAt < 180) return
+    function analyze() {
+      if (!running || !context || !ringFilled || analysisPending) return
+      if (ringFilled < context.sampleRate * 2.4) return
+      var samples = readRing()
+      var duration = samples.length / context.sampleRate
+      if (worker) {
+        var id = ++analysisId
+        analysisPending = true
+        analysisDuration = duration
+        try {
+          worker.postMessage({
+            id: id,
+            samples: samples,
+            fs: context.sampleRate,
+            minBpm: MIN_BPM,
+            maxBpm: MAX_BPM,
+          }, [samples.buffer])
+        } catch (e) {
+          analysisPending = false
+        }
+        return
+      }
+      if (!window.WhaleBeat || typeof window.WhaleBeat.detect !== 'function') return
+      try {
+        var result = window.WhaleBeat.detect(samples, {
+          fs: context.sampleRate,
+          minBpm: MIN_BPM,
+          maxBpm: MAX_BPM,
+        })
+        applyBeatResult(result, duration)
+      } catch (e) {}
+    }
+
+    function tick() {
+      if (!running || !context || !beatPeriod || !nextBeatAt || !lastGridAt) return
+      // Music stopped or the detector lost the grid: stop scheduling instead of
+      // pulsing forever on the last tempo.
+      if (Date.now() - lastGridAt > 5200) return
+      var now = context.currentTime
+      // A slow analysis can leave the grid slightly behind; skip stale beats
+      // instead of firing a burst to catch up.
+      while (nextBeatAt < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
+      if (now < nextBeatAt) return
+      if (lastBeatAt && now - lastBeatAt < beatPeriod * 0.45) {
+        nextBeatAt = now + beatPeriod
+        return
+      }
       lastBeatAt = now
       beatCount += 1
-      var strength = clamp((rise - riseThreshold) / (riseThreshold * 2 + 8), 0.25, 1)
+      var strength = clamp(0.62 + confidence * 0.38, 0.55, 1)
       try {
         if (typeof opts.onBeat === 'function') {
-          opts.onBeat({ strength: strength, energy: energy, baseline: baseline, at: now })
+          opts.onBeat({
+            strength: strength,
+            bpm: bpm,
+            confidence: confidence,
+            at: Date.now(),
+          })
         }
       } catch (e) {}
+      nextBeatAt += beatPeriod
     }
 
     async function start() {
@@ -135,6 +261,9 @@
       try {
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
           throw new Error('当前环境不支持系统音频采集')
+        }
+        if (!window.WhaleBeat || typeof window.WhaleBeat.detect !== 'function') {
+          throw new Error('节拍检测模块未加载')
         }
         var nextStream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
@@ -159,14 +288,37 @@
         if (context.state === 'suspended') {
           try { await context.resume() } catch (e) {}
         }
+        ensureRing(Math.ceil(context.sampleRate * WINDOW_SECONDS))
+        try {
+          worker = new Worker('./audio-beat-worker.js')
+          worker.onmessage = function (event) {
+            analysisPending = false
+            var data = event.data || {}
+            if (!running || data.id !== analysisId || data.error) return
+            applyBeatResult(data, analysisDuration)
+          }
+          worker.onerror = function () {
+            // Fall back to the synchronous detector if the worker cannot load.
+            try { worker.terminate() } catch (e) {}
+            worker = null
+            analysisPending = false
+          }
+        } catch (e) {
+          worker = null
+        }
         source = context.createMediaStreamSource(new MediaStream([audioTrack]))
-        analyser = context.createAnalyser()
-        analyser.fftSize = 1024
-        analyser.smoothingTimeConstant = 0.22
-        analyser.minDecibels = -92
-        analyser.maxDecibels = -8
-        source.connect(analyser)
-        samples = new Uint8Array(analyser.frequencyBinCount)
+        processor = context.createScriptProcessor(4096, 1, 1)
+        processor.onaudioprocess = function (event) {
+          if (!running) return
+          try { pushSamples(event.inputBuffer.getChannelData(0)) } catch (e) {}
+        }
+        // ScriptProcessorNode only receives audio while connected to the
+        // destination. A muted gain keeps the loopback inaudible.
+        silentGain = context.createGain()
+        silentGain.gain.value = 0
+        source.connect(processor)
+        processor.connect(silentGain)
+        silentGain.connect(context.destination)
 
         audioTrack.onended = function () {
           if (!running && !starting) return
@@ -176,13 +328,17 @@
           status('stopped')
         }
 
-        startedAt = Date.now()
-        baseline = 0
-        lastBeatAt = 0
-        beatCount = 0
         running = true
         starting = false
-        timer = window.setInterval(sample, 32)
+        beatCount = 0
+        bpm = 0
+        confidence = 0
+        beatPeriod = 0
+        nextBeatAt = 0
+        lastBeatAt = 0
+        lastGridAt = 0
+        timer = window.setInterval(tick, TICK_MS)
+        analyzeTimer = window.setInterval(analyze, ANALYZE_MS)
         status('active')
       } catch (error) {
         starting = false
@@ -205,9 +361,11 @@
         running: running,
         starting: starting,
         beats: beatCount,
-        energy: lastEnergy,
-        baseline: baseline,
-        rise: lastRise,
+        bpm: bpm,
+        confidence: confidence,
+        energy: 0,
+        baseline: 0,
+        rise: 0,
       }
     }
 

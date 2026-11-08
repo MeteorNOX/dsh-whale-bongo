@@ -13,17 +13,23 @@ let audioBeatDetector = null
 let audioBeatWanted = false
 let audioBeatStatus = 'stopped'
 let audioBeatError = ''
+let audioBeatBpm = 0
 
 function audioBeatApi() {
   return window.__dshWhaleBongoDesktopInput || null
 }
 
-function publishAudioBeatStatus(state, detail) {
+function publishAudioBeatStatus(state, detail, bpm) {
   audioBeatStatus = state || 'stopped'
   audioBeatError = detail || ''
-  window.__DSH_WHALE_AUDIO_BEAT_STATUS = { state: audioBeatStatus, error: audioBeatError }
+  audioBeatBpm = isFinite(bpm) ? Number(bpm) : 0
+  window.__DSH_WHALE_AUDIO_BEAT_STATUS = {
+    state: audioBeatStatus,
+    error: audioBeatError,
+    bpm: audioBeatBpm,
+  }
   const api = audioBeatApi()
-  try { api?.setAudioBeatStatus?.(audioBeatStatus, audioBeatError) } catch {}
+  try { api?.setAudioBeatStatus?.(audioBeatStatus, audioBeatError, audioBeatBpm) } catch {}
 }
 
 function stopAudioBeat() {
@@ -47,7 +53,11 @@ function startAudioBeat() {
         try { api?.beat?.(strength) } catch {}
       },
       onStatus(payload) {
-        publishAudioBeatStatus(payload && payload.state, payload && payload.error)
+        publishAudioBeatStatus(
+          payload && payload.state,
+          payload && payload.error,
+          payload && payload.bpm
+        )
       },
     })
   }
@@ -126,7 +136,7 @@ function applySnapshot(snapshot) {
     try {
       const api = audioBeatApi()
       api?.setAudioBeatEnabled?.(audioBeatWanted)
-      api?.setAudioBeatStatus?.(audioBeatStatus, audioBeatError)
+      api?.setAudioBeatStatus?.(audioBeatStatus, audioBeatError, audioBeatBpm)
     } catch {}
     try { bridge.rendererMounted() } catch {}
   } catch (error) {

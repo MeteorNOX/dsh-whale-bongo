@@ -70,7 +70,7 @@
     "dsh": ">=0.1.0-rc.1"
   },
   "scripts": {
-    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js && node --check runtime/electron-helper/main.js && node --check runtime/electron-helper/preload.js && node --check runtime/electron-helper/desktop-renderer.js && node --check runtime/electron-helper/audio-beat.js && node --check runtime/electron-helper/window-dip.js && node --check runtime/electron-helper/macos-monitor.js && node --check global-keys-host.js",
+    "check": "node --check index.js && node --check client.js && node --check assets/widget.js && node --check electron-runtime.js && node --check runtime/electron-helper/main.js && node --check runtime/electron-helper/preload.js && node --check runtime/electron-helper/desktop-renderer.js && node --check runtime/electron-helper/audio-beat.js && node --check runtime/electron-helper/audio-beat-worker.js && node --check runtime/electron-helper/window-dip.js && node --check runtime/electron-helper/macos-monitor.js && node --check global-keys-host.js",
     "test": "node --test tests/*.test.cjs",
     "build:native": "node scripts/build-native-helper.mjs",
     "ensure:electron": "node scripts/ensure-electron.mjs"
