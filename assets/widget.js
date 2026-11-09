@@ -1941,18 +1941,35 @@ function mountWhaleBongoWidget(options) {
     var strength = clamp(numberOr(amount, 1), 0, 1)
     var now = nowMs()
     var pressed = []
+    // Match the same hand behavior the user selected for a real mouse click.
+    var handMode = cfg.clickPressMode === 'none'
+      ? 'none'
+      : (cfg.clickPressMode === 'squash' ? 'squash' : 'press')
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
+      if (handMode === 'none') break
       if (hand.down || hand.seq || hand.keys.size > 0) continue
-      hand.manualSquash = false
       hand.randomActive = false
       hand.tap = 0
       hand.y.target = 0
-      hand.downAt = now
-      setPressed(hand, true)
-      hand.tap = Math.min(1.25, hand.tap + 0.95 * strength)
-      hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4 * strength
-      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2 * strength
+      if (handMode === 'squash') {
+        hand.down = false
+        hand.hit = false
+        hand.manualSquash = true
+        hand.manualSquashValue = CONFIG.squash * 0.90 * strength
+        hand.y.stiffness = 1100
+        hand.y.damping = 26
+        hand.squash.stiffness = 1500
+        hand.squash.damping = 28
+        hand.squash.velocity = Math.max(0, hand.squash.velocity) + 0.65 * strength
+      } else {
+        hand.manualSquash = false
+        hand.downAt = now
+        setPressed(hand, true)
+        hand.tap = Math.min(1.25, hand.tap + 0.95 * strength)
+        hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4 * strength
+        hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2 * strength
+      }
       pressed.push(hand)
     }
     imageSquash.target = clamp(0.03 * pressQBounceStrength(), 0, 0.14)

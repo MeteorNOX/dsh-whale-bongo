@@ -19,6 +19,10 @@
   var MAX_BPM = 180
   var SILENCE_RMS = 0.0025
   var SILENCE_MS = 450
+  // Start the visual press slightly early so the hand/body reach their lowest
+  // point on the musical beat rather than 40-60 ms after it.
+  var PRESS_LEAD = 0.045
+  var STARTUP_LOCK_MS = 1400
 
   function number(value, fallback) {
     var n = Number(value)
@@ -67,8 +71,11 @@
     var analysisId = 0
     var analysisDuration = 0
     var lastSoundAt = 0
+    var soundStartAt = 0
     var currentRms = 0
     var suppressUntil = 0
+    var candidateBpm = 0
+    var candidateHits = 0
 
     function status(state, detail) {
       try {
@@ -94,6 +101,9 @@
       beatPeriod = 0
       nextBeatAt = 0
       lastGridAt = 0
+      candidateBpm = 0
+      candidateHits = 0
+      soundStartAt = 0
       if (notify && hadGrid) status('active')
     }
 
@@ -154,8 +164,11 @@
       nextBeatAt = 0
       lastGridAt = 0
       lastSoundAt = 0
+      soundStartAt = 0
       currentRms = 0
       suppressUntil = 0
+      candidateBpm = 0
+      candidateHits = 0
     }
 
     function ensureRing(size) {
@@ -188,6 +201,7 @@
       // nod exactly when it should keep its current tempo until typing ends.
       if (currentRms >= SILENCE_RMS) {
         lastSoundAt = Date.now()
+        if (!soundStartAt) soundStartAt = lastSoundAt
       }
     }
 
@@ -225,6 +239,30 @@
       }
       var nextBpm = clamp(number(result.bpm, 0), MIN_BPM, MAX_BPM)
       if (!nextBpm) return
+      var nextConfidence = clamp(number(result.confidence, 0), 0, 1)
+      // A short intro or a sparse first window can make @audio/beat report a
+      // double-time tempo. Do not let a high first BPM drive the widget until
+      // a second analysis confirms it; also require the grid to be stable
+      // after the first audible sample.
+      var needsConfirmation = !bpm && nextBpm > 140
+      if (bpm && Math.abs(nextBpm - bpm) > bpm * 0.28) needsConfirmation = true
+      if (needsConfirmation) {
+        if (nextConfidence < 0.45) return
+        if (candidateBpm && Math.abs(nextBpm - candidateBpm) <= 4) {
+          candidateHits += 1
+        } else {
+          candidateBpm = nextBpm
+          candidateHits = 1
+        }
+        if (candidateHits < 2) {
+          status('active')
+          return
+        }
+      } else {
+        candidateBpm = 0
+        candidateHits = 0
+      }
+      if (!bpm && soundStartAt && Date.now() - soundStartAt < STARTUP_LOCK_MS) return
       var nextPeriod = 60 / nextBpm
       var last = Number(result.beats[result.beats.length - 1]) || 0
       var next = last + nextPeriod
@@ -250,7 +288,9 @@
         target = nextBeatAt
       }
       bpm = nextBpm
-      confidence = clamp(number(result.confidence, 0), 0, 1)
+      confidence = nextConfidence
+      candidateBpm = 0
+      candidateHits = 0
       lastGridAt = Date.now()
       beatPeriod = nextPeriod
       nextBeatAt = target
@@ -304,8 +344,8 @@
       var now = context.currentTime
       // A slow analysis can leave the grid slightly behind; skip stale beats
       // instead of firing a burst to catch up.
-      while (nextBeatAt < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
-      if (now < nextBeatAt) return
+      while (nextBeatAt - PRESS_LEAD < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
+      if (now < nextBeatAt - PRESS_LEAD) return
       if (lastBeatAt && now - lastBeatAt < beatPeriod * 0.45) {
         nextBeatAt = now + beatPeriod
         return
@@ -410,8 +450,11 @@
         lastBeatAt = 0
         lastGridAt = 0
         lastSoundAt = 0
+        soundStartAt = 0
         currentRms = 0
         suppressUntil = 0
+        candidateBpm = 0
+        candidateHits = 0
         window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS = suppress
         timer = window.setInterval(tick, TICK_MS)
         analyzeTimer = window.setInterval(analyze, ANALYZE_MS)
