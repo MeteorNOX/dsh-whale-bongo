@@ -36,6 +36,10 @@
       return enabled !== false && cfg.audioBeat !== false
     }
 
+    function hasMusic() {
+      return isEnabled() && status === 'active' && bpm > 0
+    }
+
     function leadText() {
       // The helper fires 55 ms early to compensate the press animation, so the
       // slider value itself is the visual offset from the beat.
@@ -172,6 +176,7 @@
       mount: mount,
       sync: sync,
       isEnabled: isEnabled,
+      hasMusic: hasMusic,
       setEnabled: setEnabled,
       setStatus: setStatus,
       pulse: pulse,

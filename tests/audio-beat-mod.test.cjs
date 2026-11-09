@@ -21,6 +21,7 @@ test('audio beat mod triggers one press per accepted beat', () => {
   });
   assert.equal(context.window.__DSH_WHALE_AUDIO_BEAT_LEAD, 70);
   mod.setStatus('active', '', 120);
+  assert.equal(mod.hasMusic(), true);
 
   mod.pulse();
   assert.equal(presses.length, 1);
@@ -36,4 +37,7 @@ test('audio beat mod triggers one press per accepted beat', () => {
   now = 2900;
   mod.pulse();
   assert.equal(presses.length, 2, 'late catch-up must not press again');
+
+  mod.setStatus('stopped', '', 0);
+  assert.equal(mod.hasMusic(), false);
 });

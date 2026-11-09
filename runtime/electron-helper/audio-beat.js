@@ -92,6 +92,7 @@
     var analysisDuration = 0
     var beatTimer = 0
     var scheduledLead = -1
+    var skipBeatOnce = false
     var lastSoundAt = 0
     var soundStartAt = 0
     var currentRms = 0
@@ -144,6 +145,7 @@
         candidateBpm: candidateBpm,
         candidateHits: candidateHits,
         candidateRequired: candidateRequired,
+        skipNextBeat: skipBeatOnce,
         last: previous ? {
           bpm: previous.bpm,
           confidence: previous.confidence,
@@ -204,6 +206,16 @@
         scheduleBeat()
         return
       }
+      if (skipBeatOnce) {
+        // A real tempo change gets one empty beat to settle before the new
+        // grid starts pressing again. This avoids a double-feel at the switch.
+        skipBeatOnce = false
+        lastBeatAt = now
+        nextBeatAt += beatPeriod
+        telemetry(true)
+        scheduleBeat()
+        return
+      }
       // A suspended window or long main-thread stall must not produce a burst
       // of catch-up presses. Skip the missed beat and re-anchor the next one.
       if (now > due + beatPeriod * 0.60) {
@@ -247,16 +259,16 @@
       candidateHits = 0
       candidateRequired = 0
       lastBeatAt = 0
+      skipBeatOnce = false
       soundStartAt = 0
       if (notify && hadGrid) status('active')
     }
 
     function suppress(ms) {
-      // The widget plays its own press/typing sound through the same system
-      // loopback. Ignore analysis around it so that sound is never mistaken
-      // for a musical beat. Keep the existing grid running: while typing the
-      // nod must hold its current BPM/phase, then accept corrections once the
-      // typing pauses and the suppression window expires.
+      // The widget plays its own mouse-click SFX through the same system
+      // loopback. Ignore analysis around that click so it is never mistaken
+      // for a musical beat. Keep the existing grid running: this only pauses
+      // analysis, not the scheduled beat timer.
       var duration = clamp(number(ms, 320), 120, 1500)
       suppressUntil = Math.max(suppressUntil, Date.now() + duration)
     }
@@ -402,6 +414,10 @@
       var nextBpm = clamp(number(result.bpm, 0), MIN_BPM, MAX_BPM)
       if (!nextBpm) return
       var nextConfidence = clamp(number(result.confidence, 0), 0, 1)
+      // A pending candidate is still a live analysis. Refresh the grid clock so
+      // the 5.2s stale guard does not stop the old BPM while 3/6 confirmations
+      // are being collected.
+      if (bpm) lastGridAt = Date.now()
 
       // Require a longer confirmation window for large changes and for
       // half/double/triplet tempo relationships. A 112→168 (3:2) misread can
@@ -459,6 +475,7 @@
         while (target < now + 0.05) target += nextPeriod
         nextBeatAt = target
         beatPeriod = nextPeriod
+        skipBeatOnce = true
       }
 
       bpm = nextBpm
@@ -638,6 +655,7 @@
         candidateBpm = 0
         candidateHits = 0
         candidateRequired = 0
+        skipBeatOnce = false
         clearBeatTimer()
         window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS = suppress
         timer = window.setInterval(tick, TICK_MS)

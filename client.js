@@ -16,20 +16,6 @@ window.__ModuleLoader__.load({
     }
     window.__dshWhaleBongoRemountPageWidget = remountPageWidget
 
-/* ============================================================================
- * dsh-whale-bongo · browser half
- * ----------------------------------------------------------------------------
- * Whale Bongo 打字挂件：贴合 DSH 输入框上沿（默认右侧），每敲一下键，两只手
- * 按原 Demo 的弹性/压扁/拖尾参数拍下。右键或左上角 ☰ 打开设置。
- *
- * 关键实现：
- *   ① 用 [data-composer-card] 找到输入框卡片，固定定位在卡片上沿外侧；
- *      ResizeObserver + MutationObserver 跟随输入框长高/页面切换。
- *   ② 两层 DOM：外层 translate3d 定位；内层 .dsnw-motion 负责下压与压扁，
- *      .dsnw-trail 负责残影，三者互不打架。
- *   ③ 默认参数严格沿用 bongo-demo/index.html 的当前配置（reset 模式、
- *      手宽 16%、高宽比 88%、间距 20%、轴 56%、垂直 87.2% 等）。
- * ==========================================================================*/
 function mountWhaleBongoWidget(options) {
   'use strict'
 
@@ -1437,14 +1423,15 @@ function mountWhaleBongoWidget(options) {
     }
   }
 
-  function playHit() {
+  function playHit(typing) {
     if (desktopPageActive || !soundPool.length || cfg.volume <= 0) return
     var audio = soundPool[soundCursor % soundPool.length]
     soundCursor += 1
-    // The desktop helper captures system audio. Mask the detector around the
-    // widget's own click so its sound is never mistaken for a musical beat.
-    if (desktopMode && typeof audioMod !== 'undefined' && audioMod && audioMod.isEnabled() &&
-        typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
+    var beatActive = desktopMode && typeof audioMod !== 'undefined' && audioMod && audioMod.isEnabled()
+    var musicActive = beatActive && typeof audioMod.hasMusic === 'function' && audioMod.hasMusic()
+    // Keyboard typing must not pause beat analysis. Only lower the SFX when a
+    // music grid is actually running, so ordinary typing keeps its feedback.
+    if (!typing && beatActive && typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
       var maskMs = 320
       if (isFinite(audio.duration) && audio.duration > 0) {
         maskMs = Math.max(maskMs, audio.duration * 1000 + 120)
@@ -1453,7 +1440,7 @@ function mountWhaleBongoWidget(options) {
     }
     try {
       audio.currentTime = 0
-      audio.volume = clamp(cfg.volume / 100, 0, 1)
+      audio.volume = clamp((cfg.volume / 100) * (typing && musicActive ? 0.22 : 1), 0, 1)
       var promise = audio.play()
       if (promise && typeof promise.catch === 'function') promise.catch(function () {})
     } catch (e) {}
@@ -1970,7 +1957,7 @@ function mountWhaleBongoWidget(options) {
     hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4
     hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2
     kickImage()
-    playHit()
+    playHit(true)
     render()
   }
 
@@ -4301,12 +4288,6 @@ function mountWhaleBongoWidget(options) {
     if (cfg.filterShortcutKeys !== false) {
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (MODIFIER_KEYS[event.key]) return
-    }
-    if (desktopMode && typeof audioMod !== 'undefined' && audioMod && audioMod.isEnabled() &&
-        typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
-      // Keep the already-detected grid running while typing. Corrections
-      // resume after the last key stops masking analysis.
-      try { window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS(900) } catch (e) {}
     }
     if (event.repeat) return
     var code = event.code || event.key
