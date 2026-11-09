@@ -18,12 +18,20 @@ window.__ModuleLoader__.load({
 
 
 
-
-
-
-
-
-
+/* ============================================================================
+ * dsh-whale-bongo · browser half
+ * ----------------------------------------------------------------------------
+ * Whale Bongo 打字挂件：贴合 DSH 输入框上沿（默认右侧），每敲一下键，两只手
+ * 按原 Demo 的弹性/压扁/拖尾参数拍下。右键或左上角 ☰ 打开设置。
+ *
+ * 关键实现：
+ *   ① 用 [data-composer-card] 找到输入框卡片，固定定位在卡片上沿外侧；
+ *      ResizeObserver + MutationObserver 跟随输入框长高/页面切换。
+ *   ② 两层 DOM：外层 translate3d 定位；内层 .dsnw-motion 负责下压与压扁，
+ *      .dsnw-trail 负责残影，三者互不打架。
+ *   ③ 默认参数严格沿用 bongo-demo/index.html 的当前配置（reset 模式、
+ *      手宽 16%、高宽比 88%、间距 20%、轴 56%、垂直 87.2% 等）。
+ * ==========================================================================*/
 function mountWhaleBongoWidget(options) {
   'use strict'
 
@@ -2088,19 +2096,16 @@ function mountWhaleBongoWidget(options) {
     var baseY = h * clamp(imageBottomNorm, 0.45, 1)
     var count = 4 + (Math.random() < 0.5 ? 0 : 1)
     for (var i = 0; i < count; i++) {
-      var side = i % 2 === 0 ? -1 : 1
-      var angle = side < 0
-        ? -Math.PI * 0.92 + Math.random() * Math.PI * 0.26
-        : -Math.PI * 0.34 + Math.random() * Math.PI * 0.26
-      var speed = (112 + Math.random() * 56) * scale
+      var spread = (Math.random() - 0.5) * w * 0.34
+      var speed = (76 + Math.random() * 64) * scale
       fxNotes.push({
-        x: w * 0.5 + side * w * (0.35 + Math.random() * 0.04),
-        y: baseY + 2 * scale,
-        vx: Math.cos(angle) * speed * 1.25,
-        vy: Math.sin(angle) * speed - 40 * scale,
+        x: w * 0.5 + spread,
+        y: baseY - (128 + Math.random() * 22) * scale,
+        vx: (Math.random() - 0.5) * 86 * scale,
+        vy: -speed,
         rot: (Math.random() - 0.5) * 0.5,
         vr: (Math.random() - 0.5) * 2.6,
-        size: (17 + Math.random() * 9) * scale,
+        size: (16 + Math.random() * 9) * scale,
         hue: Math.floor(Math.random() * 360),
         life: 1,
         glyph: ['♪', '♫', '♬'][i % 3],
@@ -2143,7 +2148,7 @@ function mountWhaleBongoWidget(options) {
     var fxScale = Math.min(w, h) / 320
     var baseX = w * 0.5
     var baseY = h * clamp(imageBottomNorm, 0.45, 1) - 2 * fxScale
-    var radius = Math.min(w, h) * 0.48
+    var radius = Math.min(w, h) * 0.64
     if (audioBandLevels.length !== (audioBands.length || 21)) {
       audioBandLevels = new Array(audioBands.length || 21)
       for (var bl = 0; bl < audioBandLevels.length; bl++) audioBandLevels[bl] = 0
@@ -2167,8 +2172,8 @@ function mountWhaleBongoWidget(options) {
         if (!isFinite(band)) band = 0
         var shaped = Math.pow(clamp(band, 0, 1), 1.6)
         var wave = clamp(shaped * 0.76 + fxBeatEnv * 0.10, 0.015, 0.88)
-        var length = (8 + 70 * wave) * fxScale
-        var inner = radius * 0.68
+        var length = (10 + 112 * wave) * fxScale
+        var inner = radius * 0.52
         var x1 = baseX + Math.cos(angle) * inner
         var y1 = baseY + Math.sin(angle) * inner
         var x2 = baseX + Math.cos(angle) * (inner + length)
@@ -5874,7 +5879,6 @@ function mountWhaleBongoWidget(options) {
   }
   return disposeWidget
 }
-
 
 
 
