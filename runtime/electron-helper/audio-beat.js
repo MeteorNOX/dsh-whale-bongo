@@ -13,7 +13,7 @@
   'use strict'
 
   var WINDOW_SECONDS = 8
-  var ANALYZE_MS = 1800
+  var ANALYZE_MS = 1000
   var TICK_MS = 25
   var MIN_BPM = 60
   var MAX_BPM = 180
