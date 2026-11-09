@@ -73,8 +73,61 @@
     var suppressUntil = 0
     var candidateBpm = 0
     var candidateHits = 0
+    var currentState = 'stopped'
+    var currentError = ''
+    var analysisCount = 0
+    var lastAnalysisMs = 0
+    var analysisStartedAt = 0
+    var lastResult = null
+    var lastTelemetryAt = 0
+
+    function telemetry(force) {
+      if (typeof opts.onTelemetry !== 'function') return
+      var nowMs = Date.now()
+      if (!force && nowMs - lastTelemetryAt < 100) return
+      lastTelemetryAt = nowMs
+      var previous = lastResult
+      var payload = {
+        at: nowMs,
+        state: currentState,
+        error: currentError,
+        enabled: running || starting,
+        bpm: bpm,
+        confidence: confidence,
+        beatPeriod: beatPeriod,
+        beatCount: beatCount,
+        analysisCount: analysisCount,
+        analysisMs: lastAnalysisMs,
+        analysisEveryMs: ANALYZE_MS,
+        windowSeconds: WINDOW_SECONDS,
+        sampleRate: context ? context.sampleRate : 0,
+        bufferSeconds: context && ringFilled ? ringFilled / context.sampleRate : 0,
+        audioTime: context ? context.currentTime : 0,
+        nextBeatAt: nextBeatAt,
+        nextBeatIn: context && nextBeatAt ? nextBeatAt - context.currentTime : 0,
+        leadMs: clamp(number(window.__DSH_WHALE_AUDIO_BEAT_LEAD, 0), -150, 150),
+        energy: currentRms,
+        audible: isAudible(),
+        suppressed: nowMs < suppressUntil,
+        suppressLeftMs: Math.max(0, suppressUntil - nowMs),
+        gridAgeMs: lastGridAt ? nowMs - lastGridAt : 0,
+        candidateBpm: candidateBpm,
+        candidateHits: candidateHits,
+        last: previous ? {
+          bpm: previous.bpm,
+          confidence: previous.confidence,
+          ms: previous.ms,
+          duration: previous.duration,
+          beats: previous.beats.slice(-32),
+        } : null,
+      }
+      try { opts.onTelemetry(payload) } catch (e) {}
+    }
 
     function status(state, detail) {
+      currentState = state || 'stopped'
+      currentError = detail || ''
+      telemetry(true)
       try {
         if (typeof opts.onStatus === 'function') {
           opts.onStatus({
@@ -214,6 +267,20 @@
 
     function applyBeatResult(result, duration) {
       if (!running || !context) return
+      if (result && result.bpm > 0) {
+        var offsets = []
+        var rawBeats = Array.isArray(result.beats) ? result.beats : []
+        for (var bi = 0; bi < rawBeats.length; bi++) {
+          offsets.push((Number(rawBeats[bi]) || 0) - duration)
+        }
+        lastResult = {
+          bpm: Number(result.bpm) || 0,
+          confidence: Number(result.confidence) || 0,
+          ms: Number(result.ms) || lastAnalysisMs,
+          duration: duration,
+          beats: offsets,
+        }
+      }
       if (Date.now() < suppressUntil) {
         // Hold the current grid/phase while the widget's own typing sound
         // masks the analysis. The next non-suppressed analysis can correct it.
@@ -302,6 +369,7 @@
     function analyze() {
       if (!running || !context || !ringFilled || analysisPending) return
       if (ringFilled < context.sampleRate * 2.4) return
+      analysisStartedAt = performance.now()
       var samples = readRing()
       var duration = samples.length / context.sampleRate
       if (worker) {
@@ -328,12 +396,17 @@
           minBpm: MIN_BPM,
           maxBpm: MAX_BPM,
         })
+        analysisCount += 1
+        result.ms = Math.max(0, performance.now() - analysisStartedAt)
+        lastAnalysisMs = result.ms
         applyBeatResult(result, duration)
+        telemetry(true)
       } catch (e) {}
     }
 
     function tick() {
       if (!running || !context) return
+      telemetry(false)
       if (!isAudible()) {
         clearBeatGrid(true)
         return
@@ -368,6 +441,7 @@
           })
         }
       } catch (e) {}
+      telemetry(true)
       nextBeatAt += beatPeriod
     }
 
@@ -410,9 +484,12 @@
           worker = new Worker('./audio-beat-worker.js')
           worker.onmessage = function (event) {
             analysisPending = false
+            analysisCount += 1
             var data = event.data || {}
+            lastAnalysisMs = Number(data.ms) || Math.max(0, performance.now() - analysisStartedAt)
             if (!running || data.id !== analysisId || data.error) return
             applyBeatResult(data, analysisDuration)
+            telemetry(true)
           }
           worker.onerror = function () {
             // Fall back to the synchronous detector if the worker cannot load.
@@ -448,6 +525,11 @@
         running = true
         starting = false
         beatCount = 0
+        analysisCount = 0
+        lastAnalysisMs = 0
+        lastResult = null
+        currentState = 'active'
+        currentError = ''
         bpm = 0
         confidence = 0
         beatPeriod = 0
@@ -487,12 +569,15 @@
         beats: beatCount,
         bpm: bpm,
         confidence: confidence,
-        energy: 0,
-        baseline: 0,
-        rise: 0,
+        energy: currentRms,
+        analysisCount: analysisCount,
+        analysisMs: lastAnalysisMs,
+        beatPeriod: beatPeriod,
+        nextBeatIn: context && nextBeatAt ? nextBeatAt - context.currentTime : 0,
+        bufferSeconds: context && ringFilled ? ringFilled / context.sampleRate : 0,
       }
     }
 
-    return { start: start, stop: stop, state: state }
+    return { start: start, stop: stop, state: state, telemetry: function () { telemetry(true) } }
   }
 })()

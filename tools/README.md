@@ -20,3 +20,25 @@ node tools/beat-lab-server.mjs
 页面使用 `runtime/electron-helper/vendor/beat-detect.js`，与插件桌面模式是同一份
 `@audio/beat` 检测代码；插件在 Worker 中运行，这个页面在主线程运行，因此页面上的
 耗时是算法计算量参考，不包含插件 UI 的绘制时间。
+
+## Whale Beat Live（真实插件监视器）
+
+`beat-lab.html` 是独立采样器；`beat-live.html` 则直接读取正在运行的桌面挂件，
+不采集音频，也不修改插件设置。
+
+```text
+node tools/beat-live-server.mjs
+```
+
+打开 `http://127.0.0.1:8898/`。先在 DSH 桌面模式中开启音乐律动。
+
+工具通过 helper 写入系统临时目录的 `dsh-whale-bongo-bridge.json` 自动发现端口，
+订阅 `http://127.0.0.1:<helper-port>/audio-beat/stream`，显示：
+
+- 插件当前 BPM、置信度和候选 BPM（含确认次数）。
+- 下一次拍点倒计时、节拍周期、提前量和网格年龄。
+- 系统音频 RMS 能量、缓冲窗口、分析耗时和分析间隔。
+- 实时能量曲线、已触发拍点、最近分析表和事件日志。
+
+只读数据流：helper 不把工具的请求转发给音频采集器，工具本身也没有麦克风或
+屏幕采集代码。

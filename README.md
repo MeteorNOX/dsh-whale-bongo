@@ -134,6 +134,16 @@
 
 原生 sidecar 源码在 `runtime/electron-helper/native/WhaleNativeHelper.cs`，发布包内已附带编译好的 `whale-native-helper.exe`。修改后可在 Windows 上运行 `npm run build:native` 重新编译（使用 .NET Framework 自带的 `csc.exe`）。
 
+### 实时律动监视器（额外工具，不打包）
+
+用于观察桌面挂件真实的 BPM 网格、候选 BPM、拍点、能量和计算耗时；工具本身不采集音频，也不修改插件设置。
+
+```bash
+node tools/beat-live-server.mjs
+```
+
+打开 `http://127.0.0.1:8898/`，先在桌面模式开启音乐律动。工具会自动发现 helper 的 loopback 端口，读取插件实际的数据流。更多说明见 [`tools/README.md`](tools/README.md)。
+
 ### npm
 
 

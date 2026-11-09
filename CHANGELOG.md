@@ -18,6 +18,7 @@
 - 桌面 helper 使用 `setDisplayMediaRequestHandler` 提供系统音频回环；进入桌面模式时开始采样，离开或关闭开关时释放音频轨道和 `AudioContext`。
 - 音乐停止约 450ms 后立即停用旧节拍网格，不会继续按最后一次 BPM 摆动；挂件自身播放按动音效时短暂屏蔽检测，避免把自己的声音误判为节拍。
 - 内置 `runtime/electron-helper/vendor/beat-detect.js` 来自 `@audio/beat@2.1.0`（MIT），许可证保留在 `beat-detect.LICENSE`。
+- 新增只读律动遥测：桌面 helper 通过 loopback SSE 推送实际 BPM、候选 BPM、拍点、能量与分析耗时；配套 `tools/beat-live.html` 独立监视器直接读取这些数据，不额外采集音频、不修改插件设置，也不打进 npm 包。
 
 ## v0.3.3
 

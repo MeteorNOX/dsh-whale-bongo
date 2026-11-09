@@ -21,6 +21,7 @@ const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, desktopCap
 const path = require('node:path')
 const fs = require('node:fs')
 const http = require('node:http')
+const os = require('node:os')
 const { spawn } = require('node:child_process')
 const { windowsToOverlayDip } = require('./window-dip')
 const { createMacOSMonitor } = require('./macos-monitor')
@@ -56,6 +57,8 @@ let resettingBounds = false
 let tray = null
 let returnFallbackTimer = 0
 let audioCaptureHandlerInstalled = false
+let latestAudioTelemetry = null
+const audioTelemetryClients = new Set()
 let mouseFollowOffset = null
 let mouseFollowStarted = false
 const macMonitor = createMacOSMonitor({
@@ -468,9 +471,11 @@ function audioBeatEnabled() {
 
 function sendAudioBeatState(entry) {
   if (!entry || entry !== activeEntry() || !entry.win || entry.win.isDestroyed()) return
+  const enabled = audioBeatEnabled()
+  if (!enabled) setAudioTelemetry(null)
   try {
     entry.win.webContents.send('whale:audio-beat', {
-      enabled: audioBeatEnabled(),
+      enabled,
       platform: process.platform,
     })
   } catch {}
@@ -701,6 +706,13 @@ function stop() {
   stopNativeHelper()
   destroyTray()
   try { if (bridgeServer) bridgeServer.close() } catch {}
+  bridgeServer = null
+  bridgePort = 0
+  for (const client of Array.from(audioTelemetryClients)) {
+    try { client.end() } catch {}
+  }
+  audioTelemetryClients.clear()
+  clearBridgeInfo()
   win = null
   activeEntryRef = null
   activeDisplay = null
@@ -710,14 +722,59 @@ function stop() {
 
 let bridgeServer = null
 let bridgePort = 0
+const bridgeInfoPath = path.join(os.tmpdir(), 'dsh-whale-bongo-bridge.json')
+
+function writeBridgeInfo() {
+  if (!bridgePort) return
+  try {
+    fs.writeFileSync(bridgeInfoPath, JSON.stringify({
+      port: bridgePort,
+      pid: process.pid,
+      app: 'dsh-whale-bongo-helper',
+      updatedAt: new Date().toISOString(),
+    }), 'utf8')
+  } catch (error) {
+    process.stderr.write('[whale helper] bridge info write failed: ' + String(error) + String.fromCharCode(10))
+  }
+}
+
+function clearBridgeInfo() {
+  try { fs.unlinkSync(bridgeInfoPath) } catch {}
+}
 
 function sendJson(res, status, value) {
   const body = Buffer.from(JSON.stringify(value), 'utf8')
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': String(body.length),
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': 'no-store',
   })
   res.end(body)
+}
+
+function audioTelemetryPayload() {
+  return {
+    ok: true,
+    port: bridgePort,
+    pid: process.pid,
+    updatedAt: new Date().toISOString(),
+    telemetry: latestAudioTelemetry,
+  }
+}
+
+function setAudioTelemetry(payload) {
+  if (!payload || typeof payload !== 'object') {
+    latestAudioTelemetry = null
+  } else {
+    latestAudioTelemetry = payload
+  }
+  const envelope = audioTelemetryPayload()
+  const line = 'event: telemetry' + String.fromCharCode(10) +
+    'data: ' + JSON.stringify(envelope) + String.fromCharCode(10, 10)
+  for (const client of Array.from(audioTelemetryClients)) {
+    try { client.write(line) } catch { audioTelemetryClients.delete(client) }
+  }
 }
 
 function readBody(req) {
@@ -788,10 +845,37 @@ function startBridge() {
       setTimeout(stop, 20)
       return
     }
+    if (req.method === 'GET' && req.url === '/audio-beat/state') {
+      sendJson(res, 200, audioTelemetryPayload())
+      return
+    }
+    if (req.method === 'GET' && req.url === '/audio-beat/stream') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+      })
+      const initial = 'event: telemetry' + String.fromCharCode(10) +
+        'data: ' + JSON.stringify(audioTelemetryPayload()) + String.fromCharCode(10, 10)
+      try { res.write(initial) } catch {}
+      audioTelemetryClients.add(res)
+      const heartbeat = setInterval(() => {
+        try { res.write(': ping' + String.fromCharCode(10, 10)) } catch {}
+      }, 15000)
+      const cleanup = () => {
+        clearInterval(heartbeat)
+        audioTelemetryClients.delete(res)
+      }
+      req.on('close', cleanup)
+      req.on('error', cleanup)
+      return
+    }
     sendJson(res, 404, { ok: false })
   })
   bridgeServer.listen(0, '127.0.0.1', () => {
     bridgePort = bridgeServer.address().port
+    writeBridgeInfo()
     writeLine({ type: 'port', port: bridgePort })
     if (pendingConfig) sendConfig(pendingConfig)
   })
@@ -1234,6 +1318,11 @@ app.whenReady().then(() => {
     snappedHwnd = hwnd
     if (hwnd) followSnappedWindow()
   })
+  ipcMain.on('whale:audio-beat-telemetry', (event, payload) => {
+    const entry = entryForEvent(event)
+    if (!entry || entry !== activeEntry()) return
+    setAudioTelemetry(payload)
+  })
   ipcMain.on('whale:config', (event, snapshot) => {
     const entry = entryForEvent(event)
     if (!entry || entry !== activeEntry()) return
@@ -1255,9 +1344,9 @@ app.whenReady().then(() => {
 
 })
 
-app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray() })
-app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray() })
-process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray() })
+app.on('before-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray(); clearBridgeInfo() })
+app.on('will-quit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray(); clearBridgeInfo() })
+process.on('exit', () => { stopGlobalKeys(); stopDesktopWindows(); stopMouseFollow(); stopNativeHelper(); destroyTray(); clearBridgeInfo() })
 
 app.on('window-all-closed', () => {
   app.quit()

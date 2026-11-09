@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whale Beat Live · 插件律动监视器</title>
+  <link rel="stylesheet" href="./beat-live.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">DSH WHALE BONGO · MOD MONITOR</div>
+        <h1>Whale Beat Live</h1>
+        <p class="sub">直接读取桌面挂件正在运行的 BPM 网格、能量与拍点，不做任何额外音频采集。</p>
+      </div>
+      <div class="connection" id="connection">
+        <span class="dot"></span>
+        <div>
+          <strong id="connTitle">连接中</strong>
+          <small id="connDetail">等待 helper…</small>
+        </div>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="bpm-card">
+        <span class="label">当前 BPM</span>
+        <div class="bpm"><span id="bpm">--</span><small>BPM</small></div>
+        <div class="confidence">置信度 <b id="confidence">--</b></div>
+        <div class="state-row">
+          <span class="pill" id="statePill">等待</span>
+          <span id="statusText">尚未收到插件数据</span>
+        </div>
+      </div>
+      <div class="beat-card">
+        <div class="beat-visual" id="beatVisual">
+          <div class="beat-ring"></div>
+          <div class="beat-core" id="beatCore">♪</div>
+        </div>
+        <div class="beat-copy">
+          <span class="label">下一拍</span>
+          <div class="countdown"><b id="countdown">--</b><span>ms</span></div>
+          <div class="progress"><i id="beatProgress"></i></div>
+          <small id="beatHint">等待节拍网格</small>
+        </div>
+      </div>
+      <div class="energy-card">
+        <span class="label">系统音频能量</span>
+        <div class="energy-value"><b id="energy">--</b><small>RMS</small></div>
+        <div class="meter"><i id="energyBar"></i></div>
+        <div class="energy-meta"><span id="audioState">静音</span><span id="suppressText">未屏蔽</span></div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel waveform-panel">
+        <div class="panel-head">
+          <div>
+            <h2>实时能量 / 拍点</h2>
+            <p>数据由插件每 100ms 推送，拍点来自插件已接受的节拍网格。</p>
+          </div>
+          <div class="legend"><span class="legend-energy"></span>能量 <span class="legend-beat"></span>拍点</div>
+        </div>
+        <canvas id="wave" width="1200" height="260"></canvas>
+        <div class="axis"><span>−12s</span><span>−9s</span><span>−6s</span><span>−3s</span><span>现在</span></div>
+      </article>
+
+      <article class="panel stats-panel">
+        <div class="panel-head"><h2>检测状态</h2><span class="tiny" id="pid">PID --</span></div>
+        <div class="stats">
+          <div><span>节拍周期</span><b id="period">--</b></div>
+          <div><span>已触发拍数</span><b id="beatCount">0</b></div>
+          <div><span>分析次数</span><b id="analysisCount">0</b></div>
+          <div><span>最近计算</span><b id="analysisMs">--</b></div>
+          <div><span>分析间隔</span><b id="analysisEvery">--</b></div>
+          <div><span>缓冲窗口</span><b id="buffer">--</b></div>
+          <div><span>网格年龄</span><b id="gridAge">--</b></div>
+          <div><span>提前量</span><b id="lead">--</b></div>
+        </div>
+        <div class="candidate">
+          <span>候选 BPM</span>
+          <b id="candidate">--</b>
+          <span id="candidateHits">0 次确认</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="grid lower">
+      <article class="panel">
+        <div class="panel-head"><div><h2>最近分析</h2><p>插件实际收到的检测结果，而不是工具自己算的。</p></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>BPM</th><th>置信度</th><th>计算</th><th>拍点数</th><th>状态</th></tr></thead>
+            <tbody id="analysisRows"><tr><td colspan="6" class="empty">等待第一次分析…</td></tr></tbody>
+          </table>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h2>事件</h2><p>节拍触发、网格重置与状态变化。</p></div><button id="clear" class="ghost">清空</button></div>
+        <div class="events" id="events"><div class="empty">等待事件…</div></div>
+      </article>
+    </section>
+
+    <footer>
+      <span>只读监视 · 不采集音频 · 不修改插件设置</span>
+      <span id="bridge">bridge --</span>
+    </footer>
+  </main>
+  <script src="./beat-live.js"></script>
+</body>
+</html>

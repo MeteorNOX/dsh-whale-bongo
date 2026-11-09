@@ -19,6 +19,12 @@ function audioBeatApi() {
   return window.__dshWhaleBongoDesktopInput || null
 }
 
+function publishAudioBeatTelemetry(payload) {
+  if (!payload || typeof payload !== 'object') return
+  window.__DSH_WHALE_AUDIO_BEAT_LIVE = payload
+  try { bridge?.audioBeatTelemetry?.(payload) } catch {}
+}
+
 function publishAudioBeatStatus(state, detail, bpm) {
   audioBeatStatus = state || 'stopped'
   audioBeatError = detail || ''
@@ -58,6 +64,10 @@ function startAudioBeat() {
           payload && payload.error,
           payload && payload.bpm
         )
+      },
+      onTelemetry(payload) {
+        if (!audioBeatWanted) return
+        publishAudioBeatTelemetry(payload)
       },
     })
   }

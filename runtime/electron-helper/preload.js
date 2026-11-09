@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onAudioBeat(callback) {
     ipcRenderer.on('whale:audio-beat', (_event, payload) => callback(payload || {}))
   },
+  audioBeatTelemetry(payload) {
+    ipcRenderer.send('whale:audio-beat-telemetry', payload || null)
+  },
   onWindows(callback) {
     ipcRenderer.on('whale:windows', (_event, list) => callback(list))
   },
