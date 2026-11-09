@@ -175,6 +175,7 @@ function mountWhaleBongoWidget(options) {
     filterShortcutKeys: false,
     typingAngleMode: 'position-split',
     audioBeat: true,
+    audioBeatMode: 'full',
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -298,6 +299,7 @@ function mountWhaleBongoWidget(options) {
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
     out.audioBeat = out.audioBeat !== false
+    out.audioBeatMode = out.audioBeatMode === 'vertical' ? 'vertical' : 'full'
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
@@ -1268,6 +1270,19 @@ function mountWhaleBongoWidget(options) {
             '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
           '</label>' +
           '<p class="dsnw-image-name" data-audio-beat-status>桌面模式默认开启</p>' +
+          '<div class="dsnw-behavior">' +
+            '<span class="dsnw-behavior-label">律动缩放</span>' +
+            '<div class="dsnw-select" data-select="audioBeatMode">' +
+              '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
+                '<span class="dsnw-select-label" data-select-label>整体缩放</span>' +
+                '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
+              '</button>' +
+              '<div class="dsnw-select-popover" role="listbox" aria-label="音乐律动缩放方式">' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="full"><span class="dsnw-select-check">✓</span><span>整体缩放</span></button>' +
+                '<button class="dsnw-select-option" type="button" role="option" data-value="vertical"><span class="dsnw-select-check">✓</span><span>仅纵向缩放</span></button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
           '<div class="dsnw-subhead">打字时手手角度偏移</div>' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">偏移方式</span>' +
@@ -1314,6 +1329,7 @@ function mountWhaleBongoWidget(options) {
   var typingAngleModeSelect = root.querySelector('[data-select="typingAngleMode"]')
   var filterShortcutsInput = root.querySelector('[data-filter-shortcuts]')
   var audioBeatInput = root.querySelector('[data-audio-beat]')
+  var audioBeatModeSelect = root.querySelector('[data-select="audioBeatMode"]')
   var audioBeatStatusEl = root.querySelector('[data-audio-beat-status]')
   var displayModeSelect = root.querySelector('[data-select="displayMode"]')
   var flipSettingList = root.querySelector('[data-setting-list="flip"]')
@@ -1528,6 +1544,7 @@ function mountWhaleBongoWidget(options) {
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
     if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
     if (audioBeatInput) audioBeatInput.checked = cfg.audioBeat !== false
+    if (audioBeatModeSelect) setSelectValue(audioBeatModeSelect, cfg.audioBeatMode)
     syncAudioBeatStatus()
     if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
@@ -1871,7 +1888,8 @@ function mountWhaleBongoWidget(options) {
     var bounce = Math.exp(-4.2 * phase) * Math.cos(phase * Math.PI * 2)
     var level = clamp(moveBounceRatio(), 0, 1.35)
     var nod = groove * bounce
-    var audioX = 1 - nod * level * 0.040
+    var verticalOnly = cfg.audioBeatMode === 'vertical'
+    var audioX = verticalOnly ? 1 : 1 - nod * level * 0.040
     var audioY = 1 - nod * level * 0.090
     audioBodyScaleX = audioX
     audioBodyScaleY = audioY
@@ -3499,6 +3517,14 @@ function mountWhaleBongoWidget(options) {
       syncSettings()
     })
   }
+  if (audioBeatModeSelect) {
+    initSelect(audioBeatModeSelect, function (value) {
+      cfg.audioBeatMode = value === 'vertical' ? 'vertical' : 'full'
+      saveCfg()
+      syncSettings()
+    })
+    setSelectValue(audioBeatModeSelect, cfg.audioBeatMode)
+  }
 
   if (displayModeSelect) {
     initSelect(displayModeSelect, function (value) {
@@ -4258,6 +4284,12 @@ function mountWhaleBongoWidget(options) {
     if (cfg.filterShortcutKeys !== false) {
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (MODIFIER_KEYS[event.key]) return
+    }
+    if (desktopMode && cfg.audioBeat && audioBeatEnabled &&
+        typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
+      // Keep the already-detected grid running while typing. Corrections
+      // resume after the last key stops masking analysis.
+      try { window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS(900) } catch (e) {}
     }
     if (event.repeat) return
     var code = event.code || event.key

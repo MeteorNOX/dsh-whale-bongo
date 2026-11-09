@@ -99,13 +99,12 @@
 
     function suppress(ms) {
       // The widget plays its own press/typing sound through the same system
-      // loopback. Ignore a short window around it so that sound is never
-      // mistaken for a musical beat.
+      // loopback. Ignore analysis around it so that sound is never mistaken
+      // for a musical beat. Keep the existing grid running: while typing the
+      // nod must hold its current BPM/phase, then accept corrections once the
+      // typing pauses and the suppression window expires.
       var duration = clamp(number(ms, 320), 120, 1500)
       suppressUntil = Math.max(suppressUntil, Date.now() + duration)
-      beatPeriod = 0
-      nextBeatAt = 0
-      lastGridAt = 0
     }
 
     function release() {
@@ -184,9 +183,10 @@
       // delay to every beat and make the visual pulse trail the music.
       ringEndedAt = context.currentTime
       // A frozen/stale BPM grid must not keep animating after the music stops.
-      // Only treat genuinely audible samples as "sound present"; the short
-      // suppression window covers the widget's own click sound.
-      if (Date.now() >= suppressUntil && currentRms >= SILENCE_RMS) {
+      // Count sound even while analysis is suppressed by the widget's own
+      // click: otherwise sustained typing would look like silence and cut the
+      // nod exactly when it should keep its current tempo until typing ends.
+      if (currentRms >= SILENCE_RMS) {
         lastSoundAt = Date.now()
       }
     }
@@ -203,7 +203,12 @@
 
     function applyBeatResult(result, duration) {
       if (!running || !context) return
-      if (Date.now() < suppressUntil || !isAudible()) {
+      if (Date.now() < suppressUntil) {
+        // Hold the current grid/phase while the widget's own typing sound
+        // masks the analysis. The next non-suppressed analysis can correct it.
+        return
+      }
+      if (!isAudible()) {
         clearBeatGrid(true)
         return
       }
@@ -236,6 +241,13 @@
       if (bpm && Math.abs(nextBpm - bpm) < 4 && nextBeatAt > now + 0.05) {
         var drift = target - nextBeatAt
         if (Math.abs(drift) < 0.10) target = nextBeatAt
+      }
+      // Never pull the already-scheduled beat earlier. A re-detected tempo
+      // that puts the next grid point before it would fire a second nod
+      // before the previous one settles, which reads as a stutter. Keep the
+      // current beat and let the new period take over after it.
+      if (bpm && nextBeatAt > now + 0.05 && target < nextBeatAt) {
+        target = nextBeatAt
       }
       bpm = nextBpm
       confidence = clamp(number(result.confidence, 0), 0, 1)
@@ -280,14 +292,15 @@
 
     function tick() {
       if (!running || !context) return
-      if (Date.now() < suppressUntil || !isAudible()) {
+      if (!isAudible()) {
         clearBeatGrid(true)
         return
       }
       if (!beatPeriod || !nextBeatAt || !lastGridAt) return
-      // The detector lost the grid while sound continued: stop scheduling
-      // instead of pulsing forever on the last tempo.
-      if (Date.now() - lastGridAt > 5200) return
+      // While the widget's own typing sound is masking analysis, keep the
+      // existing grid. Once suppression ends, stop if the detector has not
+      // produced a fresh grid recently.
+      if (Date.now() >= suppressUntil && Date.now() - lastGridAt > 5200) return
       var now = context.currentTime
       // A slow analysis can leave the grid slightly behind; skip stale beats
       // instead of firing a burst to catch up.
