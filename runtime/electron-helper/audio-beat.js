@@ -242,7 +242,12 @@
       // a second analysis confirms it; also require the grid to be stable
       // after the first audible sample.
       var needsConfirmation = !bpm && nextBpm > 140
-      if (bpm && Math.abs(nextBpm - bpm) > bpm * 0.28) needsConfirmation = true
+      // 123 ↔ 157 BPM is a common half/double-time misread (27.6% apart), so a
+      // 28% threshold was just loose enough to let it through. Require a
+      // second analysis for any jump over 12 BPM or 18%.
+      if (bpm && (Math.abs(nextBpm - bpm) > 12 || Math.abs(nextBpm - bpm) > bpm * 0.18)) {
+        needsConfirmation = true
+      }
       if (needsConfirmation) {
         if (nextConfidence < 0.45) return
         if (candidateBpm && Math.abs(nextBpm - candidateBpm) <= 4) {
