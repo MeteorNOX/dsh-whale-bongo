@@ -54,6 +54,7 @@
     var ringSize = 0
     var ringWrite = 0
     var ringFilled = 0
+    var ringEndedAt = 0
     var beatCount = 0
     var bpm = 0
     var confidence = 0
@@ -149,6 +150,7 @@
       ringSize = 0
       ringWrite = 0
       ringFilled = 0
+      ringEndedAt = 0
       beatPeriod = 0
       nextBeatAt = 0
       lastGridAt = 0
@@ -177,6 +179,10 @@
         if (ringFilled < ringSize) ringFilled++
       }
       currentRms = Math.sqrt(sum / input.length)
+      // This is the AudioContext time of the newest sample. Analysis may run
+      // tens of milliseconds later; scheduling from "now" would add that
+      // delay to every beat and make the visual pulse trail the music.
+      ringEndedAt = context.currentTime
       // A frozen/stale BPM grid must not keep animating after the music stops.
       // Only treat genuinely audible samples as "sound present"; the short
       // suppression window covers the widget's own click sound.
@@ -221,9 +227,10 @@
       // buffer. Move to the first grid point that is still in the future.
       while (next < duration - 0.04) next += nextPeriod
       var now = context.currentTime
-      var target = now + Math.max(0.08, next - duration)
+      var bufferEnd = ringEndedAt || now
+      var target = bufferEnd + Math.max(0.02, next - duration)
       // Do not let a stale grid schedule a beat in the past.
-      while (target < now + 0.06) target += nextPeriod
+      while (target < now + 0.03) target += nextPeriod
       // Keep a small amount of phase continuity while the tempo is stable;
       // re-anchoring on every analysis would make the pet jitter.
       if (bpm && Math.abs(nextBpm - bpm) < 4 && nextBeatAt > now + 0.05) {

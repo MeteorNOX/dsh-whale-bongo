@@ -1695,6 +1695,9 @@ function mountWhaleBongoWidget(options) {
   var audioBeatStatus = 'stopped'
   var audioBeatError = ''
   var audioBeatBpm = 0
+  var audioBeatPhase = 0
+  var audioBeatGroove = 0
+  var audioBeatPeriod = 0
   var lastDesktopFollowX = null
   var lastDesktopFollowY = null
   var desktopFollowFrame = 0
@@ -1762,6 +1765,7 @@ function mountWhaleBongoWidget(options) {
       randomAngle: 0,
       randomActive: false,
       tap: 0,
+      beatTap: 0,
       trailY: 0,
       trailY2: 0,
       trailAlpha: 0,
@@ -1834,12 +1838,20 @@ function mountWhaleBongoWidget(options) {
   function renderImageMotion() {
     if (!imageMotion) return
     var sq = clamp(imageSquash.value, -0.18, 0.18)
+    // The music groove is a continuous raised-cosine dip: it reaches its
+    // lowest point on the beat and rises back through the gap, so the body
+    // nods instead of snapping back and waiting for the next pulse.
+    var groove = audioBeatGroove > 0.001 ? audioBeatGroove : 0
+    var nod = groove * (0.5 + 0.5 * Math.cos(audioBeatPhase * Math.PI * 2))
+    var audioX = 1 + nod * 0.035
+    var audioY = 1 - nod * 0.075
     if (stage) {
       stage.classList.toggle('is-bouncing',
-        Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05)
+        Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05 || nod > 0.01)
     }
     imageMotion.style.transform =
-      'scale(' + (1 + sq * 0.80).toFixed(4) + ',' + (1 - sq * 1.10).toFixed(4) + ')'
+      'scale(' + ((1 + sq * 0.80) * audioX).toFixed(4) + ',' +
+      ((1 - sq * 1.10) * audioY).toFixed(4) + ')'
   }
 
 
@@ -2088,7 +2100,14 @@ function mountWhaleBongoWidget(options) {
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
       var tap = hand.tap
-      var squash = clamp(hand.squash.value + tap * CONFIG.tapSquash, -0.11, 0.48)
+      // beatTap only compresses the hand in place; unlike tap it never adds
+      // downward travel, so a music beat looks like a click without the hand
+      // sliding toward the bottom of the widget.
+      var squash = clamp(
+        hand.squash.value + tap * CONFIG.tapSquash + hand.beatTap * 0.22,
+        -0.11,
+        0.48
+      )
       var scaleX = 1 + squash * 0.58
       var scaleY = 1 - squash * 0.74
       var travel = (hand.y.value + tap * CONFIG.tapDepth) * handSize
@@ -2145,6 +2164,8 @@ function mountWhaleBongoWidget(options) {
     hand.squash.step(dt)
     hand.tap *= Math.exp(-dt * CONFIG.tapDecay)
     if (hand.tap < 0.001) hand.tap = 0
+    hand.beatTap *= Math.exp(-dt * 12)
+    if (hand.beatTap < 0.001) hand.beatTap = 0
 
     var speed = Math.max(Math.abs(hand.y.velocity), Math.abs(hand.squash.velocity) * 0.45)
     var strength = clamp((speed - 0.7) / 9.5, 0, 1)
@@ -2388,29 +2409,39 @@ function mountWhaleBongoWidget(options) {
     return q
   }
 
-  function pressHandsForBeat(strength) {
+  function tapHandsInPlace(strength) {
     var amount = clamp(numberOr(strength, 0.6), 0.2, 1)
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
       if (hand.down || hand.seq || hand.keys.size > 0) continue
       hand.manualSquash = false
-      hand.tap = 0
-      hand.downAt = nowMs()
-      setPressed(hand, true)
-      hand.tap = Math.min(1.25, hand.tap + 0.65 * amount)
-      hand.y.velocity = Math.max(0, hand.y.velocity) + 2.0 * amount
-      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.0 * amount
-      // Short press, then let the normal spring snap back. This keeps the
-      // hands in time with the beat instead of floating back slowly.
-      releaseHand(hand, 50 + 25 * (1 - amount))
+      // Keep the hand anchored: no y impulse and no tap travel. Only the
+      // squash envelope fires, so each beat is a compact in-place click.
+      hand.beatTap = Math.max(hand.beatTap, 0.62 * amount)
+      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 0.45 * amount
+    }
+  }
+
+  function stepAudioGroove(dt) {
+    if (!dt) return
+    var active = audioBeatEnabled && audioBeatStatus === 'active' && audioBeatPeriod > 0
+    var target = active ? 1 : 0
+    audioBeatGroove += (target - audioBeatGroove) * (1 - Math.exp(-dt * 9))
+    if (audioBeatGroove < 0.001) {
+      audioBeatGroove = 0
+      audioBeatPhase = 0
+      return
+    }
+    if (audioBeatPeriod > 0) {
+      audioBeatPhase = (audioBeatPhase + dt / audioBeatPeriod) % 1
     }
   }
 
   function pulseAudioBeat(strength) {
     if (!desktopMode || !cfg.audioBeat || !audioBeatEnabled) return
     var s = clamp(numberOr(strength, 0.5), 0.2, 1)
-    kickImage(s)
-    pressHandsForBeat(s)
+    audioBeatPhase = 0
+    tapHandsInPlace(s)
   }
 
   function applyMoveShellTransform(q) {
@@ -2662,6 +2693,7 @@ function mountWhaleBongoWidget(options) {
       }
     }
 
+    stepAudioGroove(dt)
     stepFollowBounce(dt, q)
     applyMoveShellTransform(q)
   }
@@ -4445,6 +4477,12 @@ function mountWhaleBongoWidget(options) {
     audioBeatStatus = state || 'stopped'
     audioBeatError = error || ''
     audioBeatBpm = numberOr(bpm, 0)
+    if (audioBeatStatus !== 'active' || !(audioBeatBpm > 0)) {
+      audioBeatPeriod = 0
+      audioBeatPhase = 0
+    } else {
+      audioBeatPeriod = 60 / audioBeatBpm
+    }
     syncAudioBeatStatus()
   }
 
