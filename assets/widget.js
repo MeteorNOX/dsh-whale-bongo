@@ -459,11 +459,13 @@ function mountWhaleBongoWidget(options) {
       pointer-events: none;
     }
     #dsh-whale-bongo .dsnw-stage.is-bouncing { overflow: visible; }
+    #dsh-whale-bongo .dsnw-stage.has-fx { overflow: visible; }
     #dsh-whale-bongo .dsnw-fx {
       position: absolute;
-      inset: 0;
+      left: -20%;
+      top: 0;
       z-index: 0;
-      width: 100%;
+      width: 140%;
       height: 100%;
       pointer-events: none;
     }
@@ -2141,7 +2143,9 @@ function mountWhaleBongoWidget(options) {
     }
     if (cfg.audioFxStyle === 'spectrum') {
       var bars = audioBandLevels.length || 21
-      var energy = clamp(audioEnergy * 24 + fxBeatEnv * 0.55, 0, 1)
+      var audible = audioEnergy > 0.0008 || fxBeatEnv > 0.01
+      if (!audible) return
+      var energy = clamp(audioEnergy * 20 + fxBeatEnv * 0.40, 0, 1)
       fxCtx.save()
       fxCtx.lineCap = 'round'
       for (var i = 0; i < bars; i++) {
@@ -2149,8 +2153,9 @@ function mountWhaleBongoWidget(options) {
         var angle = -Math.PI * 0.98 + t * Math.PI * 0.96
         var band = audioBandLevels[i]
         if (!isFinite(band)) band = 0
-        var wave = clamp(band * 1.35 + 0.10 + fxBeatEnv * 0.30, 0.10, 1)
-        var length = (10 + 54 * wave) * fxScale
+        var shaped = Math.pow(clamp(band, 0, 1), 1.6)
+        var wave = clamp(shaped * 0.76 + fxBeatEnv * 0.10, 0.015, 0.88)
+        var length = (8 + 70 * wave) * fxScale
         var inner = radius * 0.68
         var x1 = baseX + Math.cos(angle) * inner
         var y1 = baseY + Math.sin(angle) * inner
