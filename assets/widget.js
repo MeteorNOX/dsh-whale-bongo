@@ -858,6 +858,37 @@ function mountWhaleBongoWidget(options) {
       font-size: 11px;
       line-height: 16px;
     }
+    #dsh-whale-bongo .dsnw-mod-section {
+      margin-top: 12px;
+      padding-top: 9px;
+      border-top: 1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.22));
+    }
+    #dsh-whale-bongo .dsnw-mod-title {
+      color: var(--dsw-alias-brand-primary, #4d6bfe);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      line-height: 16px;
+      opacity: .9;
+    }
+    #dsh-whale-bongo .dsnw-mod-section:empty {
+      display: none;
+    }
+    #dsh-whale-bongo .dsnw-mod-select {
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 24px;
+      border: 1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.3));
+      border-radius: 6px;
+      background: var(--dsw-alias-bg-base, #1b1b1b);
+      color: var(--dsw-alias-label-primary, #e8e8e8);
+      font: inherit;
+      font-size: 11px;
+      padding: 0 6px;
+    }
+    #dsh-whale-bongo .dsnw-mod-section .dsnw-toggle-row {
+      margin-top: 6px;
+    }
     #dsh-whale-bongo .dsnw-fold-body[data-open="1"] {
       background: rgba(77,107,254,.045);
       background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 4.5%, transparent);
@@ -1246,24 +1277,8 @@ function mountWhaleBongoWidget(options) {
             '<input type="checkbox" data-filter-shortcuts>' +
             '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
           '</label>' +
-          '<label class="dsnw-toggle-row">' +
-            '<span class="dsnw-toggle-label">桌面模式随系统声音律动</span>' +
-            '<input type="checkbox" data-audio-beat>' +
-            '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
-          '</label>' +
-          '<p class="dsnw-image-name" data-audio-beat-status>桌面模式默认开启</p>' +
-          '<div class="dsnw-behavior">' +
-            '<span class="dsnw-behavior-label">律动缩放</span>' +
-            '<div class="dsnw-select" data-select="audioBeatMode">' +
-              '<button class="dsnw-select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">' +
-                '<span class="dsnw-select-label" data-select-label>整体缩放</span>' +
-                '<span class="dsnw-select-chevron" aria-hidden="true">⌄</span>' +
-              '</button>' +
-              '<div class="dsnw-select-popover" role="listbox" aria-label="音乐律动缩放方式">' +
-                '<button class="dsnw-select-option" type="button" role="option" data-value="full"><span class="dsnw-select-check">✓</span><span>整体缩放</span></button>' +
-                '<button class="dsnw-select-option" type="button" role="option" data-value="vertical"><span class="dsnw-select-check">✓</span><span>仅纵向缩放</span></button>' +
-              '</div>' +
-            '</div>' +
+          '<div class="dsnw-mod-section" data-mod="audio-beat">' +
+            '<div data-mod-slot="audio-beat"></div>' +
           '</div>' +
           '<div class="dsnw-subhead">打字时手手角度偏移</div>' +
           '<div class="dsnw-behavior">' +
@@ -1310,15 +1325,32 @@ function mountWhaleBongoWidget(options) {
   var flipModeSelect = root.querySelector('[data-select="flipMode"]')
   var typingAngleModeSelect = root.querySelector('[data-select="typingAngleMode"]')
   var filterShortcutsInput = root.querySelector('[data-filter-shortcuts]')
-  var audioBeatInput = root.querySelector('[data-audio-beat]')
-  var audioBeatModeSelect = root.querySelector('[data-select="audioBeatMode"]')
-  var audioBeatStatusEl = root.querySelector('[data-audio-beat-status]')
   var displayModeSelect = root.querySelector('[data-select="displayMode"]')
   var flipSettingList = root.querySelector('[data-setting-list="flip"]')
   var menuScroll = root.querySelector('.dsnw-menu-scroll')
   var imageNameEl = root.querySelector('[data-image-name]')
   var soundFileInput = root.querySelector('[data-sound-file]')
   var soundNameEl = root.querySelector('[data-sound-name]')
+  var audioMod = null
+  if (desktopMode && window.DSHWhaleBongoMods &&
+      typeof window.DSHWhaleBongoMods.audioBeat === 'function') {
+    try {
+      audioMod = window.DSHWhaleBongoMods.audioBeat({
+        cfg: cfg,
+        desktopMode: desktopMode,
+        save: saveCfg,
+        q: moveBounceRatio
+      })
+      var audioModSlot = root.querySelector('[data-mod-slot="audio-beat"]')
+      if (audioModSlot) audioMod.mount(audioModSlot)
+    } catch (modError) {
+      audioMod = null
+    }
+  }
+  if (!audioMod) {
+    var audioModSection = root.querySelector('[data-mod="audio-beat"]')
+    if (audioModSection) audioModSection.hidden = true
+  }
 
   var clipPath = root.querySelector('#dsnw-alpha-clip')
   var imageSettingList = root.querySelector('[data-setting-list="image"]')
@@ -1371,7 +1403,7 @@ function mountWhaleBongoWidget(options) {
     soundCursor += 1
     // The desktop helper captures system audio. Mask the detector around the
     // widget's own click so its sound is never mistaken for a musical beat.
-    if (desktopMode && cfg.audioBeat && audioBeatEnabled &&
+    if (desktopMode && typeof audioMod !== 'undefined' && audioMod && audioMod.isEnabled() &&
         typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
       var maskMs = 320
       if (isFinite(audio.duration) && audio.duration > 0) {
@@ -1492,23 +1524,6 @@ function mountWhaleBongoWidget(options) {
     return { min: 0, max: 100, def: 0 }
   }
 
-  function syncAudioBeatStatus() {
-    if (!audioBeatStatusEl) return
-    var text = '桌面模式默认开启'
-    if (!cfg.audioBeat || !audioBeatEnabled) text = '已关闭'
-    else if (!desktopMode) text = '仅在桌面模式生效'
-    else if (audioBeatStatus === 'starting') text = '正在申请系统音频…'
-    else if (audioBeatStatus === 'active') {
-      text = '已连接系统音频'
-      if (audioBeatBpm > 0) text += ' · ' + Math.round(audioBeatBpm) + ' BPM'
-    }
-    else if (audioBeatStatus === 'error') text = audioBeatError || '系统音频不可用'
-    else text = '等待桌面音频'
-    audioBeatStatusEl.textContent = text
-    audioBeatStatusEl.classList.toggle('is-error', audioBeatStatus === 'error' && cfg.audioBeat)
-    audioBeatStatusEl.classList.toggle('is-active', audioBeatStatus === 'active' && cfg.audioBeat)
-  }
-
   function syncSettings() {
     for (var i = 0; i < SETTINGS.length; i++) {
       var item = SETTINGS[i]
@@ -1525,9 +1540,7 @@ function mountWhaleBongoWidget(options) {
     if (flipModeSelect) setSelectValue(flipModeSelect, cfg.flipMode)
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
     if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
-    if (audioBeatInput) audioBeatInput.checked = cfg.audioBeat !== false
-    if (audioBeatModeSelect) setSelectValue(audioBeatModeSelect, cfg.audioBeatMode)
-    syncAudioBeatStatus()
+    if (typeof audioMod !== 'undefined' && audioMod) audioMod.sync()
     if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
     if (flipSettingList) flipSettingList.hidden = cfg.flipMode !== 'custom'
@@ -1708,14 +1721,6 @@ function mountWhaleBongoWidget(options) {
   var followStretch = 0
   var followStretchV = 0
 
-  var audioBeatEnabled = true
-  var audioBeatStatus = 'stopped'
-  var audioBeatError = ''
-  var audioBeatBpm = 0
-  var audioBeatPhase = 0
-  var audioBeatGroove = 0
-  var audioBeatPeriod = 0
-  var audioBeatTargetPeriod = 0
   var audioBodyScaleX = 1
   var audioBodyScaleY = 1
   var lastDesktopFollowX = null
@@ -1861,23 +1866,16 @@ function mountWhaleBongoWidget(options) {
       return
     }
     var sq = clamp(imageSquash.value, -0.18, 0.18)
-    // One damped bounce per beat: the body hits its lowest point at phase 0,
-    // overshoots taller, then settles. The curve is continuous across phase
-    // wrap, so BPM corrections do not restart a second nod mid-beat.
-    var groove = audioBeatGroove > 0.001 ? audioBeatGroove : 0
-    var phase = audioBeatPhase % 1
-    if (phase < 0) phase += 1
-    var bounce = Math.exp(-4.2 * phase) * Math.cos(phase * Math.PI * 2)
-    var level = clamp(moveBounceRatio(), 0, 1.35)
-    var nod = groove * bounce
-    var verticalOnly = cfg.audioBeatMode === 'vertical'
-    var audioX = verticalOnly ? 1 : 1 - nod * level * 0.040
-    var audioY = 1 - nod * level * 0.090
+    // The MOD owns the musical nod; the widget only composes its scale with
+    // the click squash so the hands and body share the same beat frame.
+    var beatScale = (typeof audioMod !== 'undefined' && audioMod) ? audioMod.scales() : { x: 1, y: 1 }
+    var audioX = clamp(beatScale.x, 0.8, 1.2)
+    var audioY = clamp(beatScale.y, 0.7, 1.3)
     audioBodyScaleX = audioX
     audioBodyScaleY = audioY
+    var beatActive = Math.abs(audioY - 1) > 0.001
     if (stage) {
-      stage.classList.toggle('is-bouncing',
-        Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05 || nod > 0.01)
+      stage.classList.toggle('is-bouncing', Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05 || beatActive)
     }
     imageMotion.style.transform =
       'scale(' + ((1 + sq * 0.80) * audioX).toFixed(4) + ',' +
@@ -2436,36 +2434,11 @@ function mountWhaleBongoWidget(options) {
   }
 
   function stepAudioGroove(dt) {
-    if (!dt) return
-    var active = audioBeatEnabled && audioBeatStatus === 'active' && audioBeatTargetPeriod > 0
-    var target = active ? 1 : 0
-    audioBeatGroove += (target - audioBeatGroove) * (1 - Math.exp(-dt * 9))
-    // BPM refinements arrive every analysis window. Slew the period instead
-    // of snapping to the new value, otherwise the nod speed jumps and the
-    // phase visibly lurches on every re-detect.
-    if (audioBeatTargetPeriod > 0) {
-      audioBeatPeriod += (audioBeatTargetPeriod - audioBeatPeriod) * (1 - Math.exp(-dt * 5))
-    } else {
-      audioBeatPeriod += (0 - audioBeatPeriod) * (1 - Math.exp(-dt * 10))
-      if (audioBeatPeriod < 0.01) audioBeatPeriod = 0
-    }
-    if (audioBeatGroove < 0.001) {
-      audioBeatGroove = 0
-      audioBeatPhase = 0
-      return
-    }
-    if (audioBeatPeriod > 0) {
-      audioBeatPhase = (audioBeatPhase + dt / audioBeatPeriod) % 1
-    }
+    if (typeof audioMod !== 'undefined' && audioMod) audioMod.update(dt)
   }
 
   function pulseAudioBeat(strength) {
-    if (!desktopMode || !cfg.audioBeat || !audioBeatEnabled) return
-    // Every grid event is a beat, so the nod's lowest point belongs exactly
-    // there. The hands have no separate beat spring, so snapping the shared
-    // body phase cannot produce a second hand bounce; the period slew below
-    // keeps the tempo change itself smooth.
-    audioBeatPhase = 0
+    if (typeof audioMod !== 'undefined' && audioMod) audioMod.pulse(strength)
   }
 
   function applyMoveShellTransform(q) {
@@ -3492,22 +3465,6 @@ function mountWhaleBongoWidget(options) {
       syncSettings()
     })
   }
-  if (audioBeatInput) {
-    audioBeatInput.addEventListener('change', function () {
-      cfg.audioBeat = Boolean(this.checked)
-      saveCfg()
-      syncSettings()
-    })
-  }
-  if (audioBeatModeSelect) {
-    initSelect(audioBeatModeSelect, function (value) {
-      cfg.audioBeatMode = value === 'vertical' ? 'vertical' : 'full'
-      saveCfg()
-      syncSettings()
-    })
-    setSelectValue(audioBeatModeSelect, cfg.audioBeatMode)
-  }
-
   if (displayModeSelect) {
     initSelect(displayModeSelect, function (value) {
       var next = value === 'desktop' ? 'desktop' : 'web'
@@ -4267,7 +4224,7 @@ function mountWhaleBongoWidget(options) {
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (MODIFIER_KEYS[event.key]) return
     }
-    if (desktopMode && cfg.audioBeat && audioBeatEnabled &&
+    if (desktopMode && typeof audioMod !== 'undefined' && audioMod && audioMod.isEnabled() &&
         typeof window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS === 'function') {
       // Keep the already-detected grid running while typing. Corrections
       // resume after the last key stops masking analysis.
@@ -4507,23 +4464,11 @@ function mountWhaleBongoWidget(options) {
   }
 
   function setAudioBeatEnabled(enabled) {
-    audioBeatEnabled = enabled !== false
-    syncAudioBeatStatus()
+    if (typeof audioMod !== 'undefined' && audioMod) audioMod.setEnabled(enabled)
   }
 
   function setAudioBeatStatus(state, error, bpm) {
-    audioBeatStatus = state || 'stopped'
-    audioBeatError = error || ''
-    audioBeatBpm = numberOr(bpm, 0)
-    if (audioBeatStatus !== 'active' || !(audioBeatBpm > 0)) {
-      // Let the groove fade from its current phase. Snapping to phase 0 here
-      // would drop the body to the bottom for one last visible nod.
-      audioBeatTargetPeriod = 0
-    } else {
-      audioBeatTargetPeriod = 60 / audioBeatBpm
-      if (!(audioBeatPeriod > 0)) audioBeatPeriod = audioBeatTargetPeriod
-    }
-    syncAudioBeatStatus()
+    if (typeof audioMod !== 'undefined' && audioMod) audioMod.setStatus(state, error, bpm)
   }
 
   function setDesktopDisplay(info) {
