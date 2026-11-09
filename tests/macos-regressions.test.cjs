@@ -193,7 +193,7 @@ function motion() {
     moveShell:{style:{}}, root:{style:{},classList:{add(){}}},
     followLean:0, followLeanV:0, followStretch:0, followStretchV:0, moveSquash:0, moveSquashV:0, moveSquashArmed:false,
     audioBeatEnabled:true, audioBeatStatus:'stopped', audioBeatBpm:0,
-    audioBeatPhase:0, audioBeatGroove:0, audioBeatPeriod:0,
+    audioBeatPhase:0, audioBeatGroove:0, audioBeatPeriod:0, audioBeatTargetPeriod:0,
     bodyStretch:0, springActive:false, springAnchorX:400, springAnchorY:300,
     springTargetAnchorX:400, springTargetAnchorY:300, springVX:0, springVY:0,
     MOVE_STIFFNESS_BASE:240, MOVE_STIFFNESS_RANGE:60, MOVE_DAMPING_BASE:36,

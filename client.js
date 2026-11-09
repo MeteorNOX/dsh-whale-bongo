@@ -1716,6 +1716,7 @@ function mountWhaleBongoWidget(options) {
   var audioBeatPhase = 0
   var audioBeatGroove = 0
   var audioBeatPeriod = 0
+  var audioBeatTargetPeriod = 0
   var lastDesktopFollowX = null
   var lastDesktopFollowY = null
   var desktopFollowFrame = 0
@@ -1776,6 +1777,7 @@ function mountWhaleBongoWidget(options) {
       trail2: el.querySelector('.dsnw-trail--far'),
       y: new Spring(0, 1500, 31),
       squash: new Spring(0, 1050, 14),
+      beatSquash: new Spring(0, 320, 10),
       down: false,
       hit: false,
       manualSquash: false,
@@ -1783,7 +1785,6 @@ function mountWhaleBongoWidget(options) {
       randomAngle: 0,
       randomActive: false,
       tap: 0,
-      beatTap: 0,
       trailY: 0,
       trailY2: 0,
       trailAlpha: 0,
@@ -1856,13 +1857,22 @@ function mountWhaleBongoWidget(options) {
   function renderImageMotion() {
     if (!imageMotion) return
     var sq = clamp(imageSquash.value, -0.18, 0.18)
-    // The music groove is a continuous raised-cosine dip: it reaches its
-    // lowest point on the beat and rises back through the gap, so the body
-    // nods instead of snapping back and waiting for the next pulse.
+    // Asymmetric nod: the fall into the next beat is fast, the recovery is
+    // slow, and the lowest point lands exactly on phase 0 (the beat). The
+    // 0.72 split makes the downstroke visibly quicker than the rise.
     var groove = audioBeatGroove > 0.001 ? audioBeatGroove : 0
-    var nod = groove * (0.5 + 0.5 * Math.cos(audioBeatPhase * Math.PI * 2))
-    var audioX = 1 + nod * 0.035
-    var audioY = 1 - nod * 0.075
+    var phase = audioBeatPhase % 1
+    if (phase < 0) phase += 1
+    var dip
+    if (phase < 0.72) {
+      dip = 1 - Math.pow(phase / 0.72, 1.55)
+    } else {
+      dip = Math.pow((phase - 0.72) / 0.28, 2)
+    }
+    var level = clamp(moveBounceRatio(), 0, 1.35)
+    var nod = groove * dip
+    var audioX = 1 + nod * level * 0.040
+    var audioY = 1 - nod * level * 0.090
     if (stage) {
       stage.classList.toggle('is-bouncing',
         Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05 || nod > 0.01)
@@ -2118,11 +2128,11 @@ function mountWhaleBongoWidget(options) {
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
       var tap = hand.tap
-      // beatTap only compresses the hand in place; unlike tap it never adds
-      // downward travel, so a music beat looks like a click without the hand
-      // sliding toward the bottom of the widget.
+      // beatSquash is a separate underdamped spring: it compresses the hand
+      // in place, overshoots slightly and settles, unlike tap which adds
+      // downward travel. This is the same Q feel as a click without sliding.
       var squash = clamp(
-        hand.squash.value + tap * CONFIG.tapSquash + hand.beatTap * 0.22,
+        hand.squash.value + tap * CONFIG.tapSquash + hand.beatSquash.value,
         -0.11,
         0.48
       )
@@ -2180,10 +2190,9 @@ function mountWhaleBongoWidget(options) {
       hand.squash.target = hand.down ? CONFIG.squash * Math.pow(progress, 1.18) : 0
     }
     hand.squash.step(dt)
+    hand.beatSquash.step(dt)
     hand.tap *= Math.exp(-dt * CONFIG.tapDecay)
     if (hand.tap < 0.001) hand.tap = 0
-    hand.beatTap *= Math.exp(-dt * 12)
-    if (hand.beatTap < 0.001) hand.beatTap = 0
 
     var speed = Math.max(Math.abs(hand.y.velocity), Math.abs(hand.squash.velocity) * 0.45)
     var strength = clamp((speed - 0.7) / 9.5, 0, 1)
@@ -2429,22 +2438,34 @@ function mountWhaleBongoWidget(options) {
 
   function tapHandsInPlace(strength) {
     var amount = clamp(numberOr(strength, 0.6), 0.2, 1)
+    var level = moveBounceRatio()
+    var ratio = clamp(level / 1.35, 0, 1)
+    var impulse = (1.6 + 2.4 * ratio) * amount
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
       if (hand.down || hand.seq || hand.keys.size > 0) continue
       hand.manualSquash = false
-      // Keep the hand anchored: no y impulse and no tap travel. Only the
-      // squash envelope fires, so each beat is a compact in-place click.
-      hand.beatTap = Math.max(hand.beatTap, 0.62 * amount)
-      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 0.45 * amount
+      // Keep the hand anchored: no y impulse and no tap travel. The separate
+      // underdamped spring gives a soft overshoot instead of a hard snap.
+      // Cap repeat beats at high BPM so the spring cannot pile up indefinitely.
+      hand.beatSquash.velocity = clamp(hand.beatSquash.velocity + impulse, -2, 4.5)
     }
   }
 
   function stepAudioGroove(dt) {
     if (!dt) return
-    var active = audioBeatEnabled && audioBeatStatus === 'active' && audioBeatPeriod > 0
+    var active = audioBeatEnabled && audioBeatStatus === 'active' && audioBeatTargetPeriod > 0
     var target = active ? 1 : 0
     audioBeatGroove += (target - audioBeatGroove) * (1 - Math.exp(-dt * 9))
+    // BPM refinements arrive every analysis window. Slew the period instead
+    // of snapping to the new value, otherwise the nod speed jumps and the
+    // phase visibly lurches on every re-detect.
+    if (audioBeatTargetPeriod > 0) {
+      audioBeatPeriod += (audioBeatTargetPeriod - audioBeatPeriod) * (1 - Math.exp(-dt * 5))
+    } else {
+      audioBeatPeriod += (0 - audioBeatPeriod) * (1 - Math.exp(-dt * 10))
+      if (audioBeatPeriod < 0.01) audioBeatPeriod = 0
+    }
     if (audioBeatGroove < 0.001) {
       audioBeatGroove = 0
       audioBeatPhase = 0
@@ -2458,6 +2479,9 @@ function mountWhaleBongoWidget(options) {
   function pulseAudioBeat(strength) {
     if (!desktopMode || !cfg.audioBeat || !audioBeatEnabled) return
     var s = clamp(numberOr(strength, 0.5), 0.2, 1)
+    // The grid callback is the beat: put the nod at its lowest point now.
+    // Tempo changes are smoothed by audioBeatPeriod, so this does not make
+    // the body lurch when the BPM estimate is refined.
     audioBeatPhase = 0
     tapHandsInPlace(s)
   }
@@ -4496,10 +4520,12 @@ function mountWhaleBongoWidget(options) {
     audioBeatError = error || ''
     audioBeatBpm = numberOr(bpm, 0)
     if (audioBeatStatus !== 'active' || !(audioBeatBpm > 0)) {
-      audioBeatPeriod = 0
-      audioBeatPhase = 0
+      // Let the groove fade from its current phase. Snapping to phase 0 here
+      // would drop the body to the bottom for one last visible nod.
+      audioBeatTargetPeriod = 0
     } else {
-      audioBeatPeriod = 60 / audioBeatBpm
+      audioBeatTargetPeriod = 60 / audioBeatBpm
+      if (!(audioBeatPeriod > 0)) audioBeatPeriod = audioBeatTargetPeriod
     }
     syncAudioBeatStatus()
   }
