@@ -13,7 +13,6 @@ const els = {
   pid: $('pid'), bridge: $('bridge'), analysisRows: $('analysisRows'), events: $('events'),
   recorder: $('recorder'), recordState: $('recordState'), recordToggle: $('recordToggle'),
   recordExport: $('recordExport'), recDot: $('recDot'),
-  stageGrid: $('stageGrid'), stageSelected: $('stageSelected'), stageDemo: $('stageDemo'),
 }
 const RECORD_FORMAT = 'dsh-whale-bongo-beat-recording'
 const RECORD_VERSION = 1
@@ -32,17 +31,6 @@ let recorder = null
 let recordStartedPerf = 0
 let recordStartedWall = 0
 let recordTicker = 0
-const STAGE_KEY = 'dsh-whale-bongo:stage-effect'
-const STAGE_LABELS = {
-  aura: '呼吸光环',
-  ripple: '同心波纹',
-  bars: '低频音柱',
-  orbit: '轨道微光',
-  wave: '声浪地平线',
-  spot: '舞台追光',
-}
-let stageFlashTimer = 0
-let lastLiveStageBeat = 0
 
 function recordElapsed() {
   return Math.max(0, Math.round(performance.now() - recordStartedPerf))
@@ -86,7 +74,6 @@ function startRecording() {
   if (recorder && recorder.active) return
   recordStartedPerf = performance.now()
   recordStartedWall = Date.now()
-  const selectedStage = document.querySelector('.stage-card.is-selected')
   recorder = {
     format: RECORD_FORMAT,
     version: RECORD_VERSION,
@@ -106,7 +93,6 @@ function startRecording() {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       devicePixelRatio: window.devicePixelRatio || 1,
       viewport: { width: innerWidth, height: innerHeight },
-      stageEffect: selectedStage ? selectedStage.getAttribute('data-stage') : '',
     },
     samples: [],
     beats: [],
@@ -353,50 +339,10 @@ function applyTelemetry(env) {
   draw()
 }
 
-function selectStage(card, persist) {
-  if (!card || !els.stageGrid) return
-  const cards = els.stageGrid.querySelectorAll('.stage-card')
-  for (const item of cards) {
-    const on = item === card
-    item.classList.toggle('is-selected', on)
-    item.setAttribute('aria-pressed', on ? 'true' : 'false')
-  }
-  const key = card.getAttribute('data-stage') || 'aura'
-  if (els.stageSelected) els.stageSelected.textContent = '已选择 · ' + (STAGE_LABELS[key] || key)
-  if (persist) {
-    try { localStorage.setItem(STAGE_KEY, key) } catch {}
-  }
-}
-
-function restoreStage() {
-  if (!els.stageGrid) return
-  let key = 'aura'
-  try { key = localStorage.getItem(STAGE_KEY) || 'aura' } catch {}
-  const card = els.stageGrid.querySelector('.stage-card[data-stage="' + key + '"]') ||
-    els.stageGrid.querySelector('.stage-card')
-  selectStage(card, false)
-}
-
-function flashStages() {
-  if (!els.stageGrid) return
-  const visuals = els.stageGrid.querySelectorAll('.stage-visual')
-  for (const visual of visuals) {
-    visual.classList.remove('is-beat')
-    void visual.offsetWidth
-    visual.classList.add('is-beat')
-  }
-  clearTimeout(stageFlashTimer)
-  stageFlashTimer = setTimeout(() => {
-    for (const visual of visuals) visual.classList.remove('is-beat')
-  }, 900)
-}
-
 function flashBeat() {
   els.beatVisual.classList.add('hit')
   clearTimeout(hitTimer)
   hitTimer = setTimeout(() => els.beatVisual.classList.remove('hit'), 130)
-  lastLiveStageBeat = Date.now()
-  flashStages()
 }
 
 function resizeCanvas() {
@@ -524,29 +470,6 @@ window.__BeatLiveRecorder = {
   export: exportRecording,
   get: () => recorder,
 }
-window.__BeatLiveStage = {
-  select: (key) => {
-    if (!els.stageGrid) return
-    selectStage(els.stageGrid.querySelector('.stage-card[data-stage="' + key + '"]'), true)
-  },
-  flash: flashStages,
-  current: () => {
-    const card = els.stageGrid && els.stageGrid.querySelector('.stage-card.is-selected')
-    return card ? card.getAttribute('data-stage') : null
-  },
-}
-if (els.stageGrid) {
-  els.stageGrid.addEventListener('click', (event) => {
-    const card = event.target.closest('.stage-card')
-    if (card) selectStage(card, true)
-  })
-  restoreStage()
-}
-if (els.stageDemo) els.stageDemo.addEventListener('click', flashStages)
-setInterval(() => {
-  if (document.hidden) return
-  if (Date.now() - lastLiveStageBeat > 1600) flashStages()
-}, 520)
 updateRecordUi()
 connect()
 pollInfo()

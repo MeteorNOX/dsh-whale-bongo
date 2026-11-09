@@ -16,6 +16,8 @@ window.__ModuleLoader__.load({
     }
     window.__dshWhaleBongoRemountPageWidget = remountPageWidget
 
+
+
 function mountWhaleBongoWidget(options) {
   'use strict'
 
@@ -162,6 +164,7 @@ function mountWhaleBongoWidget(options) {
     typingAngleMode: 'position-split',
     audioBeat: true,
     audioBeatLead: 0,
+    audioFxStyle: 'spectrum',
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -283,9 +286,12 @@ function mountWhaleBongoWidget(options) {
     delete out.clickPressHands
     out.flipMode = out.flipMode === 'custom' || out.flipMode === 'never' || out.flipMode === 'always' ? out.flipMode : 'auto'
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
-    out.filterShortcutKeys = out.filterShortcutKeys !== false
+    out.filterShortcutKeys = out.filterShortcutKeys === true
     out.audioBeat = out.audioBeat !== false
     out.audioBeatLead = clamp(numberOr(out.audioBeatLead, 0), -100, 150)
+    out.audioFxStyle = out.audioFxStyle === 'notes' || out.audioFxStyle === 'ripple' || out.audioFxStyle === 'none'
+      ? out.audioFxStyle
+      : 'spectrum'
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
@@ -459,9 +465,20 @@ function mountWhaleBongoWidget(options) {
       pointer-events: none;
     }
     #dsh-whale-bongo .dsnw-stage.is-bouncing { overflow: visible; }
+    #dsh-whale-bongo .dsnw-stage.has-fx { overflow: visible; }
+    #dsh-whale-bongo .dsnw-fx {
+      position: absolute;
+      left: -35%;
+      top: -30%;
+      z-index: 0;
+      width: 170%;
+      height: 170%;
+      pointer-events: none;
+    }
     #dsh-whale-bongo .dsnw-image-motion {
       position: absolute;
       inset: 0;
+      z-index: 1;
       transform-origin: 50% 100%;
       will-change: transform;
       pointer-events: none;
@@ -893,6 +910,18 @@ function mountWhaleBongoWidget(options) {
     #dsh-whale-bongo .dsnw-mod-section .dsnw-toggle-row {
       margin-top: 6px;
     }
+    #dsh-whale-bongo .dsnw-mod-select-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--dsw-alias-label-secondary, #aaa);
+      font-size: 11px;
+      line-height: 16px;
+    }
+    #dsh-whale-bongo .dsnw-mod-select-row .dsnw-mod-select {
+      flex: 1 1 auto;
+    }
     #dsh-whale-bongo .dsnw-mod-slider-head {
       display: flex;
       align-items: center;
@@ -1190,6 +1219,7 @@ function mountWhaleBongoWidget(options) {
       '<defs><clipPath id="dsnw-alpha-clip" clipPathUnits="objectBoundingBox"></clipPath></defs>' +
     '</svg>' +
     '<div class="dsnw-reveal-shell"><div class="dsnw-move-shell"><div class="dsnw-art"><div class="dsnw-stage">' +
+      '<canvas class="dsnw-fx" aria-hidden="true"></canvas>' +
       '<div class="dsnw-image-motion"><img class="dsnw-portrait" alt="" draggable="false"></div>' +
       '<div class="dsnw-hand" data-side="left">' +
         '<div class="dsnw-trail dsnw-trail--far"></div>' +
@@ -1248,6 +1278,26 @@ function mountWhaleBongoWidget(options) {
           '<div data-setting-list="sound"></div>' +
         '</div>' +
       '</div>' +
+      '<div class="dsnw-fold" data-mod-fold="audio-beat">' +
+        '<div class="dsnw-fold-row" data-fold-row="mod" role="button" tabindex="0" aria-expanded="false">' +
+          '<span>MOD</span><span class="dsnw-fold-sum" data-fold-summary="mod"></span><span class="dsnw-fold-arrow" data-fold-arrow="mod">▸</span>' +
+        '</div>' +
+        '<div class="dsnw-fold-body" data-fold-body="mod" data-open="0">' +
+          '<div class="dsnw-mod-section" data-mod="audio-beat">' +
+            '<div data-mod-slot="audio-beat"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="dsnw-fold" data-rhythm-fold hidden>' +
+        '<div class="dsnw-fold-row" data-fold-row="rhythm" role="button" tabindex="0" aria-expanded="false">' +
+          '<span>律动模式</span><span class="dsnw-fold-sum" data-fold-summary="rhythm"></span><span class="dsnw-fold-arrow" data-fold-arrow="rhythm">▸</span>' +
+        '</div>' +
+        '<div class="dsnw-fold-body" data-fold-body="rhythm" data-open="0">' +
+          '<div class="dsnw-mod-section" data-mod-detail="audio-beat">' +
+            '<div data-mod-detail-slot="audio-beat"></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
       '<div class="dsnw-fold">' +
         '<div class="dsnw-fold-row" data-fold-row="behavior" role="button" tabindex="0" aria-expanded="false">' +
           '<span>行为与动效</span><span class="dsnw-fold-sum" data-fold-summary="behavior"></span><span class="dsnw-fold-arrow" data-fold-arrow="behavior">▸</span>' +
@@ -1302,9 +1352,6 @@ function mountWhaleBongoWidget(options) {
             '<input type="checkbox" data-filter-shortcuts>' +
             '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
           '</label>' +
-          '<div class="dsnw-mod-section" data-mod="audio-beat">' +
-            '<div data-mod-slot="audio-beat"></div>' +
-          '</div>' +
           '<div class="dsnw-subhead">打字时手手角度偏移</div>' +
           '<div class="dsnw-behavior">' +
             '<span class="dsnw-behavior-label">偏移方式</span>' +
@@ -1334,6 +1381,17 @@ function mountWhaleBongoWidget(options) {
     '</div></div>'
 
   var stage = root.querySelector('.dsnw-stage')
+  var fxCanvas = root.querySelector('.dsnw-fx')
+  var fxCtx = fxCanvas && fxCanvas.getContext ? fxCanvas.getContext('2d') : null
+  var audioEnergy = 0
+  var audioEnergyTarget = 0
+  var fxBeatEnv = 0
+  var fxNotes = []
+  var fxRipples = []
+  var fxLastAt = 0
+  var fxCanvasW = 0
+  var fxCanvasH = 0
+  var fxCanvasDpr = 0
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
@@ -1357,6 +1415,17 @@ function mountWhaleBongoWidget(options) {
   var soundFileInput = root.querySelector('[data-sound-file]')
   var soundNameEl = root.querySelector('[data-sound-name]')
   var audioMod = null
+  var rhythmFold = root.querySelector('[data-rhythm-fold]')
+  function setRhythmVisible(visible, open) {
+    if (!rhythmFold) return
+    rhythmFold.hidden = !visible
+    var body = foldBody('rhythm')
+    if (!visible) {
+      if (body) setFold(body, false, true)
+    } else if (open && body) {
+      setFold(body, true, true)
+    }
+  }
   if (desktopMode && window.DSHWhaleBongoMods &&
       typeof window.DSHWhaleBongoMods.audioBeat === 'function') {
     try {
@@ -1365,17 +1434,21 @@ function mountWhaleBongoWidget(options) {
         desktopMode: desktopMode,
         save: saveCfg,
         q: moveBounceRatio,
-        pressBeat: pressWidgetForBeat
+        pressBeat: pressWidgetForBeat,
+        setRhythmVisible: setRhythmVisible,
+        onChange: updateFoldSummaries
       })
       var audioModSlot = root.querySelector('[data-mod-slot="audio-beat"]')
-      if (audioModSlot) audioMod.mount(audioModSlot)
+      var audioModDetailSlot = root.querySelector('[data-mod-detail-slot="audio-beat"]')
+      if (audioModSlot) audioMod.mount(audioModSlot, audioModDetailSlot)
     } catch (modError) {
       audioMod = null
     }
   }
   if (!audioMod) {
-    var audioModSection = root.querySelector('[data-mod="audio-beat"]')
-    if (audioModSection) audioModSection.hidden = true
+    var audioModFold = root.querySelector('[data-mod-fold="audio-beat"]')
+    if (audioModFold) audioModFold.hidden = true
+    if (rhythmFold) rhythmFold.hidden = true
   }
 
   var clipPath = root.querySelector('#dsnw-alpha-clip')
@@ -1566,7 +1639,7 @@ function mountWhaleBongoWidget(options) {
     if (clickModeSelect) setSelectValue(clickModeSelect, cfg.clickPressMode)
     if (flipModeSelect) setSelectValue(flipModeSelect, cfg.flipMode)
     if (typingAngleModeSelect) setSelectValue(typingAngleModeSelect, cfg.typingAngleMode)
-    if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys !== false
+    if (filterShortcutsInput) filterShortcutsInput.checked = cfg.filterShortcutKeys === true
     if (typeof audioMod !== 'undefined' && audioMod) audioMod.sync()
     if (displayModeSelect) setSelectValue(displayModeSelect, cfg.displayMode)
     if (typingSettingList) typingSettingList.hidden = cfg.typingAngleMode !== 'random'
@@ -1961,6 +2034,153 @@ function mountWhaleBongoWidget(options) {
     render()
   }
 
+  function syncFxCanvas() {
+    if (!fxCanvas || !fxCtx) return false
+    var w = Math.max(1, Math.round(fxCanvas.clientWidth || stage.clientWidth || 0))
+    var h = Math.max(1, Math.round(fxCanvas.clientHeight || stage.clientHeight || 0))
+    var dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
+    if (!w || !h) return false
+    if (fxCanvasW !== w || fxCanvasH !== h || fxCanvasDpr !== dpr) {
+      fxCanvas.width = Math.round(w * dpr)
+      fxCanvas.height = Math.round(h * dpr)
+      fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      fxCanvasW = w
+      fxCanvasH = h
+      fxCanvasDpr = dpr
+    }
+    return true
+  }
+
+  function audioFxEnabled() {
+    return Boolean(desktopMode && audioMod && audioMod.isEnabled() && cfg.audioFxStyle !== 'none')
+  }
+
+  function spawnFxNotes(strength) {
+    if (!syncFxCanvas()) return
+    var w = fxCanvasW
+    var h = fxCanvasH
+    var count = 10
+    for (var i = 0; i < count; i++) {
+      var side = i % 2 === 0 ? -1 : 1
+      var angle = side < 0
+        ? -Math.PI * 0.95 + Math.random() * Math.PI * 0.30
+        : -Math.PI * 0.35 + Math.random() * Math.PI * 0.30
+      var speed = 120 + Math.random() * 80
+      fxNotes.push({
+        x: w * 0.5 + side * w * (0.04 + Math.random() * 0.04),
+        y: h * 0.82,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 38,
+        rot: (Math.random() - 0.5) * 0.5,
+        vr: (Math.random() - 0.5) * 2.6,
+        size: 17 + Math.random() * 11,
+        hue: Math.floor(Math.random() * 360),
+        life: 1,
+        glyph: ['♪', '♫', '♬'][i % 3],
+        power: strength
+      })
+    }
+    if (fxNotes.length > 60) fxNotes.splice(0, fxNotes.length - 60)
+  }
+
+  function audioFxBeat(strength) {
+    if (!audioFxEnabled()) return
+    fxBeatEnv = Math.max(fxBeatEnv, 0.35 + 0.65 * strength)
+    if (cfg.audioFxStyle === 'notes') spawnFxNotes(strength)
+    if (cfg.audioFxStyle === 'ripple') {
+      for (var i = 0; i < 3; i++) {
+        fxRipples.push({ age: -i * 0.10, life: 0.9 + i * 0.12, power: strength, hue: 182 + i * 18 })
+      }
+      if (fxRipples.length > 24) fxRipples.splice(0, fxRipples.length - 24)
+    }
+  }
+
+  function drawAudioFx() {
+    if (!fxCtx || !syncFxCanvas()) return
+    var w = fxCanvasW
+    var h = fxCanvasH
+    var active = audioFxEnabled()
+    if (stage) stage.classList.toggle('has-fx', active)
+    if (!active) {
+      fxCtx.clearRect(0, 0, w, h)
+      fxBeatEnv = 0
+      return
+    }
+    var now = (window.performance && window.performance.now) ? window.performance.now() : Date.now()
+    var dt = fxLastAt ? Math.min(0.05, (now - fxLastAt) / 1000) : 0.016
+    fxLastAt = now
+    audioEnergy += (audioEnergyTarget - audioEnergy) * (1 - Math.exp(-dt * 9))
+    fxBeatEnv *= Math.exp(-dt * 3.4)
+    if (fxBeatEnv < 0.002) fxBeatEnv = 0
+    fxCtx.clearRect(0, 0, w, h)
+    var baseX = w * 0.5
+    var baseY = h * 0.86
+    var radius = Math.min(w, h) * 0.60
+    if (cfg.audioFxStyle === 'spectrum') {
+      var bars = 17
+      var energy = clamp(audioEnergy * 26 + fxBeatEnv * 0.45, 0, 1)
+      fxCtx.save()
+      fxCtx.lineCap = 'round'
+      for (var i = 0; i < bars; i++) {
+        var t = bars === 1 ? 0.5 : i / (bars - 1)
+        var angle = -Math.PI * 0.98 + t * Math.PI * 0.96
+        var wave = 0.22 + 0.78 * Math.abs(Math.sin(t * Math.PI * 2.2 + now * 0.003))
+        var length = 8 + (10 + energy * 38) * wave
+        var inner = radius * 0.86
+        var x1 = baseX + Math.cos(angle) * inner
+        var y1 = baseY + Math.sin(angle) * inner
+        var x2 = baseX + Math.cos(angle) * (inner + length)
+        var y2 = baseY + Math.sin(angle) * (inner + length)
+        fxCtx.strokeStyle = 'hsla(' + (184 + t * 64) + ', 92%, ' + (60 + energy * 16) + '%, ' + (0.55 + energy * 0.38) + ')'
+        fxCtx.lineWidth = 3.4
+        fxCtx.beginPath()
+        fxCtx.moveTo(x1, y1)
+        fxCtx.lineTo(x2, y2)
+        fxCtx.stroke()
+      }
+      fxCtx.restore()
+    } else if (cfg.audioFxStyle === 'ripple') {
+      fxCtx.save()
+      for (var r = fxRipples.length - 1; r >= 0; r--) {
+        var ring = fxRipples[r]
+        ring.age += dt
+        if (ring.age < 0) continue
+        var progress = ring.age / ring.life
+        if (progress >= 1) { fxRipples.splice(r, 1); continue }
+        var fade = (1 - progress) * (0.55 + ring.power * 0.35)
+        fxCtx.strokeStyle = 'hsla(' + ring.hue + ', 90%, 66%, ' + fade + ')'
+        fxCtx.lineWidth = 2.2 * (1 - progress * 0.6)
+        fxCtx.beginPath()
+        fxCtx.arc(baseX, baseY, radius * (0.35 + progress * 0.9), Math.PI, 2 * Math.PI)
+        fxCtx.stroke()
+      }
+      fxCtx.restore()
+    } else if (cfg.audioFxStyle === 'notes') {
+      fxCtx.save()
+      fxCtx.textAlign = 'center'
+      fxCtx.textBaseline = 'middle'
+      fxCtx.shadowColor = 'rgba(18, 96, 140, 0.28)'
+      fxCtx.shadowBlur = 5
+      for (var n = fxNotes.length - 1; n >= 0; n--) {
+        var note = fxNotes[n]
+        note.life -= dt * 0.62
+        if (note.life <= 0) { fxNotes.splice(n, 1); continue }
+        note.vy += 36 * dt
+        note.x += note.vx * dt
+        note.y += note.vy * dt
+        note.rot += note.vr * dt
+        fxCtx.save()
+        fxCtx.translate(note.x, note.y)
+        fxCtx.rotate(note.rot)
+        fxCtx.fillStyle = 'hsla(' + note.hue + ', 92%, 68%, ' + clamp(note.life, 0, 1) * 0.92 + ')'
+        fxCtx.font = '600 ' + note.size.toFixed(1) + 'px "Segoe UI", sans-serif'
+        fxCtx.fillText(note.glyph, 0, 0)
+        fxCtx.restore()
+      }
+      fxCtx.restore()
+    }
+  }
+
   // Music beats trigger the same two-hand press as a real pointer click.
   // They deliberately do not play the click sound, and are skipped while the
   // user is already dragging or typing.
@@ -2001,6 +2221,7 @@ function mountWhaleBongoWidget(options) {
       pressed.push(hand)
     }
     imageSquash.target = clamp(0.03 * pressQBounceStrength(), 0, 0.14)
+    audioFxBeat(strength)
     render()
     var token = ++beatPressToken
     later(function () {
@@ -2231,6 +2452,7 @@ function mountWhaleBongoWidget(options) {
         }
       }
     }
+    drawAudioFx()
   }
 
   function stepHand(hand, dt) {
@@ -3323,6 +3545,12 @@ function mountWhaleBongoWidget(options) {
       image: fmtSetting(cfg.imageScalePct) + '% · ' + fmtSetting(cfg.imageXPct) + ',' + fmtSetting(cfg.imageYPct),
       hand: '宽' + fmtSetting(cfg.handWidthPct) + ' 高' + fmtSetting(cfg.handAspectPct) + ' 距' + fmtSetting(cfg.handSpreadPct) + ' 轴' + fmtSetting(cfg.handAxisPct) + ' 纵' + fmtSetting(cfg.handCenterYPct),
       sound: '音量 ' + (Number(cfg.volume) === 0 ? '关' : fmtSetting(cfg.volume)),
+      mod: cfg.audioBeat === false ? '律动关' : '律动开',
+      rhythm: (cfg.audioFxStyle === 'notes' ? '彩色音符'
+        : cfg.audioFxStyle === 'ripple' ? '半扇波纹'
+          : cfg.audioFxStyle === 'none' ? '无底层效果' : '半扇频谱') +
+        ' · ' + (Number(cfg.audioBeatLead) > 0 ? '提前 ' + fmtSetting(cfg.audioBeatLead) + 'ms'
+          : Number(cfg.audioBeatLead) < 0 ? '延后 ' + fmtSetting(-cfg.audioBeatLead) + 'ms' : '对齐'),
       behavior: cfg.clickPressMode === 'none' ? '手部不跟随' : (cfg.clickPressMode === 'squash' ? '手部变扁' : '手部跟随下压'),
     }
     for (var key in summaries) {
@@ -4530,6 +4758,10 @@ function mountWhaleBongoWidget(options) {
     if (typeof audioMod !== 'undefined' && audioMod) audioMod.setStatus(state, error, bpm)
   }
 
+  function setAudioEnergy(value) {
+    audioEnergyTarget = clamp(Number(value) || 0, 0, 1)
+  }
+
   function setDesktopDisplay(info) {
     if (!desktopMode) return
     var previousDisplay = window.__DSH_WHALE_DESKTOP_DISPLAY
@@ -4910,6 +5142,7 @@ function mountWhaleBongoWidget(options) {
       setDesktopDisplaySwitch: function (payload) { setDesktopDisplaySwitch(payload) },
       setAudioBeatEnabled: function (enabled) { setAudioBeatEnabled(enabled) },
       setAudioBeatStatus: function (state, error, bpm) { setAudioBeatStatus(state, error, bpm) },
+      setAudioEnergy: function (value) { setAudioEnergy(value) },
       beat: function (strength) { pulseAudioBeat(strength) },
       recall: function () { recallDesktopWidget() },
       returnToClient: function () { leaveDesktopForClient(null) },
