@@ -2094,8 +2094,13 @@ function mountWhaleBongoWidget(options) {
   function fxCenterX(width) {
     var stageW = root.clientWidth || cfg.size
     var axis = isFinite(CONFIG.axisX) ? CONFIG.axisX : 0.5
-    if (root.classList.contains('is-flipped')) axis = 1 - axis
     return (width - stageW) / 2 + stageW * axis
+  }
+
+  function fxImageCenterX(width) {
+    var stageW = root.clientWidth || cfg.size
+    var imageX = clamp(numberOr(cfg.imageXPct, 0), -30, 30) / 100
+    return (width - stageW) / 2 + stageW * (0.5 + imageX)
   }
 
   function spawnFxNotes(strength) {
@@ -2174,6 +2179,7 @@ function mountWhaleBongoWidget(options) {
       var audible = audioEnergy > 0.0008 || fxBeatEnv > 0.01
       if (!audible) return
       var energy = clamp(audioEnergy * 20 + fxBeatEnv * 0.40, 0, 1)
+      var barsX = fxImageCenterX(w)
       fxCtx.save()
       fxCtx.lineCap = 'round'
       for (var i = 0; i < bars; i++) {
@@ -2185,9 +2191,9 @@ function mountWhaleBongoWidget(options) {
         var wave = clamp(shaped * 0.76 + fxBeatEnv * 0.10, 0.015, 0.88)
         var length = (10 + 112 * wave) * fxScale
         var inner = radius * 0.52
-        var x1 = baseX + Math.cos(angle) * inner
+        var x1 = barsX + Math.cos(angle) * inner
         var y1 = baseY + Math.sin(angle) * inner
-        var x2 = baseX + Math.cos(angle) * (inner + length)
+        var x2 = barsX + Math.cos(angle) * (inner + length)
         var y2 = baseY + Math.sin(angle) * (inner + length)
         fxCtx.strokeStyle = 'hsla(' + (184 + t * 64) + ', 94%, ' + (58 + energy * 20) + '%, ' + (0.70 + energy * 0.24) + ')'
         fxCtx.lineWidth = 6.5 * fxScale
