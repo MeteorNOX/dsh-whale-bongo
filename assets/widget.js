@@ -2638,12 +2638,19 @@ function mountWhaleBongoWidget(options) {
       var left = 0
       var width = window.innerWidth
       if (desktopMode) {
+        // Desktop auto-flip only applies while snapped to a window. Loose
+        // desktop placement keeps its current orientation instead of flipping
+        // against the whole primary display.
         if (cfg.snap && cfg.snap.ref === 'desktop-window') {
           var snappedWindow = findDesktopWindow(cfg.snap.hwnd)
           if (snappedWindow && snappedWindow.width) {
             left = snappedWindow.left
             width = snappedWindow.width
+          } else {
+            return
           }
+        } else {
+          return
         }
       } else {
         var card = cardEl()
