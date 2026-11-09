@@ -2070,21 +2070,23 @@ function mountWhaleBongoWidget(options) {
     if (!syncFxCanvas()) return
     var w = fxCanvasW
     var h = fxCanvasH
+    var scale = Math.min(w, h) / 320
+    var baseY = h * clamp(imageBottomNorm, 0.45, 1)
     var count = 4 + (Math.random() < 0.5 ? 0 : 1)
     for (var i = 0; i < count; i++) {
       var side = i % 2 === 0 ? -1 : 1
       var angle = side < 0
         ? -Math.PI * 0.92 + Math.random() * Math.PI * 0.26
         : -Math.PI * 0.34 + Math.random() * Math.PI * 0.26
-      var speed = 112 + Math.random() * 56
+      var speed = (112 + Math.random() * 56) * scale
       fxNotes.push({
-        x: w * 0.5 + side * w * (0.33 + Math.random() * 0.05),
-        y: h - 8,
+        x: w * 0.5 + side * w * (0.35 + Math.random() * 0.04),
+        y: baseY + 2 * scale,
         vx: Math.cos(angle) * speed * 1.25,
-        vy: Math.sin(angle) * speed - 40,
+        vy: Math.sin(angle) * speed - 40 * scale,
         rot: (Math.random() - 0.5) * 0.5,
         vr: (Math.random() - 0.5) * 2.6,
-        size: 17 + Math.random() * 9,
+        size: (17 + Math.random() * 9) * scale,
         hue: Math.floor(Math.random() * 360),
         life: 1,
         glyph: ['♪', '♫', '♬'][i % 3],
@@ -2124,8 +2126,9 @@ function mountWhaleBongoWidget(options) {
     fxBeatEnv *= Math.exp(-dt * 3.4)
     if (fxBeatEnv < 0.002) fxBeatEnv = 0
     fxCtx.clearRect(0, 0, w, h)
+    var fxScale = Math.min(w, h) / 320
     var baseX = w * 0.5
-    var baseY = h - 2
+    var baseY = h * clamp(imageBottomNorm, 0.45, 1) - 2 * fxScale
     var radius = Math.min(w, h) * 0.48
     if (audioBandLevels.length !== (audioBands.length || 21)) {
       audioBandLevels = new Array(audioBands.length || 21)
@@ -2147,14 +2150,14 @@ function mountWhaleBongoWidget(options) {
         var band = audioBandLevels[i]
         if (!isFinite(band)) band = 0
         var wave = clamp(band * 1.35 + 0.10 + fxBeatEnv * 0.30, 0.10, 1)
-        var length = 10 + 54 * wave
+        var length = (10 + 54 * wave) * fxScale
         var inner = radius * 0.68
         var x1 = baseX + Math.cos(angle) * inner
         var y1 = baseY + Math.sin(angle) * inner
         var x2 = baseX + Math.cos(angle) * (inner + length)
         var y2 = baseY + Math.sin(angle) * (inner + length)
         fxCtx.strokeStyle = 'hsla(' + (184 + t * 64) + ', 94%, ' + (58 + energy * 20) + '%, ' + (0.70 + energy * 0.24) + ')'
-        fxCtx.lineWidth = 6.5
+        fxCtx.lineWidth = 6.5 * fxScale
         fxCtx.beginPath()
         fxCtx.moveTo(x1, y1)
         fxCtx.lineTo(x2, y2)
@@ -2163,6 +2166,7 @@ function mountWhaleBongoWidget(options) {
       fxCtx.restore()
     } else if (cfg.audioFxStyle === 'ripple') {
       fxCtx.save()
+      var ringRadius = Math.min(w, h) * 0.82
       for (var r = fxRipples.length - 1; r >= 0; r--) {
         var ring = fxRipples[r]
         ring.age += dt
@@ -2171,12 +2175,12 @@ function mountWhaleBongoWidget(options) {
         if (progress >= 1) { fxRipples.splice(r, 1); continue }
         var fade = (1 - progress) * (0.55 + ring.power * 0.35)
         fxCtx.strokeStyle = 'hsla(' + ring.hue + ', 90%, 66%, ' + fade + ')'
-        fxCtx.lineWidth = 3.2 * (1 - progress * 0.55)
+        fxCtx.lineWidth = 3.2 * fxScale * (1 - progress * 0.55)
         fxCtx.beginPath()
         fxCtx.ellipse(
           baseX, baseY,
-          radius * (0.94 + progress * 0.06),
-          radius * (0.14 + progress * 0.86),
+          ringRadius * (0.55 + progress * 0.45),
+          ringRadius * (0.32 + progress * 0.68),
           0, Math.PI, 2 * Math.PI
         )
         fxCtx.stroke()
@@ -2187,7 +2191,7 @@ function mountWhaleBongoWidget(options) {
       fxCtx.textAlign = 'center'
       fxCtx.textBaseline = 'middle'
       fxCtx.shadowColor = 'rgba(18, 96, 140, 0.28)'
-      fxCtx.shadowBlur = 5
+      fxCtx.shadowBlur = 5 * fxScale
       for (var n = fxNotes.length - 1; n >= 0; n--) {
         var note = fxNotes[n]
         note.life -= dt * 1.35
