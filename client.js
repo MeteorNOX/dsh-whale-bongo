@@ -32,6 +32,9 @@ window.__ModuleLoader__.load({
  *   ③ 默认参数严格沿用 bongo-demo/index.html 的当前配置（reset 模式、
  *      手宽 16%、高宽比 88%、间距 20%、轴 56%、垂直 87.2% 等）。
  * ==========================================================================*/
+
+
+
 function mountWhaleBongoWidget(options) {
   'use strict'
 
@@ -2088,18 +2091,26 @@ function mountWhaleBongoWidget(options) {
     return Boolean(desktopMode && audioMod && audioMod.isEnabled() && cfg.audioFxStyle !== 'none')
   }
 
+  function fxCenterX(width) {
+    var stageW = root.clientWidth || cfg.size
+    var axis = isFinite(CONFIG.axisX) ? CONFIG.axisX : 0.5
+    if (root.classList.contains('is-flipped')) axis = 1 - axis
+    return (width - stageW) / 2 + stageW * axis
+  }
+
   function spawnFxNotes(strength) {
     if (!syncFxCanvas()) return
     var w = fxCanvasW
     var h = fxCanvasH
     var scale = Math.min(w, h) / 320
     var baseY = h * clamp(imageBottomNorm, 0.45, 1)
+    var centerX = fxCenterX(w)
     var count = 4 + (Math.random() < 0.5 ? 0 : 1)
     for (var i = 0; i < count; i++) {
       var spread = (Math.random() - 0.5) * w * 0.34
       var speed = (76 + Math.random() * 64) * scale
       fxNotes.push({
-        x: w * 0.5 + spread,
+        x: centerX + spread,
         y: baseY - (128 + Math.random() * 22) * scale,
         vx: (Math.random() - 0.5) * 86 * scale,
         vy: -speed,
@@ -2146,7 +2157,7 @@ function mountWhaleBongoWidget(options) {
     if (fxBeatEnv < 0.002) fxBeatEnv = 0
     fxCtx.clearRect(0, 0, w, h)
     var fxScale = Math.min(w, h) / 320
-    var baseX = w * 0.5
+    var baseX = fxCenterX(w)
     var baseY = h * clamp(imageBottomNorm, 0.45, 1) - 2 * fxScale
     var radius = Math.min(w, h) * 0.64
     if (audioBandLevels.length !== (audioBands.length || 21)) {
