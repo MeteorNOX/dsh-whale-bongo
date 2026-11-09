@@ -37,9 +37,10 @@
     }
 
     function leadText() {
-      var total = lead + 55
-      if (total > 0) return '提前 ' + total + ' ms'
-      if (total < 0) return '延后 ' + (-total) + ' ms'
+      // The helper fires 55 ms early to compensate the press animation, so the
+      // slider value itself is the visual offset from the beat.
+      if (lead > 0) return '提前 ' + lead + ' ms'
+      if (lead < 0) return '延后 ' + (-lead) + ' ms'
       return '对齐节拍'
     }
 
@@ -84,10 +85,10 @@
         '<p class="dsnw-image-name" data-mod-audio-beat-status>桌面模式默认开启</p>' +
         '<div class="dsnw-mod-slider-head">' +
           '<span class="dsnw-toggle-label">额外提前量</span>' +
-          '<span class="dsnw-mod-slider-value" data-mod-audio-lead-value>提前 55 ms</span>' +
+          '<span class="dsnw-mod-slider-value" data-mod-audio-lead-value>对齐节拍</span>' +
         '</div>' +
         '<input class="dsnw-mod-range" type="range" min="-100" max="150" step="5" data-mod-audio-lead aria-label="额外提前量">' +
-        '<p class="dsnw-image-name">已内置 55 ms 按压补偿；每个拍点按一次，复用鼠标点按的按压动效</p>'
+        '<p class="dsnw-image-name">0 = 最低点对齐节拍；正值提前、负值延后；已内置 55 ms 按压补偿</p>'
       input = slot.querySelector('[data-mod-audio-beat]')
       statusEl = slot.querySelector('[data-mod-audio-beat-status]')
       leadInput = slot.querySelector('[data-mod-audio-lead]')
