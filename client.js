@@ -1717,6 +1717,8 @@ function mountWhaleBongoWidget(options) {
   var audioBeatGroove = 0
   var audioBeatPeriod = 0
   var audioBeatTargetPeriod = 0
+  var audioBodyScaleX = 1
+  var audioBodyScaleY = 1
   var lastDesktopFollowX = null
   var lastDesktopFollowY = null
   var desktopFollowFrame = 0
@@ -1777,7 +1779,6 @@ function mountWhaleBongoWidget(options) {
       trail2: el.querySelector('.dsnw-trail--far'),
       y: new Spring(0, 1500, 31),
       squash: new Spring(0, 1050, 14),
-      beatSquash: new Spring(0, 320, 10),
       down: false,
       hit: false,
       manualSquash: false,
@@ -1855,24 +1856,25 @@ function mountWhaleBongoWidget(options) {
   }
 
   function renderImageMotion() {
-    if (!imageMotion) return
+    if (!imageMotion) {
+      audioBodyScaleX = 1
+      audioBodyScaleY = 1
+      return
+    }
     var sq = clamp(imageSquash.value, -0.18, 0.18)
-    // Asymmetric nod: the fall into the next beat is fast, the recovery is
-    // slow, and the lowest point lands exactly on phase 0 (the beat). The
-    // 0.72 split makes the downstroke visibly quicker than the rise.
+    // One damped bounce per beat: the body hits its lowest point at phase 0,
+    // overshoots taller, then settles. The curve is continuous across phase
+    // wrap, so BPM corrections do not restart a second nod mid-beat.
     var groove = audioBeatGroove > 0.001 ? audioBeatGroove : 0
     var phase = audioBeatPhase % 1
     if (phase < 0) phase += 1
-    var dip
-    if (phase < 0.72) {
-      dip = 1 - Math.pow(phase / 0.72, 1.55)
-    } else {
-      dip = Math.pow((phase - 0.72) / 0.28, 2)
-    }
+    var bounce = Math.exp(-4.2 * phase) * Math.cos(phase * Math.PI * 2)
     var level = clamp(moveBounceRatio(), 0, 1.35)
-    var nod = groove * dip
-    var audioX = 1 + nod * level * 0.040
+    var nod = groove * bounce
+    var audioX = 1 - nod * level * 0.040
     var audioY = 1 - nod * level * 0.090
+    audioBodyScaleX = audioX
+    audioBodyScaleY = audioY
     if (stage) {
       stage.classList.toggle('is-bouncing',
         Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05 || nod > 0.01)
@@ -2128,16 +2130,12 @@ function mountWhaleBongoWidget(options) {
     for (var i = 0; i < hands.length; i++) {
       var hand = hands[i]
       var tap = hand.tap
-      // beatSquash is a separate underdamped spring: it compresses the hand
-      // in place, overshoots slightly and settles, unlike tap which adds
-      // downward travel. This is the same Q feel as a click without sliding.
-      var squash = clamp(
-        hand.squash.value + tap * CONFIG.tapSquash + hand.beatSquash.value,
-        -0.11,
-        0.48
-      )
-      var scaleX = 1 + squash * 0.58
-      var scaleY = 1 - squash * 0.74
+      var squash = clamp(hand.squash.value + tap * CONFIG.tapSquash, -0.11, 0.48)
+      // Music groove uses the body's scale directly. No separate hand spring
+      // or timing, so the hands can never double-bounce when the BPM is
+      // corrected mid-nod.
+      var scaleX = (1 + squash * 0.58) * audioBodyScaleX
+      var scaleY = (1 - squash * 0.74) * audioBodyScaleY
       var travel = (hand.y.value + tap * CONFIG.tapDepth) * handSize
       var translateY = Math.min(travel, handBottomLimit)
       var xShift = 0
@@ -2190,7 +2188,6 @@ function mountWhaleBongoWidget(options) {
       hand.squash.target = hand.down ? CONFIG.squash * Math.pow(progress, 1.18) : 0
     }
     hand.squash.step(dt)
-    hand.beatSquash.step(dt)
     hand.tap *= Math.exp(-dt * CONFIG.tapDecay)
     if (hand.tap < 0.001) hand.tap = 0
 
@@ -2217,8 +2214,10 @@ function mountWhaleBongoWidget(options) {
         for (var i = 0; i < hands.length; i++) stepHand(hands[i], sub)
         imageSquash.step(sub)
       }
-      render()
+      // Update the body scale first so the hands use the same frame's groove
+      // transform instead of trailing it by one animation frame.
       renderImageMotion()
+      render()
     }
     rafId = window.requestAnimationFrame(tick)
   }
@@ -2436,22 +2435,6 @@ function mountWhaleBongoWidget(options) {
     return q
   }
 
-  function tapHandsInPlace(strength) {
-    var amount = clamp(numberOr(strength, 0.6), 0.2, 1)
-    var level = moveBounceRatio()
-    var ratio = clamp(level / 1.35, 0, 1)
-    var impulse = (1.6 + 2.4 * ratio) * amount
-    for (var i = 0; i < hands.length; i++) {
-      var hand = hands[i]
-      if (hand.down || hand.seq || hand.keys.size > 0) continue
-      hand.manualSquash = false
-      // Keep the hand anchored: no y impulse and no tap travel. The separate
-      // underdamped spring gives a soft overshoot instead of a hard snap.
-      // Cap repeat beats at high BPM so the spring cannot pile up indefinitely.
-      hand.beatSquash.velocity = clamp(hand.beatSquash.velocity + impulse, -2, 4.5)
-    }
-  }
-
   function stepAudioGroove(dt) {
     if (!dt) return
     var active = audioBeatEnabled && audioBeatStatus === 'active' && audioBeatTargetPeriod > 0
@@ -2478,12 +2461,11 @@ function mountWhaleBongoWidget(options) {
 
   function pulseAudioBeat(strength) {
     if (!desktopMode || !cfg.audioBeat || !audioBeatEnabled) return
-    var s = clamp(numberOr(strength, 0.5), 0.2, 1)
-    // The grid callback is the beat: put the nod at its lowest point now.
-    // Tempo changes are smoothed by audioBeatPeriod, so this does not make
-    // the body lurch when the BPM estimate is refined.
+    // Every grid event is a beat, so the nod's lowest point belongs exactly
+    // there. The hands have no separate beat spring, so snapping the shared
+    // body phase cannot produce a second hand bounce; the period slew below
+    // keeps the tempo change itself smooth.
     audioBeatPhase = 0
-    tapHandsInPlace(s)
   }
 
   function applyMoveShellTransform(q) {
