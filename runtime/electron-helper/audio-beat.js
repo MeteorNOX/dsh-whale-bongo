@@ -19,9 +19,6 @@
   var MAX_BPM = 180
   var SILENCE_RMS = 0.0025
   var SILENCE_MS = 450
-  // Start the visual press slightly early so the hand/body reach their lowest
-  // point on the musical beat rather than 40-60 ms after it.
-  var PRESS_LEAD = 0.045
   var STARTUP_LOCK_MS = 1400
 
   function number(value, fallback) {
@@ -344,8 +341,8 @@
       var now = context.currentTime
       // A slow analysis can leave the grid slightly behind; skip stale beats
       // instead of firing a burst to catch up.
-      while (nextBeatAt - PRESS_LEAD < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
-      if (now < nextBeatAt - PRESS_LEAD) return
+      while (nextBeatAt < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
+      if (now < nextBeatAt) return
       if (lastBeatAt && now - lastBeatAt < beatPeriod * 0.45) {
         nextBeatAt = now + beatPeriod
         return
