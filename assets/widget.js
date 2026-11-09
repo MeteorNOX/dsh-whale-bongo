@@ -459,14 +459,12 @@ function mountWhaleBongoWidget(options) {
       pointer-events: none;
     }
     #dsh-whale-bongo .dsnw-stage.is-bouncing { overflow: visible; }
-    #dsh-whale-bongo .dsnw-stage.has-fx { overflow: visible; }
     #dsh-whale-bongo .dsnw-fx {
       position: absolute;
-      left: -35%;
-      top: -30%;
+      inset: 0;
       z-index: 0;
-      width: 170%;
-      height: 170%;
+      width: 100%;
+      height: 100%;
       pointer-events: none;
     }
     #dsh-whale-bongo .dsnw-image-motion {
@@ -657,6 +655,17 @@ function mountWhaleBongoWidget(options) {
     #dsh-whale-bongo .dsnw-fold-row:focus-visible {
       outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe);
       outline-offset: 1px;
+    }
+    #dsh-whale-bongo .dsnw-fold-badge {
+      flex: 0 0 auto;
+      padding: 0 5px;
+      border-radius: 4px;
+      background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4d6bfe) 24%, transparent);
+      color: var(--dsw-alias-brand-primary, #8aa0ff);
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 15px;
+      letter-spacing: .08em;
     }
     #dsh-whale-bongo .dsnw-fold-sum {
       margin-left: auto;
@@ -1284,7 +1293,7 @@ function mountWhaleBongoWidget(options) {
       '</div>' +
       '<div class="dsnw-fold" data-rhythm-fold hidden>' +
         '<div class="dsnw-fold-row" data-fold-row="rhythm" role="button" tabindex="0" aria-expanded="false">' +
-          '<span>律动模式</span><span class="dsnw-fold-sum" data-fold-summary="rhythm"></span><span class="dsnw-fold-arrow" data-fold-arrow="rhythm">▸</span>' +
+          '<span class="dsnw-fold-badge">MOD</span><span>律动模式</span><span class="dsnw-fold-sum" data-fold-summary="rhythm"></span><span class="dsnw-fold-arrow" data-fold-arrow="rhythm">▸</span>' +
         '</div>' +
         '<div class="dsnw-fold-body" data-fold-body="rhythm" data-open="0">' +
           '<div class="dsnw-mod-section" data-mod-detail="audio-beat">' +
@@ -1379,6 +1388,8 @@ function mountWhaleBongoWidget(options) {
   var fxCtx = fxCanvas && fxCanvas.getContext ? fxCanvas.getContext('2d') : null
   var audioEnergy = 0
   var audioEnergyTarget = 0
+  var audioBands = []
+  var audioBandLevels = []
   var fxBeatEnv = 0
   var fxNotes = []
   var fxRipples = []
@@ -1409,6 +1420,12 @@ function mountWhaleBongoWidget(options) {
   var soundFileInput = root.querySelector('[data-sound-file]')
   var soundNameEl = root.querySelector('[data-sound-name]')
   var audioMod = null
+  var modFold = root.querySelector('[data-mod-fold="audio-beat"]')
+  var behaviorFoldRow = root.querySelector('[data-fold-row="behavior"]')
+  var behaviorFold = behaviorFoldRow ? behaviorFoldRow.parentNode : null
+  if (modFold && behaviorFold && behaviorFold !== modFold) {
+    modFold.parentNode.insertBefore(behaviorFold, modFold)
+  }
   var rhythmFold = root.querySelector('[data-rhythm-fold]')
   function setRhythmVisible(visible, open) {
     if (!rhythmFold) return
@@ -2053,21 +2070,21 @@ function mountWhaleBongoWidget(options) {
     if (!syncFxCanvas()) return
     var w = fxCanvasW
     var h = fxCanvasH
-    var count = 10
+    var count = 4 + (Math.random() < 0.5 ? 0 : 1)
     for (var i = 0; i < count; i++) {
       var side = i % 2 === 0 ? -1 : 1
       var angle = side < 0
-        ? -Math.PI * 0.95 + Math.random() * Math.PI * 0.30
-        : -Math.PI * 0.35 + Math.random() * Math.PI * 0.30
-      var speed = 120 + Math.random() * 80
+        ? -Math.PI * 0.92 + Math.random() * Math.PI * 0.26
+        : -Math.PI * 0.34 + Math.random() * Math.PI * 0.26
+      var speed = 112 + Math.random() * 56
       fxNotes.push({
-        x: w * 0.5 + side * w * (0.04 + Math.random() * 0.04),
-        y: h * 0.82,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 38,
+        x: w * 0.5 + side * w * (0.33 + Math.random() * 0.05),
+        y: h - 8,
+        vx: Math.cos(angle) * speed * 1.25,
+        vy: Math.sin(angle) * speed - 40,
         rot: (Math.random() - 0.5) * 0.5,
         vr: (Math.random() - 0.5) * 2.6,
-        size: 17 + Math.random() * 11,
+        size: 17 + Math.random() * 9,
         hue: Math.floor(Math.random() * 360),
         life: 1,
         glyph: ['♪', '♫', '♬'][i % 3],
@@ -2082,10 +2099,10 @@ function mountWhaleBongoWidget(options) {
     fxBeatEnv = Math.max(fxBeatEnv, 0.35 + 0.65 * strength)
     if (cfg.audioFxStyle === 'notes') spawnFxNotes(strength)
     if (cfg.audioFxStyle === 'ripple') {
-      for (var i = 0; i < 3; i++) {
-        fxRipples.push({ age: -i * 0.10, life: 0.9 + i * 0.12, power: strength, hue: 182 + i * 18 })
+      for (var i = 0; i < 2; i++) {
+        fxRipples.push({ age: -i * 0.08, life: 0.52 + i * 0.08, power: strength, hue: 182 + i * 18 })
       }
-      if (fxRipples.length > 24) fxRipples.splice(0, fxRipples.length - 24)
+      if (fxRipples.length > 12) fxRipples.splice(0, fxRipples.length - 12)
     }
   }
 
@@ -2108,25 +2125,36 @@ function mountWhaleBongoWidget(options) {
     if (fxBeatEnv < 0.002) fxBeatEnv = 0
     fxCtx.clearRect(0, 0, w, h)
     var baseX = w * 0.5
-    var baseY = h * 0.86
-    var radius = Math.min(w, h) * 0.60
+    var baseY = h - 2
+    var radius = Math.min(w, h) * 0.48
+    if (audioBandLevels.length !== (audioBands.length || 21)) {
+      audioBandLevels = new Array(audioBands.length || 21)
+      for (var bl = 0; bl < audioBandLevels.length; bl++) audioBandLevels[bl] = 0
+    }
+    for (var bl2 = 0; bl2 < audioBandLevels.length; bl2++) {
+      var targetLevel = Number(audioBands[bl2])
+      if (!isFinite(targetLevel)) targetLevel = 0
+      audioBandLevels[bl2] += (targetLevel - audioBandLevels[bl2]) * (1 - Math.exp(-dt * 15))
+    }
     if (cfg.audioFxStyle === 'spectrum') {
-      var bars = 17
-      var energy = clamp(audioEnergy * 26 + fxBeatEnv * 0.45, 0, 1)
+      var bars = audioBandLevels.length || 21
+      var energy = clamp(audioEnergy * 24 + fxBeatEnv * 0.55, 0, 1)
       fxCtx.save()
       fxCtx.lineCap = 'round'
       for (var i = 0; i < bars; i++) {
         var t = bars === 1 ? 0.5 : i / (bars - 1)
         var angle = -Math.PI * 0.98 + t * Math.PI * 0.96
-        var wave = 0.22 + 0.78 * Math.abs(Math.sin(t * Math.PI * 2.2 + now * 0.003))
-        var length = 8 + (10 + energy * 38) * wave
-        var inner = radius * 0.86
+        var band = audioBandLevels[i]
+        if (!isFinite(band)) band = 0
+        var wave = clamp(band * 1.35 + 0.10 + fxBeatEnv * 0.30, 0.10, 1)
+        var length = 10 + 54 * wave
+        var inner = radius * 0.68
         var x1 = baseX + Math.cos(angle) * inner
         var y1 = baseY + Math.sin(angle) * inner
         var x2 = baseX + Math.cos(angle) * (inner + length)
         var y2 = baseY + Math.sin(angle) * (inner + length)
-        fxCtx.strokeStyle = 'hsla(' + (184 + t * 64) + ', 92%, ' + (60 + energy * 16) + '%, ' + (0.55 + energy * 0.38) + ')'
-        fxCtx.lineWidth = 3.4
+        fxCtx.strokeStyle = 'hsla(' + (184 + t * 64) + ', 94%, ' + (58 + energy * 20) + '%, ' + (0.70 + energy * 0.24) + ')'
+        fxCtx.lineWidth = 6.5
         fxCtx.beginPath()
         fxCtx.moveTo(x1, y1)
         fxCtx.lineTo(x2, y2)
@@ -2143,9 +2171,14 @@ function mountWhaleBongoWidget(options) {
         if (progress >= 1) { fxRipples.splice(r, 1); continue }
         var fade = (1 - progress) * (0.55 + ring.power * 0.35)
         fxCtx.strokeStyle = 'hsla(' + ring.hue + ', 90%, 66%, ' + fade + ')'
-        fxCtx.lineWidth = 2.2 * (1 - progress * 0.6)
+        fxCtx.lineWidth = 3.2 * (1 - progress * 0.55)
         fxCtx.beginPath()
-        fxCtx.arc(baseX, baseY, radius * (0.35 + progress * 0.9), Math.PI, 2 * Math.PI)
+        fxCtx.ellipse(
+          baseX, baseY,
+          radius * (0.94 + progress * 0.06),
+          radius * (0.14 + progress * 0.86),
+          0, Math.PI, 2 * Math.PI
+        )
         fxCtx.stroke()
       }
       fxCtx.restore()
@@ -2157,7 +2190,7 @@ function mountWhaleBongoWidget(options) {
       fxCtx.shadowBlur = 5
       for (var n = fxNotes.length - 1; n >= 0; n--) {
         var note = fxNotes[n]
-        note.life -= dt * 0.62
+        note.life -= dt * 1.35
         if (note.life <= 0) { fxNotes.splice(n, 1); continue }
         note.vy += 36 * dt
         note.x += note.vx * dt
@@ -4756,6 +4789,15 @@ function mountWhaleBongoWidget(options) {
     audioEnergyTarget = clamp(Number(value) || 0, 0, 1)
   }
 
+  function setAudioBands(value) {
+    if (!value || typeof value.length !== 'number') return
+    var next = []
+    for (var i = 0; i < value.length; i++) {
+      next.push(clamp(Number(value[i]) || 0, 0, 1))
+    }
+    audioBands = next
+  }
+
   function setDesktopDisplay(info) {
     if (!desktopMode) return
     var previousDisplay = window.__DSH_WHALE_DESKTOP_DISPLAY
@@ -5137,6 +5179,7 @@ function mountWhaleBongoWidget(options) {
       setAudioBeatEnabled: function (enabled) { setAudioBeatEnabled(enabled) },
       setAudioBeatStatus: function (state, error, bpm) { setAudioBeatStatus(state, error, bpm) },
       setAudioEnergy: function (value) { setAudioEnergy(value) },
+      setAudioBands: function (value) { setAudioBands(value) },
       beat: function (strength) { pulseAudioBeat(strength) },
       recall: function () { recallDesktopWidget() },
       returnToClient: function () { leaveDesktopForClient(null) },

@@ -25,6 +25,7 @@
   // lands on the beat. The MOD slider adds/subtracts extra lead.
   var PRESS_LEAD_MS = 55
   var HARMONIC_TOLERANCE = 0.035
+  var BAND_COUNT = 21
 
   function number(value, fallback) {
     var n = Number(value)
@@ -71,6 +72,10 @@
     var context = null
     var source = null
     var processor = null
+    var analyser = null
+    var frequencyData = null
+    var currentBands = new Array(BAND_COUNT)
+    for (var bi = 0; bi < BAND_COUNT; bi++) currentBands[bi] = 0
     var silentGain = null
     var timer = 0
     var analyzeTimer = 0
@@ -138,6 +143,7 @@
         userLeadMs: userLeadMs(),
         pressLeadMs: PRESS_LEAD_MS,
         energy: currentRms,
+        bands: currentBands.slice(),
         audible: isAudible(),
         suppressed: nowMs < suppressUntil,
         suppressLeftMs: Math.max(0, suppressUntil - nowMs),
@@ -288,6 +294,11 @@
         worker = null
       }
       analysisPending = false
+      if (analyser) {
+        try { analyser.disconnect() } catch (e) {}
+        analyser = null
+        frequencyData = null
+      }
       if (processor) {
         try { processor.disconnect() } catch (e) {}
         processor.onaudioprocess = null
@@ -339,6 +350,26 @@
       ringFilled = 0
     }
 
+    function updateBands() {
+      if (!analyser || !frequencyData || !context) return
+      analyser.getByteFrequencyData(frequencyData)
+      var nyquist = context.sampleRate / 2
+      var minHz = 40
+      var maxHz = Math.min(12000, nyquist)
+      var bins = frequencyData.length
+      for (var b = 0; b < BAND_COUNT; b++) {
+        var startHz = minHz * Math.pow(maxHz / minHz, b / BAND_COUNT)
+        var endHz = minHz * Math.pow(maxHz / minHz, (b + 1) / BAND_COUNT)
+        var first = Math.max(0, Math.floor(startHz / nyquist * bins))
+        var last = Math.min(bins - 1, Math.ceil(endHz / nyquist * bins) - 1)
+        if (last < first) last = first
+        var sum = 0
+        for (var k = first; k <= last; k++) sum += frequencyData[k]
+        var level = sum / ((last - first + 1) * 255)
+        currentBands[b] = Math.pow(Math.max(0, Math.min(1, level)), 0.72)
+      }
+    }
+
     function pushSamples(input) {
       if (!input || !input.length) return
       ensureRing(Math.ceil(context.sampleRate * WINDOW_SECONDS))
@@ -351,6 +382,7 @@
         if (ringFilled < ringSize) ringFilled++
       }
       currentRms = Math.sqrt(sum / input.length)
+      updateBands()
       // This is the AudioContext time of the newest sample. Analysis may run
       // tens of milliseconds later; scheduling from "now" would add that
       // delay to every beat and make the visual pulse trail the music.
@@ -622,7 +654,13 @@
         // destination. A muted gain keeps the loopback inaudible.
         silentGain = context.createGain()
         silentGain.gain.value = 0
+        analyser = context.createAnalyser()
+        analyser.fftSize = 1024
+        analyser.smoothingTimeConstant = 0.35
+        frequencyData = new Uint8Array(analyser.frequencyBinCount)
         source.connect(processor)
+        source.connect(analyser)
+        analyser.connect(silentGain)
         processor.connect(silentGain)
         silentGain.connect(context.destination)
 
@@ -651,6 +689,7 @@
         lastSoundAt = 0
         soundStartAt = 0
         currentRms = 0
+        for (var bandReset = 0; bandReset < BAND_COUNT; bandReset++) currentBands[bandReset] = 0
         suppressUntil = 0
         candidateBpm = 0
         candidateHits = 0
@@ -685,6 +724,7 @@
         bpm: bpm,
         confidence: confidence,
         energy: currentRms,
+        bands: currentBands.slice(),
         analysisCount: analysisCount,
         analysisMs: lastAnalysisMs,
         beatPeriod: beatPeriod,
