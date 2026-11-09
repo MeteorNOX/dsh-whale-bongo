@@ -13,15 +13,25 @@
         <div class="eyebrow">DSH WHALE BONGO · MOD MONITOR</div>
         <h1>Whale Beat Live</h1>
         <p class="sub">直接读取桌面挂件正在运行的 BPM 网格、能量与拍点，不做任何额外音频采集。</p>
+        <p class="record-note">录制会保存这期间每个 100ms 遥测帧、分析结果、拍点和状态日志；停止后导出 JSON。</p>
       </div>
-      <div class="connection" id="connection">
-        <span class="dot"></span>
-        <div>
-          <strong id="connTitle">连接中</strong>
-          <small id="connDetail">等待 helper…</small>
+      <div class="top-tools">
+        <div class="recorder" id="recorder">
+          <span class="rec-dot" id="recDot"></span>
+          <span class="rec-state" id="recordState">未录制</span>
+          <button id="recordToggle" class="record-btn" type="button">开始录制</button>
+          <button id="recordExport" class="ghost" type="button" disabled>导出录制</button>
+        </div>
+        <div class="connection" id="connection">
+          <span class="dot"></span>
+          <div>
+            <strong id="connTitle">连接中</strong>
+            <small id="connDetail">等待 helper…</small>
+          </div>
         </div>
       </div>
     </header>
+    <noscript>这个工具需要 JavaScript 才能读取插件遥测。</noscript>
 
     <section class="hero">
       <div class="bpm-card">

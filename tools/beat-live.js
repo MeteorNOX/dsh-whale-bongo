@@ -11,7 +11,12 @@ const els = {
   analysisMs: $('analysisMs'), analysisEvery: $('analysisEvery'), buffer: $('buffer'),
   gridAge: $('gridAge'), lead: $('lead'), candidate: $('candidate'), candidateHits: $('candidateHits'),
   pid: $('pid'), bridge: $('bridge'), analysisRows: $('analysisRows'), events: $('events'),
+  recorder: $('recorder'), recordState: $('recordState'), recordToggle: $('recordToggle'),
+  recordExport: $('recordExport'), recDot: $('recDot'),
 }
+const RECORD_FORMAT = 'dsh-whale-bongo-beat-recording'
+const RECORD_VERSION = 1
+const MAX_RECORD_MS = 15 * 60 * 1000
 let stream = null
 let paused = false
 let lastSample = null
@@ -22,11 +27,198 @@ let history = []
 let beatMarks = []
 let hitTimer = 0
 let infoTimer = 0
+let recorder = null
+let recordStartedPerf = 0
+let recordStartedWall = 0
+let recordTicker = 0
+
+function recordElapsed() {
+  return Math.max(0, Math.round(performance.now() - recordStartedPerf))
+}
+
+function fmtDuration(ms) {
+  const total = Math.max(0, Math.round(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0')
+}
+
+function recordLog(kind, text) {
+  if (!recorder || !recorder.active) return
+  recorder.logs.push({
+    t: recordElapsed(),
+    at: new Date().toISOString(),
+    kind: kind || '',
+    text: String(text || ''),
+  })
+}
+
+function updateRecordUi() {
+  if (!els.recorder || !els.recordState) return
+  const active = Boolean(recorder && recorder.active)
+  els.recorder.classList.toggle('active', active)
+  els.recordToggle.classList.toggle('stop', active)
+  els.recordToggle.textContent = active ? '停止录制' : '开始录制'
+  els.recordToggle.disabled = false
+  if (active) {
+    els.recordState.textContent = '录制中 ' + fmtDuration(recordElapsed()) + ' · ' + recorder.samples.length + ' 帧'
+  } else if (recorder) {
+    els.recordState.textContent = '已录制 ' + fmtDuration(recorder.durationMs) + ' · ' + recorder.samples.length + ' 帧'
+  } else {
+    els.recordState.textContent = '未录制'
+  }
+  els.recordExport.disabled = !recorder || active || recorder.samples.length === 0
+}
+
+function startRecording() {
+  if (recorder && recorder.active) return
+  recordStartedPerf = performance.now()
+  recordStartedWall = Date.now()
+  recorder = {
+    format: RECORD_FORMAT,
+    version: RECORD_VERSION,
+    startedAt: new Date(recordStartedWall).toISOString(),
+    startedAtMs: recordStartedWall,
+    endedAt: null,
+    endedAtMs: 0,
+    durationMs: 0,
+    stopReason: '',
+    active: true,
+    bridge: null,
+    plugin: null,
+    environment: {
+      href: location.href,
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      viewport: { width: innerWidth, height: innerHeight },
+    },
+    samples: [],
+    beats: [],
+    analyses: [],
+    statusChanges: [],
+    logs: [],
+  }
+  els.recorder.classList.add('active')
+  updateRecordUi()
+  recordTicker = setInterval(updateRecordUi, 250)
+  logEvent('warn', '开始录制 · 请保持音乐播放，停止后导出 JSON')
+  fetch('/api/info', { cache: 'no-store' }).then((response) => response.json()).then((info) => {
+    if (!recorder) return
+    recorder.bridge = info && info.bridge ? info.bridge : null
+    recorder.plugin = info && info.state ? info.state : null
+  }).catch(() => {})
+}
+
+function stopRecording(reason) {
+  if (!recorder || !recorder.active) return
+  const elapsed = recordElapsed()
+  recorder.durationMs = elapsed
+  recorder.endedAtMs = recordStartedWall + elapsed
+  recorder.endedAt = new Date(recorder.endedAtMs).toISOString()
+  recorder.stopReason = reason || 'manual'
+  recordLog('record', '录制停止 · ' + fmtDuration(elapsed) + ' · ' + recorder.samples.length + ' 帧')
+  recorder.active = false
+  clearInterval(recordTicker)
+  recordTicker = 0
+  updateRecordUi()
+  logEvent('warn', '录制已停止 · ' + fmtDuration(elapsed) + ' · ' + recorder.samples.length + ' 帧')
+}
+
+function recordTelemetry(sample, flags) {
+  if (!recorder || !recorder.active) return
+  const t = recordElapsed()
+  const receivedAt = new Date().toISOString()
+  const copy = {
+    t,
+    receivedAt,
+    at: sample.at || 0,
+    state: sample.state || 'stopped',
+    error: sample.error || '',
+    enabled: Boolean(sample.enabled),
+    bpm: Number(sample.bpm) || 0,
+    confidence: Number(sample.confidence) || 0,
+    beatPeriod: Number(sample.beatPeriod) || 0,
+    beatCount: Number(sample.beatCount) || 0,
+    analysisCount: Number(sample.analysisCount) || 0,
+    analysisMs: Number(sample.analysisMs) || 0,
+    analysisEveryMs: Number(sample.analysisEveryMs) || 0,
+    windowSeconds: Number(sample.windowSeconds) || 0,
+    sampleRate: Number(sample.sampleRate) || 0,
+    bufferSeconds: Number(sample.bufferSeconds) || 0,
+    audioTime: Number(sample.audioTime) || 0,
+    nextBeatAt: Number(sample.nextBeatAt) || 0,
+    nextBeatIn: Number(sample.nextBeatIn) || 0,
+    leadMs: Number(sample.leadMs) || 0,
+    energy: Number(sample.energy) || 0,
+    audible: Boolean(sample.audible),
+    suppressed: Boolean(sample.suppressed),
+    suppressLeftMs: Number(sample.suppressLeftMs) || 0,
+    gridAgeMs: Number(sample.gridAgeMs) || 0,
+    candidateBpm: Number(sample.candidateBpm) || 0,
+    candidateHits: Number(sample.candidateHits) || 0,
+    last: sample.last || null,
+  }
+  recorder.samples.push(copy)
+  if (flags.beat) {
+    recorder.beats.push({
+      t,
+      at: copy.at,
+      bpm: copy.bpm,
+      confidence: copy.confidence,
+      energy: copy.energy,
+      candidateBpm: copy.candidateBpm,
+      beatCount: copy.beatCount,
+      nextBeatIn: copy.nextBeatIn,
+    })
+  }
+  if (flags.analysis) {
+    recorder.analyses.push({
+      t,
+      at: copy.at,
+      analysisCount: copy.analysisCount,
+      state: copy.state,
+      bpm: copy.last ? copy.last.bpm : copy.bpm,
+      confidence: copy.last ? copy.last.confidence : copy.confidence,
+      ms: copy.last ? copy.last.ms : copy.analysisMs,
+      duration: copy.last ? copy.last.duration : 0,
+      beats: copy.last ? copy.last.beats : [],
+    })
+  }
+  if (flags.status) {
+    recorder.statusChanges.push({ t, at: copy.at, state: copy.state, error: copy.error, bpm: copy.bpm })
+  }
+  if (t >= MAX_RECORD_MS) stopRecording('max-duration')
+}
+
+function exportRecording() {
+  if (!recorder || recorder.active || !recorder.samples.length) return
+  const payload = JSON.parse(JSON.stringify(recorder))
+  payload.active = false
+  payload.exportedAt = new Date().toISOString()
+  payload.exportedAtMs = Date.now()
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const stamp = new Date(payload.startedAtMs).toISOString().replace(/[:.]/g, '-')
+  link.href = url
+  link.download = 'whale-beat-recording-' + stamp + '.json'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1500)
+  logEvent('', '已导出录制 · ' + payload.samples.length + ' 帧')
+}
 
 function setConnection(kind, title, detail) {
+  const changed = els.connTitle.textContent !== title || els.connDetail.textContent !== detail
   els.connection.className = 'connection ' + (kind || '')
   els.connTitle.textContent = title
   els.connDetail.textContent = detail
+  if (changed && recorder && recorder.active && title) {
+    recordLog('connection', title + ' · ' + detail)
+  }
 }
 
 function fmt(value, digits = 0) {
@@ -40,6 +232,7 @@ function stateLabel(state) {
 
 function logEvent(kind, text) {
   if (!els.events) return
+  recordLog(kind, text)
   const empty = els.events.querySelector('.empty')
   if (empty) empty.remove()
   const row = document.createElement('div')
@@ -83,6 +276,12 @@ function applyTelemetry(env) {
   }
   lastSample = sample
   const state = sample.state || 'stopped'
+  const beatChanged = Number(sample.beatCount || 0) > lastBeatCount
+  const analysisChanged = Number(sample.analysisCount || 0) > lastAnalysisCount
+  const statusChanged = state !== lastState
+  if (recorder && recorder.active) {
+    recordTelemetry(sample, { beat: beatChanged, analysis: analysisChanged, status: statusChanged })
+  }
   els.bpm.textContent = sample.bpm ? fmt(sample.bpm, 1) : '--'
   els.confidence.textContent = fmt((sample.confidence || 0) * 100, 0) + '%'
   els.statePill.textContent = stateLabel(state)
@@ -254,7 +453,24 @@ $('clear').addEventListener('click', () => {
   draw()
 })
 
+$('recordToggle').addEventListener('click', () => {
+  if (recorder && recorder.active) stopRecording('manual')
+  else startRecording()
+})
+$('recordExport').addEventListener('click', exportRecording)
+window.addEventListener('beforeunload', (event) => {
+  if (!recorder || !recorder.active) return
+  event.preventDefault()
+  event.returnValue = ''
+})
 window.addEventListener('resize', draw)
+window.__BeatLiveRecorder = {
+  start: startRecording,
+  stop: stopRecording,
+  export: exportRecording,
+  get: () => recorder,
+}
+updateRecordUi()
 connect()
 pollInfo()
 setInterval(() => { if (!paused) draw() }, 250)

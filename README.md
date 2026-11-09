@@ -142,7 +142,7 @@
 node tools/beat-live-server.mjs
 ```
 
-打开 `http://127.0.0.1:8898/`，先在桌面模式开启音乐律动。工具会自动发现 helper 的 loopback 端口，读取插件实际的数据流。更多说明见 [`tools/README.md`](tools/README.md)。
+打开 `http://127.0.0.1:8898/`，先在桌面模式开启音乐律动。工具会自动发现 helper 的 loopback 端口，读取插件实际的数据流；也可以开始录制并导出完整 JSON，用于复现 BPM 和拍点问题。更多说明见 [`tools/README.md`](tools/README.md)。
 
 ### npm
 

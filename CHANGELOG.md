@@ -19,6 +19,7 @@
 - 音乐停止约 450ms 后立即停用旧节拍网格，不会继续按最后一次 BPM 摆动；挂件自身播放按动音效时短暂屏蔽检测，避免把自己的声音误判为节拍。
 - 内置 `runtime/electron-helper/vendor/beat-detect.js` 来自 `@audio/beat@2.1.0`（MIT），许可证保留在 `beat-detect.LICENSE`。
 - 新增只读律动遥测：桌面 helper 通过 loopback SSE 推送实际 BPM、候选 BPM、拍点、能量与分析耗时；配套 `tools/beat-live.html` 独立监视器直接读取这些数据，不额外采集音频、不修改插件设置，也不打进 npm 包。
+- 律动监视器新增录制/导出：开始录制后保存每个 100ms 遥测帧、拍点、分析结果、状态和连接日志，停止后可导出 JSON 用于复现 BPM 误判、拍点偏移和修正多触发问题。
 
 ## v0.3.3
 
