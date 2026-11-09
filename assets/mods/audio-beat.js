@@ -191,7 +191,12 @@
         ? global.performance.now()
         : Date.now()
       var elapsed = eventMs > 0 ? (now - eventMs) / 1000 : 0
-      var visualPeriod = eventPeriod > 0 ? eventPeriod : period
+      // The helper can switch between half/double-time grids (e.g. 85↔170).
+      // `eventPeriod` is learned from old events and becomes stale across such
+      // a switch; using it would reject every new beat as early/late and leave
+      // the widget motionless. Trust the current BPM target first, and only
+      // fall back to the observed interval before the first BPM arrives.
+      var visualPeriod = targetPeriod > 0 ? targetPeriod : (eventPeriod > 0 ? eventPeriod : period)
       if (elapsed > 0 && visualPeriod > 0) {
         // Ignore duplicate/early events and late catch-up events; a beat is
         // only allowed to trigger the click-style press once per period.

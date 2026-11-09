@@ -41,3 +41,34 @@ test('audio beat mod triggers one press per accepted beat', () => {
   mod.setStatus('stopped', '', 0);
   assert.equal(mod.hasMusic(), false);
 });
+
+test('audio beat mod keeps pressing after a half/double-time BPM switch', () => {
+  let now = 1000;
+  const context = {
+    window: { performance: { now: () => now } },
+    console,
+  };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync('assets/mods/audio-beat.js', 'utf8'), context);
+
+  const presses = [];
+  const mod = context.window.DSHWhaleBongoMods.audioBeat({
+    cfg: { audioBeat: true },
+    desktopMode: true,
+    save() {},
+    pressBeat(strength) { presses.push({ at: now, strength }); },
+  });
+
+  mod.setStatus('active', '', 170);
+  mod.pulse();
+  now = 1350;
+  mod.pulse();
+  assert.equal(presses.length, 2);
+
+  // The helper moves to the 85 BPM downbeat grid. The learned 350 ms period
+  // must not reject the new 706 ms beats forever.
+  mod.setStatus('active', '', 85);
+  now = 2052;
+  mod.pulse();
+  assert.equal(presses.length, 3);
+});
