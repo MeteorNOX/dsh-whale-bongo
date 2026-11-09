@@ -410,12 +410,18 @@
       // grid does not get stuck.
       var requiredHits = 0
       if (!bpm) {
-        requiredHits = nextBpm > 140 ? 3 : 0
+        // A high first estimate is usually a subdivision of the real beat.
+        // Do not lock onto it from three windows; wait for the slower grid.
+        requiredHits = nextBpm > 140 ? 6 : 3
       } else {
         var diff = Math.abs(nextBpm - bpm)
         if (diff > 2.5) {
-          if (harmonicRatio(nextBpm, bpm)) requiredHits = 6
-          else if (diff > 12 || diff > bpm * 0.18) requiredHits = 3
+          if (harmonicRatio(nextBpm, bpm)) {
+            // Slower harmonic candidates (3/4, 2/3, 1/2) are usually the
+            // structural beat; faster ones are usually subdivisions. Accept a
+            // slower grid quickly, but make a faster one prove itself.
+            requiredHits = nextBpm < bpm ? 3 : 6
+          } else if (diff > 12 || diff > bpm * 0.18) requiredHits = 3
           else requiredHits = 2
         }
       }
