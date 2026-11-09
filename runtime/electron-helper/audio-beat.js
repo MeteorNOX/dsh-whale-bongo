@@ -19,7 +19,12 @@
   var MAX_BPM = 180
   var SILENCE_RMS = 0.0025
   var SILENCE_MS = 450
-  var STARTUP_LOCK_MS = 1400
+  var SOUND_WARMUP_MS = 3000
+  // The widget's beat press has a ~55ms press shape before its lowest point.
+  // Fire the event this much before the musical beat so the visual bottom
+  // lands on the beat. The MOD slider adds/subtracts extra lead.
+  var PRESS_LEAD_MS = 55
+  var HARMONIC_TOLERANCE = 0.035
 
   function number(value, fallback) {
     var n = Number(value)
@@ -28,6 +33,24 @@
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max)
+  }
+
+  function userLeadMs() {
+    return clamp(number(window.__DSH_WHALE_AUDIO_BEAT_LEAD, 0), -100, 150)
+  }
+
+  function pressLeadSeconds() {
+    return (PRESS_LEAD_MS + userLeadMs()) / 1000
+  }
+
+  function harmonicRatio(nextBpm, currentBpm) {
+    if (!currentBpm) return false
+    var ratio = nextBpm / currentBpm
+    var targets = [0.5, 2 / 3, 0.75, 4 / 3, 1.5, 2]
+    for (var i = 0; i < targets.length; i++) {
+      if (Math.abs(ratio - targets[i]) <= HARMONIC_TOLERANCE) return true
+    }
+    return false
   }
 
   function friendlyError(error) {
@@ -67,12 +90,15 @@
     var analysisPending = false
     var analysisId = 0
     var analysisDuration = 0
+    var beatTimer = 0
+    var scheduledLead = -1
     var lastSoundAt = 0
     var soundStartAt = 0
     var currentRms = 0
     var suppressUntil = 0
     var candidateBpm = 0
     var candidateHits = 0
+    var candidateRequired = 0
     var currentState = 'stopped'
     var currentError = ''
     var analysisCount = 0
@@ -87,6 +113,7 @@
       if (!force && nowMs - lastTelemetryAt < 100) return
       lastTelemetryAt = nowMs
       var previous = lastResult
+      var lead = pressLeadSeconds()
       var payload = {
         at: nowMs,
         state: currentState,
@@ -105,7 +132,10 @@
         audioTime: context ? context.currentTime : 0,
         nextBeatAt: nextBeatAt,
         nextBeatIn: context && nextBeatAt ? nextBeatAt - context.currentTime : 0,
-        leadMs: clamp(number(window.__DSH_WHALE_AUDIO_BEAT_LEAD, 0), -150, 150),
+        nextPressIn: context && nextBeatAt ? nextBeatAt - lead - context.currentTime : 0,
+        leadMs: Math.round(lead * 1000),
+        userLeadMs: userLeadMs(),
+        pressLeadMs: PRESS_LEAD_MS,
         energy: currentRms,
         audible: isAudible(),
         suppressed: nowMs < suppressUntil,
@@ -113,6 +143,7 @@
         gridAgeMs: lastGridAt ? nowMs - lastGridAt : 0,
         candidateBpm: candidateBpm,
         candidateHits: candidateHits,
+        candidateRequired: candidateRequired,
         last: previous ? {
           bpm: previous.bpm,
           confidence: previous.confidence,
@@ -144,7 +175,68 @@
       return Boolean(lastSoundAt) && Date.now() - lastSoundAt < SILENCE_MS
     }
 
+    function clearBeatTimer() {
+      if (beatTimer) {
+        try { window.clearTimeout(beatTimer) } catch (e) {}
+        beatTimer = 0
+      }
+      scheduledLead = -1
+    }
+
+    function scheduleBeat() {
+      clearBeatTimer()
+      if (!running || !context || !beatPeriod || !nextBeatAt) return
+      var lead = pressLeadSeconds()
+      var delay = (nextBeatAt - lead - context.currentTime) * 1000
+      if (!isFinite(delay)) return
+      beatTimer = window.setTimeout(fireBeat, Math.max(0, delay))
+      scheduledLead = lead
+    }
+
+    function fireBeat() {
+      beatTimer = 0
+      if (!running || !context || !beatPeriod || !nextBeatAt) return
+      var now = context.currentTime
+      var lead = pressLeadSeconds()
+      var due = nextBeatAt - lead
+      // Timers can wake slightly early; wait rather than double-fire.
+      if (now + 0.003 < due) {
+        scheduleBeat()
+        return
+      }
+      // A suspended window or long main-thread stall must not produce a burst
+      // of catch-up presses. Skip the missed beat and re-anchor the next one.
+      if (now > due + beatPeriod * 0.60) {
+        nextBeatAt = now + beatPeriod
+        scheduleBeat()
+        return
+      }
+      if (lastBeatAt && now - lastBeatAt < beatPeriod * 0.40) {
+        scheduleBeat()
+        return
+      }
+      lastBeatAt = now
+      beatCount += 1
+      var strength = clamp(0.62 + confidence * 0.38, 0.55, 1)
+      try {
+        if (typeof opts.onBeat === 'function') {
+          opts.onBeat({
+            strength: strength,
+            bpm: bpm,
+            confidence: confidence,
+            at: Date.now(),
+            scheduledAt: nextBeatAt,
+            firedAt: now,
+          })
+        }
+      } catch (e) {}
+      nextBeatAt += beatPeriod
+      telemetry(true)
+      scheduleBeat()
+    }
+
     function clearBeatGrid(notify) {
+      clearBeatTimer()
       var hadGrid = Boolean(bpm || beatPeriod || nextBeatAt || lastGridAt)
       bpm = 0
       confidence = 0
@@ -153,6 +245,8 @@
       lastGridAt = 0
       candidateBpm = 0
       candidateHits = 0
+      candidateRequired = 0
+      lastBeatAt = 0
       soundStartAt = 0
       if (notify && hadGrid) status('active')
     }
@@ -168,6 +262,7 @@
     }
 
     function release() {
+      clearBeatTimer()
       if (timer) {
         try { window.clearInterval(timer) } catch (e) {}
         timer = 0
@@ -219,6 +314,9 @@
       suppressUntil = 0
       candidateBpm = 0
       candidateHits = 0
+      candidateRequired = 0
+      lastBeatAt = 0
+      scheduledLead = 0
     }
 
     function ensureRing(size) {
@@ -267,108 +365,120 @@
 
     function applyBeatResult(result, duration) {
       if (!running || !context) return
-      if (result && result.bpm > 0) {
-        var offsets = []
-        var rawBeats = Array.isArray(result.beats) ? result.beats : []
-        for (var bi = 0; bi < rawBeats.length; bi++) {
-          offsets.push((Number(rawBeats[bi]) || 0) - duration)
-        }
-        lastResult = {
-          bpm: Number(result.bpm) || 0,
-          confidence: Number(result.confidence) || 0,
-          ms: Number(result.ms) || lastAnalysisMs,
-          duration: duration,
-          beats: offsets,
-        }
+      if (!isAudible()) {
+        clearBeatGrid(true)
+        return
+      }
+      if (!result || !(result.bpm > 0) || !Array.isArray(result.beats)) return
+
+      // @audio/beat repeats the window edge as a synthetic beat. Dropping it
+      // avoids short 147–352ms intervals in the analysis log and keeps the
+      // grid anchored to real detected onsets.
+      var offsets = []
+      var rawBeats = Array.isArray(result.beats) ? result.beats : []
+      for (var bi = 0; bi < rawBeats.length; bi++) {
+        var offset = number(rawBeats[bi], NaN) - duration
+        if (!isFinite(offset)) continue
+        if (offset <= -duration + 0.05) continue
+        if (offset > 0.02) continue
+        if (offsets.length && offset - offsets[offsets.length - 1] < 0.04) continue
+        offsets.push(offset)
+      }
+      if (offsets.length < 2) return
+
+      lastResult = {
+        bpm: Number(result.bpm) || 0,
+        confidence: Number(result.confidence) || 0,
+        ms: Number(result.ms) || lastAnalysisMs,
+        duration: duration,
+        beats: offsets,
       }
       if (Date.now() < suppressUntil) {
         // Hold the current grid/phase while the widget's own typing sound
         // masks the analysis. The next non-suppressed analysis can correct it.
         return
       }
-      if (!isAudible()) {
-        clearBeatGrid(true)
-        return
-      }
-      if (!result || !(result.bpm > 0) || !result.beats || result.beats.length < 2) {
-        if (lastGridAt && Date.now() - lastGridAt > 4200) {
-          bpm = 0
-          confidence = 0
-          beatPeriod = 0
-          nextBeatAt = 0
-          lastGridAt = 0
-          status('active')
-        }
-        return
-      }
+
       var nextBpm = clamp(number(result.bpm, 0), MIN_BPM, MAX_BPM)
       if (!nextBpm) return
       var nextConfidence = clamp(number(result.confidence, 0), 0, 1)
-      // A short intro or a sparse first window can make @audio/beat report a
-      // double-time tempo. Do not let a high first BPM drive the widget until
-      // a second analysis confirms it; also require the grid to be stable
-      // after the first audible sample.
-      var needsConfirmation = !bpm && nextBpm > 140
-      // 123 ↔ 157 BPM is a common half/double-time misread (27.6% apart), so a
-      // 28% threshold was just loose enough to let it through. Require a
-      // second analysis for any jump over 12 BPM or 18%.
-      if (bpm && (Math.abs(nextBpm - bpm) > 12 || Math.abs(nextBpm - bpm) > bpm * 0.18)) {
-        needsConfirmation = true
+
+      // Require a longer confirmation window for large changes and for
+      // half/double/triplet tempo relationships. A 112→168 (3:2) misread can
+      // otherwise persist for several seconds and produces a burst of fast
+      // presses. Small 112↔113 fluctuations are accepted immediately so the
+      // grid does not get stuck.
+      var requiredHits = 0
+      if (!bpm) {
+        requiredHits = nextBpm > 140 ? 3 : 0
+      } else {
+        var diff = Math.abs(nextBpm - bpm)
+        if (diff > 2.5) {
+          if (harmonicRatio(nextBpm, bpm)) requiredHits = 6
+          else if (diff > 12 || diff > bpm * 0.18) requiredHits = 3
+          else requiredHits = 2
+        }
       }
-      if (needsConfirmation) {
+      if (requiredHits > 0) {
         if (nextConfidence < 0.45) return
-        if (candidateBpm && Math.abs(nextBpm - candidateBpm) <= 4) {
+        if (candidateBpm && Math.abs(nextBpm - candidateBpm) <= 3) {
           candidateHits += 1
         } else {
           candidateBpm = nextBpm
           candidateHits = 1
         }
-        if (candidateHits < 2) {
+        candidateRequired = requiredHits
+        if (candidateHits < requiredHits) {
           status('active')
+          telemetry(true)
           return
         }
-      } else {
-        candidateBpm = 0
-        candidateHits = 0
       }
-      if (!bpm && soundStartAt && Date.now() - soundStartAt < STARTUP_LOCK_MS) return
+
       var nextPeriod = 60 / nextBpm
-      var last = Number(result.beats[result.beats.length - 1]) || 0
-      var next = last + nextPeriod
-      // Detect can place the last grid point slightly before the end of the
-      // buffer. Move to the first grid point that is still in the future.
-      while (next < duration - 0.04) next += nextPeriod
+      var last = Number(offsets[offsets.length - 1]) || 0
       var now = context.currentTime
       var bufferEnd = ringEndedAt || now
-      var target = bufferEnd + Math.max(0.02, next - duration)
-      // Do not let a stale grid schedule a beat in the past.
+      var target = bufferEnd + Math.max(0.02, last + nextPeriod)
       while (target < now + 0.03) target += nextPeriod
-      // Keep a small amount of phase continuity while the tempo is stable;
-      // re-anchoring on every analysis would make the pet jitter.
-      if (bpm && Math.abs(nextBpm - bpm) < 4 && nextBeatAt > now + 0.05) {
-        var drift = target - nextBeatAt
-        if (Math.abs(drift) < 0.10) target = nextBeatAt
+
+      if (!bpm) {
+        nextBeatAt = target
+        beatPeriod = nextPeriod
+      } else if (Math.abs(nextBpm - bpm) <= 2.5) {
+        // Same tempo (including 112/113): preserve the current phase and timer.
+        // Re-anchoring here was the cause of skipped beats (974–1051ms gaps).
+        beatPeriod = nextPeriod
+        if (!nextBeatAt) nextBeatAt = target
+      } else {
+        // A real tempo change is applied at a beat boundary. Clamp the target
+        // so the new grid cannot introduce a two-beat hole.
+        var lower = lastBeatAt ? lastBeatAt + nextPeriod * 0.65 : now + 0.05
+        var upper = lastBeatAt ? lastBeatAt + nextPeriod * 1.35 : now + nextPeriod
+        target = clamp(target, lower, upper)
+        while (target < now + 0.05) target += nextPeriod
+        nextBeatAt = target
+        beatPeriod = nextPeriod
       }
-      // Never pull the already-scheduled beat earlier. A re-detected tempo
-      // that puts the next grid point before it would fire a second nod
-      // before the previous one settles, which reads as a stutter. Keep the
-      // current beat and let the new period take over after it.
-      if (bpm && nextBeatAt > now + 0.05 && target < nextBeatAt) {
-        target = nextBeatAt
-      }
+
       bpm = nextBpm
       confidence = nextConfidence
       candidateBpm = 0
       candidateHits = 0
+      candidateRequired = 0
       lastGridAt = Date.now()
-      beatPeriod = nextPeriod
-      nextBeatAt = target
       status('active')
+      scheduleBeat()
     }
 
     function analyze() {
       if (!running || !context || !ringFilled || analysisPending) return
       if (ringFilled < context.sampleRate * 2.4) return
+      // A window that is mostly silence makes @audio/beat return confident but
+      // nonsense tempos (125/148/180 BPM). Do not publish any result until the
+      // rolling window contains enough real sound.
+      if (!soundStartAt || Date.now() - soundStartAt < SOUND_WARMUP_MS) return
+      if (!isAudible()) return
       analysisStartedAt = performance.now()
       var samples = readRing()
       var duration = samples.length / context.sampleRate
@@ -412,37 +522,22 @@
         return
       }
       if (!beatPeriod || !nextBeatAt || !lastGridAt) return
-      // While the widget's own typing sound is masking analysis, keep the
-      // existing grid. Once suppression ends, stop if the detector has not
-      // produced a fresh grid recently.
-      if (Date.now() >= suppressUntil && Date.now() - lastGridAt > 5200) return
-      var now = context.currentTime
-      // Positive lead fires early, negative lead fires late. The MOD updates
-      // this global while its slider moves, so no IPC round-trip is needed.
-      var lead = clamp(number(window.__DSH_WHALE_AUDIO_BEAT_LEAD, 0) / 1000, -0.2, 0.2)
-      // A slow analysis can leave the grid slightly behind; skip stale beats
-      // instead of firing a burst to catch up.
-      while (nextBeatAt - lead < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
-      if (now < nextBeatAt - lead) return
-      if (lastBeatAt && now - lastBeatAt < beatPeriod * 0.45) {
-        nextBeatAt = now + beatPeriod
+      if (Date.now() >= suppressUntil && Date.now() - lastGridAt > 5200) {
+        clearBeatGrid(true)
         return
       }
-      lastBeatAt = now
-      beatCount += 1
-      var strength = clamp(0.62 + confidence * 0.38, 0.55, 1)
-      try {
-        if (typeof opts.onBeat === 'function') {
-          opts.onBeat({
-            strength: strength,
-            bpm: bpm,
-            confidence: confidence,
-            at: Date.now(),
-          })
-        }
-      } catch (e) {}
-      telemetry(true)
-      nextBeatAt += beatPeriod
+      var now = context.currentTime
+      var lead = pressLeadSeconds()
+      // If the UI thread was stalled past the beat, skip the missed pulse and
+      // re-anchor instead of firing a burst of catch-up presses.
+      if (now > nextBeatAt - lead + beatPeriod * 0.65) {
+        var missed = Math.floor((now - (nextBeatAt - lead)) / beatPeriod)
+        if (missed < 1) missed = 1
+        nextBeatAt += beatPeriod * missed
+        scheduleBeat()
+        return
+      }
+      if (!beatTimer || Math.abs(scheduledLead - lead) > 0.001) scheduleBeat()
     }
 
     async function start() {
@@ -542,6 +637,8 @@
         suppressUntil = 0
         candidateBpm = 0
         candidateHits = 0
+        candidateRequired = 0
+        clearBeatTimer()
         window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS = suppress
         timer = window.setInterval(tick, TICK_MS)
         analyzeTimer = window.setInterval(analyze, ANALYZE_MS)
@@ -574,6 +671,8 @@
         analysisMs: lastAnalysisMs,
         beatPeriod: beatPeriod,
         nextBeatIn: context && nextBeatAt ? nextBeatAt - context.currentTime : 0,
+        nextPressIn: context && nextBeatAt ? nextBeatAt - pressLeadSeconds() - context.currentTime : 0,
+        leadMs: Math.round(pressLeadSeconds() * 1000),
         bufferSeconds: context && ringFilled ? ringFilled / context.sampleRate : 0,
       }
     }
