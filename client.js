@@ -175,7 +175,6 @@ function mountWhaleBongoWidget(options) {
     filterShortcutKeys: false,
     typingAngleMode: 'position-split',
     audioBeat: true,
-    audioBeatMode: 'full',
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -299,7 +298,6 @@ function mountWhaleBongoWidget(options) {
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
     out.audioBeat = out.audioBeat !== false
-    out.audioBeatMode = out.audioBeatMode === 'vertical' ? 'vertical' : 'full'
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
@@ -1357,7 +1355,8 @@ function mountWhaleBongoWidget(options) {
         cfg: cfg,
         desktopMode: desktopMode,
         save: saveCfg,
-        q: moveBounceRatio
+        q: moveBounceRatio,
+        pressBeat: pressWidgetForBeat
       })
       var audioModSlot = root.querySelector('[data-mod-slot="audio-beat"]')
       if (audioModSlot) audioMod.mount(audioModSlot)
@@ -1739,8 +1738,6 @@ function mountWhaleBongoWidget(options) {
   var followStretch = 0
   var followStretchV = 0
 
-  var audioBodyScaleX = 1
-  var audioBodyScaleY = 1
   var lastDesktopFollowX = null
   var lastDesktopFollowY = null
   var desktopFollowFrame = 0
@@ -1757,6 +1754,7 @@ function mountWhaleBongoWidget(options) {
   var lastDiagPlace = ''
   var drag = null
   var pointerPress = null
+  var beatPressToken = 0
   var roCard = null
   var ro = null
   var mo = null
@@ -1878,26 +1876,14 @@ function mountWhaleBongoWidget(options) {
   }
 
   function renderImageMotion() {
-    if (!imageMotion) {
-      audioBodyScaleX = 1
-      audioBodyScaleY = 1
-      return
-    }
+    if (!imageMotion) return
     var sq = clamp(imageSquash.value, -0.18, 0.18)
-    // The MOD owns the musical nod; the widget only composes its scale with
-    // the click squash so the hands and body share the same beat frame.
-    var beatScale = (typeof audioMod !== 'undefined' && audioMod) ? audioMod.scales() : { x: 1, y: 1 }
-    var audioX = clamp(beatScale.x, 0.8, 1.2)
-    var audioY = clamp(beatScale.y, 0.7, 1.3)
-    audioBodyScaleX = audioX
-    audioBodyScaleY = audioY
-    var beatActive = Math.abs(audioY - 1) > 0.001
     if (stage) {
-      stage.classList.toggle('is-bouncing', Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05 || beatActive)
+      stage.classList.toggle('is-bouncing', Math.abs(sq) > 0.0015 || Math.abs(imageSquash.velocity) > 0.05)
     }
     imageMotion.style.transform =
-      'scale(' + ((1 + sq * 0.80) * audioX).toFixed(4) + ',' +
-      ((1 - sq * 1.10) * audioY).toFixed(4) + ')'
+      'scale(' + (1 + sq * 0.80).toFixed(4) + ',' +
+      (1 - sq * 1.10).toFixed(4) + ')'
   }
 
 
@@ -1965,8 +1951,44 @@ function mountWhaleBongoWidget(options) {
     render()
   }
 
+  // Music beats trigger the same two-hand press as a real pointer click.
+  // They deliberately do not play the click sound, and are skipped while the
+  // user is already dragging or typing.
+  function pressWidgetForBeat(amount) {
+    if (!desktopMode || pointerPress || drag) return
+    var strength = clamp(numberOr(amount, 1), 0, 1)
+    var now = nowMs()
+    var pressed = []
+    for (var i = 0; i < hands.length; i++) {
+      var hand = hands[i]
+      if (hand.down || hand.seq || hand.keys.size > 0) continue
+      hand.manualSquash = false
+      hand.randomActive = false
+      hand.tap = 0
+      hand.y.target = 0
+      hand.downAt = now
+      setPressed(hand, true)
+      hand.tap = Math.min(1.25, hand.tap + 0.95 * strength)
+      hand.y.velocity = Math.max(0, hand.y.velocity) + 2.4 * strength
+      hand.squash.velocity = Math.max(0, hand.squash.velocity) + 1.2 * strength
+      pressed.push(hand)
+    }
+    imageSquash.target = clamp(0.03 * pressQBounceStrength(), 0, 0.14)
+    render()
+    var token = ++beatPressToken
+    later(function () {
+      if (token !== beatPressToken || pointerPress) return
+      imageSquash.target = 0
+      kickImage(strength)
+      for (var j = 0; j < pressed.length; j++) {
+        if (pressed[j].keys.size === 0 && !pressed[j].seq) releaseHand(pressed[j], 0)
+      }
+    }, 55)
+  }
+
   function startPointerPress() {
     if (pointerPress) return
+    beatPressToken++
     var now = nowMs()
     var mode = cfg.clickPressMode
     var pressed = []
@@ -2147,11 +2169,8 @@ function mountWhaleBongoWidget(options) {
       var hand = hands[i]
       var tap = hand.tap
       var squash = clamp(hand.squash.value + tap * CONFIG.tapSquash, -0.11, 0.48)
-      // Music groove uses the body's scale directly. No separate hand spring
-      // or timing, so the hands can never double-bounce when the BPM is
-      // corrected mid-nod.
-      var scaleX = (1 + squash * 0.58) * audioBodyScaleX
-      var scaleY = (1 - squash * 0.74) * audioBodyScaleY
+      var scaleX = 1 + squash * 0.58
+      var scaleY = 1 - squash * 0.74
       var travel = (hand.y.value + tap * CONFIG.tapDepth) * handSize
       var translateY = Math.min(travel, handBottomLimit)
       var xShift = 0
@@ -2457,6 +2476,7 @@ function mountWhaleBongoWidget(options) {
 
   function pulseAudioBeat(strength) {
     if (typeof audioMod !== 'undefined' && audioMod) audioMod.pulse(strength)
+    else pressWidgetForBeat(strength)
   }
 
   function applyMoveShellTransform(q) {
@@ -5542,7 +5562,6 @@ function mountWhaleBongoWidget(options) {
   }
   return disposeWidget
 }
-
 
     return {
       inject: [],
