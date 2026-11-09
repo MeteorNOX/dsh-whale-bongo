@@ -26,11 +26,26 @@
     var targetPeriod = 0
     var eventMs = 0
     var eventPeriod = 0
+    var lead = clamp(Number(host.cfg && host.cfg.audioBeatLead) || 0, -100, 150)
     var input = null
     var statusEl = null
+    var leadInput = null
+    var leadValue = null
 
     function isEnabled() {
       return enabled !== false && cfg.audioBeat !== false
+    }
+
+    function leadText() {
+      if (lead > 0) return '提前 ' + lead + ' ms'
+      if (lead < 0) return '延后 ' + (-lead) + ' ms'
+      return '不提前'
+    }
+
+    function applyLead() {
+      // The helper-side scheduler reads this global on every tick. Keeping it
+      // in the renderer avoids an IPC round-trip while the slider is moving.
+      try { global.__DSH_WHALE_AUDIO_BEAT_LEAD = lead } catch (e) {}
     }
 
     function statusText() {
@@ -46,11 +61,14 @@
 
     function sync() {
       if (input) input.checked = isEnabled()
+      if (leadInput) leadInput.value = String(lead)
+      if (leadValue) leadValue.textContent = leadText()
       if (statusEl) {
         statusEl.textContent = statusText()
         statusEl.classList.toggle('is-error', status === 'error' && isEnabled())
         statusEl.classList.toggle('is-active', status === 'active' && isEnabled())
       }
+      applyLead()
     }
 
     function mount(slot) {
@@ -63,12 +81,27 @@
           '<span class="dsnw-toggle-track" aria-hidden="true"></span>' +
         '</label>' +
         '<p class="dsnw-image-name" data-mod-audio-beat-status>桌面模式默认开启</p>' +
-        '<p class="dsnw-image-name">每个拍点按一次，复用鼠标点按的按压动效</p>'
+        '<div class="dsnw-mod-slider-head">' +
+          '<span class="dsnw-toggle-label">节拍提前量</span>' +
+          '<span class="dsnw-mod-slider-value" data-mod-audio-lead-value>不提前</span>' +
+        '</div>' +
+        '<input class="dsnw-mod-range" type="range" min="-100" max="150" step="5" data-mod-audio-lead aria-label="节拍提前量">' +
+        '<p class="dsnw-image-name">每个拍点按一次，复用鼠标点按的按压动效；正值提前，负值延后</p>'
       input = slot.querySelector('[data-mod-audio-beat]')
       statusEl = slot.querySelector('[data-mod-audio-beat-status]')
+      leadInput = slot.querySelector('[data-mod-audio-lead]')
+      leadValue = slot.querySelector('[data-mod-audio-lead-value]')
       if (input) {
         input.addEventListener('change', function () {
           cfg.audioBeat = Boolean(this.checked)
+          host.save()
+          sync()
+        })
+      }
+      if (leadInput) {
+        leadInput.addEventListener('input', function () {
+          lead = clamp(Number(this.value) || 0, -100, 150)
+          cfg.audioBeatLead = lead
           host.save()
           sync()
         })
@@ -130,6 +163,8 @@
         if (period < 0.01) period = 0
       }
     }
+
+    applyLead()
 
     return {
       mount: mount,

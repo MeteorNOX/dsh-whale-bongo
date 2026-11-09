@@ -339,10 +339,13 @@
       // produced a fresh grid recently.
       if (Date.now() >= suppressUntil && Date.now() - lastGridAt > 5200) return
       var now = context.currentTime
+      // Positive lead fires early, negative lead fires late. The MOD updates
+      // this global while its slider moves, so no IPC round-trip is needed.
+      var lead = clamp(number(window.__DSH_WHALE_AUDIO_BEAT_LEAD, 0) / 1000, -0.2, 0.2)
       // A slow analysis can leave the grid slightly behind; skip stale beats
       // instead of firing a burst to catch up.
-      while (nextBeatAt < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
-      if (now < nextBeatAt) return
+      while (nextBeatAt - lead < now - beatPeriod * 0.35) nextBeatAt += beatPeriod
+      if (now < nextBeatAt - lead) return
       if (lastBeatAt && now - lastBeatAt < beatPeriod * 0.45) {
         nextBeatAt = now + beatPeriod
         return

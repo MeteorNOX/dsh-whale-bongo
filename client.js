@@ -175,6 +175,7 @@ function mountWhaleBongoWidget(options) {
     filterShortcutKeys: false,
     typingAngleMode: 'position-split',
     audioBeat: true,
+    audioBeatLead: 0,
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -298,6 +299,7 @@ function mountWhaleBongoWidget(options) {
     out.flipSplitPct = clamp(numberOr(out.flipSplitPct, 50), 0, 100)
     out.filterShortcutKeys = out.filterShortcutKeys !== false
     out.audioBeat = out.audioBeat !== false
+    out.audioBeatLead = clamp(numberOr(out.audioBeatLead, 0), -100, 150)
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
@@ -904,6 +906,27 @@ function mountWhaleBongoWidget(options) {
     }
     #dsh-whale-bongo .dsnw-mod-section .dsnw-toggle-row {
       margin-top: 6px;
+    }
+    #dsh-whale-bongo .dsnw-mod-slider-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--dsw-alias-label-secondary, #aaa);
+      font-size: 11px;
+      line-height: 16px;
+    }
+    #dsh-whale-bongo .dsnw-mod-slider-value {
+      color: var(--dsw-alias-label-primary, #e8e8e8);
+      font-variant-numeric: tabular-nums;
+    }
+    #dsh-whale-bongo .dsnw-mod-range {
+      width: 100%;
+      height: 16px;
+      margin: 3px 0 1px;
+      accent-color: var(--dsw-alias-brand-primary, #4d6bfe);
+      cursor: pointer;
     }
     #dsh-whale-bongo .dsnw-fold-body[data-open="1"] {
       background: rgba(77,107,254,.045);

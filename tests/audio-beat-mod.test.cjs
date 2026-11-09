@@ -14,11 +14,12 @@ test('audio beat mod triggers one press per accepted beat', () => {
 
   const presses = [];
   const mod = context.window.DSHWhaleBongoMods.audioBeat({
-    cfg: { audioBeat: true },
+    cfg: { audioBeat: true, audioBeatLead: 70 },
     desktopMode: true,
     save() {},
     pressBeat(strength) { presses.push({ at: now, strength }); },
   });
+  assert.equal(context.window.__DSH_WHALE_AUDIO_BEAT_LEAD, 70);
   mod.setStatus('active', '', 120);
 
   mod.pulse();
