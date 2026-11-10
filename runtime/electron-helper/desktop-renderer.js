@@ -163,126 +163,27 @@ function applySnapshot(snapshot) {
   }
 }
 
-function containsPoint(el, x, y) {
-  if (!el) return false
-  const r = el.getBoundingClientRect()
-  return r.width > 0 && r.height > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom
-}
-
-function forwardedTargetAt(x, y) {
-  const root = document.getElementById('dsh-whale-bongo')
-  if (root) {
-    const button = root.querySelector('.dsnw-menu-btn')
-    if (containsPoint(button, x, y) && getComputedStyle(button).visibility !== 'hidden') return button
-    const menu = root.querySelector('.dsnw-menu')
-    if (menu && menu.classList.contains('open') && containsPoint(menu, x, y)) {
-      const nodes = Array.from(menu.querySelectorAll('button, select, input, [data-select], [role="option"], .dsnw-select'))
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        if (containsPoint(nodes[i], x, y)) return nodes[i]
-      }
-      return menu
+function updateInteractive(event) {
+  if (window.__dshWhaleBongoDesktopDragging) {
+    if (!interactive) {
+      interactive = true
+      try { bridge.setInteractive(true) } catch {}
     }
-    const hitbox = root.querySelector('.dsnw-hitbox')
-    if (containsPoint(hitbox, x, y)) return hitbox
-  }
-  return null
-}
-
-function emitPointer(target, type, x, y, buttons) {
-  if (!target) return
-  const init = {
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-    clientX: x,
-    clientY: y,
-    screenX: x,
-    screenY: y,
-    pointerId: 1,
-    pointerType: 'mouse',
-    isPrimary: true,
-    button: 0,
-    buttons: buttons,
-  }
-  target.dispatchEvent(new PointerEvent(type, init))
-}
-
-function emitMouse(target, type, x, y) {
-  if (!target) return
-  target.dispatchEvent(new MouseEvent(type, {
-    bubbles: type !== 'mouseenter' && type !== 'mouseleave',
-    cancelable: true,
-    composed: true,
-    clientX: x,
-    clientY: y,
-    button: 0,
-  }))
-}
-
-function emitClick(target, x, y) {
-  if (!target) return
-  target.dispatchEvent(new MouseEvent('click', {
-    bubbles: true,
-    cancelable: true,
-    composed: true,
-    clientX: x,
-    clientY: y,
-    button: 0,
-  }))
-}
-
-let globalPointerDown = false
-let globalPointerTarget = null
-let globalPointerLast = null
-
-function handleGlobalPointer(payload) {
-  if (!payload) return
-  const x = Number(payload.x)
-  const y = Number(payload.y)
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return
-  const target = forwardedTargetAt(x, y)
-  if (!target) {
-    if (globalPointerLast) {
-      emitPointer(globalPointerLast, 'pointerleave', x, y, 0)
-      emitMouse(globalPointerLast, 'mouseout', x, y)
-      emitMouse(globalPointerLast, 'mouseleave', x, y)
-    }
-    globalPointerLast = null
-    globalPointerDown = false
-    globalPointerTarget = null
     return
   }
-  if (globalPointerLast !== target) {
-    if (globalPointerLast) {
-      emitPointer(globalPointerLast, 'pointerleave', x, y, 0)
-      emitMouse(globalPointerLast, 'mouseout', x, y)
-      emitMouse(globalPointerLast, 'mouseleave', x, y)
-    }
-    emitMouse(target, 'mouseover', x, y)
-    emitMouse(target, 'mouseenter', x, y)
-  }
-  if (payload.left) {
-    if (!globalPointerDown) {
-      globalPointerDown = true
-      globalPointerTarget = target
-      emitPointer(target, 'pointerdown', x, y, 1)
-    }
-    emitPointer(target, 'pointermove', x, y, 1)
-  } else {
-    if (globalPointerDown) {
-      emitPointer(target, 'pointerup', x, y, 0)
-      const downTarget = globalPointerTarget
-      globalPointerDown = false
-      globalPointerTarget = null
-      if (downTarget && (downTarget === target || downTarget.contains?.(target) || target.contains?.(downTarget))) {
-        emitClick(downTarget, x, y)
-      }
-    } else {
-      emitPointer(target, 'pointermove', x, y, 0)
-    }
-  }
-  globalPointerLast = target
+  const target = document.elementFromPoint(event.clientX, event.clientY)
+  const next = Boolean(target && target.closest && target.closest('#dsh-whale-bongo'))
+  if (next === interactive) return
+  interactive = next
+  try { bridge.setInteractive(interactive) } catch {}
 }
+
+window.addEventListener('pointermove', updateInteractive, true)
+window.addEventListener('pointerleave', () => {
+  if (!interactive) return
+  interactive = false
+  try { bridge.setInteractive(false) } catch {}
+})
 
 bridge.onConfig(applySnapshot)
 bridge.onBlur(() => {
@@ -302,8 +203,6 @@ bridge.onMouseFollow((payload) => {
   const api = window.__dshWhaleBongoDesktopInput
   try { api?.setMouseFollow?.(payload) } catch {}
 })
-
-bridge.onPointer(handleGlobalPointer)
 
 bridge.onInputAnchor((anchor) => {
   window.__DSH_WHALE_DESKTOP_INPUT_ANCHOR = anchor || null

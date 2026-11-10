@@ -61,11 +61,9 @@ let latestAudioTelemetry = null
 const audioTelemetryClients = new Set()
 let mouseFollowOffset = null
 let mouseFollowStarted = false
-let pointerWatchActive = false
 const macMonitor = createMacOSMonitor({
   onSample(sample) {
     if (Array.isArray(sample.windows)) publishDesktopWindows(sample.windows)
-    if (sample.mouse) publishPointerWatch({ x: sample.mouse.x, y: sample.mouse.y, left: sample.mouse.left })
     if (sample.mouse && mouseFollowStarted) publishMouseFollow(sample.mouse)
   },
   onError(message) { writeLine({ type: 'error', message }) },
@@ -966,19 +964,19 @@ function handleNativeKey(message) {
 }
 
 function handleNativeMouse(message) {
-  if (!mouseFollowStarted && !pointerWatchActive) return
+  if (!mouseFollowStarted) return
   const entry = activeEntry()
   if (!entry || !entry.win || entry.win.isDestroyed()) return
   const screenX = Number(message.x)
   const screenY = Number(message.y)
   if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return
   const left = message.left === 1 || message.left === true
-  const bounds = entry.win.getContentBounds()
-  const x = screenX - bounds.x
-  const y = screenY - bounds.y
-  if (pointerWatchActive) publishPointerWatch({ x: screenX, y: screenY, left: left })
-  if (!mouseFollowStarted) return
-  const follow = { left: left, x: x, y: y }
+  const bounds = entry.win.getBounds()
+  const follow = {
+    left: left,
+    x: screenX - bounds.x,
+    y: screenY - bounds.y,
+  }
   if (mouseFollowOffset) {
     follow.offsetX = mouseFollowOffset.x
     follow.offsetY = mouseFollowOffset.y
@@ -988,18 +986,6 @@ function handleNativeMouse(message) {
     mouseFollowOffset = null
     stopMouseFollow()
   }
-}
-
-function publishPointerWatch(mouse) {
-  if (!pointerWatchActive) return
-  const entry = activeEntry()
-  if (!entry || !entry.win || entry.win.isDestroyed()) return
-  const screenX = Number(mouse.x)
-  const screenY = Number(mouse.y)
-  if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) return
-  const bounds = entry.win.getContentBounds()
-  const left = mouse.left === 1 || mouse.left === true
-  try { entry.win.webContents.send('whale:pointer', { x: screenX - bounds.x, y: screenY - bounds.y, left: left }) } catch {}
 }
 
 function handleNativeMessage(message) {
@@ -1062,7 +1048,6 @@ function startNativeHelper() {
     nativeKeysActive = false
     globalKeysActive = false
     mouseFollowStarted = false
-    pointerWatchActive = false
     mouseFollowOffset = null
     if (hostGone || (!restartWindows && !restartKeys)) return
     if (nativeRestartTimer) return
@@ -1125,7 +1110,7 @@ function startMouseFollow() {
 function stopMouseFollow() {
   if (!mouseFollowStarted) return
   mouseFollowStarted = false
-  if (process.platform === 'win32' && !pointerWatchActive) sendNative('mouse:stop')
+  if (process.platform === 'win32') sendNative('mouse:stop')
 }
 
 function publishMouseFollow(mouse) {
@@ -1155,31 +1140,20 @@ function publishMouseFollow(mouse) {
 
 function startDesktopWindows() {
   if (process.platform === 'darwin') {
-    pointerWatchActive = true
     macMonitor.start()
     return
   }
   if (process.platform !== 'win32' || nativeWindowsActive) return
   if (!startNativeHelper()) return
   nativeWindowsActive = true
-  pointerWatchActive = true
   sendNative('windows:start')
-  sendNative('pointer:start')
 }
 
 function stopDesktopWindows() {
-  if (process.platform === 'darwin') {
-    pointerWatchActive = false
-    if (macMonitor) macMonitor.stop()
-    return
-  }
   if (macMonitor) macMonitor.stop()
   if (!nativeWindowsActive) return
   nativeWindowsActive = false
-  pointerWatchActive = false
   sendNative('windows:stop')
-  sendNative('pointer:stop')
-  if (!mouseFollowStarted) sendNative('mouse:stop')
 }
 
 function handleGlobalKeyLine(line) {
