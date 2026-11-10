@@ -9,7 +9,8 @@ const els = {
   audioState: $('audioState'), suppressText: $('suppressText'),
   period: $('period'), beatCount: $('beatCount'), analysisCount: $('analysisCount'),
   analysisMs: $('analysisMs'), analysisEvery: $('analysisEvery'), buffer: $('buffer'),
-  gridAge: $('gridAge'), lead: $('lead'), candidate: $('candidate'), candidateHits: $('candidateHits'),
+  gridAge: $('gridAge'), lead: $('lead'), phaseError: $('phaseError'), periodDrift: $('periodDrift'),
+  candidate: $('candidate'), candidateHits: $('candidateHits'),
   pid: $('pid'), bridge: $('bridge'), analysisRows: $('analysisRows'), events: $('events'),
   recorder: $('recorder'), recordState: $('recordState'), recordToggle: $('recordToggle'),
   recordExport: $('recordExport'), recDot: $('recDot'),
@@ -158,6 +159,14 @@ function recordTelemetry(sample, flags) {
     gridAgeMs: Number(sample.gridAgeMs) || 0,
     candidateBpm: Number(sample.candidateBpm) || 0,
     candidateHits: Number(sample.candidateHits) || 0,
+    candidateRequired: Number(sample.candidateRequired) || 0,
+    observedPeriod: Number(sample.observedPeriod) || 0,
+    phaseErrorMs: Number(sample.phaseErrorMs) || 0,
+    periodDriftMs: Number(sample.periodDriftMs) || 0,
+    nextPressIn: Number(sample.nextPressIn) || 0,
+    userLeadMs: Number(sample.userLeadMs) || 0,
+    pressLeadMs: Number(sample.pressLeadMs) || 0,
+    skipNextBeat: Boolean(sample.skipNextBeat),
     last: sample.last || null,
   }
   recorder.samples.push(copy)
@@ -310,6 +319,8 @@ function applyTelemetry(env) {
   els.analysisEvery.textContent = sample.analysisEveryMs ? fmt(sample.analysisEveryMs, 0) + ' ms' : '--'
   els.buffer.textContent = sample.bufferSeconds ? fmt(sample.bufferSeconds, 2) + ' / ' + fmt(sample.windowSeconds, 0) + 's' : '--'
   els.gridAge.textContent = sample.gridAgeMs ? fmt(sample.gridAgeMs, 0) + ' ms' : '--'
+  els.phaseError.textContent = Number.isFinite(sample.phaseErrorMs) ? fmt(sample.phaseErrorMs, 1) + ' ms' : '--'
+  els.periodDrift.textContent = Number.isFinite(sample.periodDriftMs) ? fmt(sample.periodDriftMs, 1) + ' ms' : '--'
   els.lead.textContent = Number(sample.leadMs || 0) === 0 ? '0 ms' : (sample.leadMs > 0 ? '提前 ' : '延后 ') + fmt(Math.abs(sample.leadMs), 0) + ' ms'
   els.candidate.textContent = sample.candidateBpm ? fmt(sample.candidateBpm, 1) : '--'
   els.candidateHits.textContent = (sample.candidateHits || 0) + ' 次确认'
