@@ -1396,6 +1396,7 @@ function mountWhaleBongoWidget(options) {
   var fxNotes = []
   var fxRipples = []
   var fxLastAt = 0
+  var fxWasActive = false
   var fxCanvasW = 0
   var fxCanvasH = 0
   var fxCanvasDpr = 0
@@ -2121,16 +2122,23 @@ function mountWhaleBongoWidget(options) {
   }
 
   function drawAudioFx() {
-    if (!fxCtx || !syncFxCanvas()) return
-    var w = fxCanvasW
-    var h = fxCanvasH
     var active = audioFxEnabled()
-    if (stage) stage.classList.toggle('has-fx', active)
     if (!active) {
-      fxCtx.clearRect(0, 0, w, h)
-      fxBeatEnv = 0
+      if (fxWasActive) {
+        if (fxCtx) fxCtx.clearRect(0, 0, fxCanvasW, fxCanvasH)
+        if (stage) stage.classList.remove('has-fx')
+        fxBeatEnv = 0
+        fxWasActive = false
+      }
       return
     }
+    if (!fxCtx || !syncFxCanvas()) return
+    if (!fxWasActive) {
+      if (stage) stage.classList.add('has-fx')
+      fxWasActive = true
+    }
+    var w = fxCanvasW
+    var h = fxCanvasH
     var now = (window.performance && window.performance.now) ? window.performance.now() : Date.now()
     var dt = fxLastAt ? Math.min(0.05, (now - fxLastAt) / 1000) : 0.016
     fxLastAt = now
