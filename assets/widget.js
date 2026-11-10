@@ -462,10 +462,10 @@ function mountWhaleBongoWidget(options) {
     #dsh-whale-bongo .dsnw-stage.has-fx { overflow: visible; }
     #dsh-whale-bongo .dsnw-fx {
       position: absolute;
-      left: -20%;
+      left: -33%;
       top: 0;
       z-index: 0;
-      width: 140%;
+      width: 166%;
       height: 100%;
       pointer-events: none;
     }
