@@ -33,6 +33,7 @@ class WhaleNativeHelper
     private static volatile bool windowsEnabled = false;
     private static volatile bool keysEnabled = false;
     private static volatile bool mouseEnabled = false;
+    private static volatile bool pointerWatch = false;
     private static volatile bool windowsReset = true;
     private static volatile bool keysReset = true;
 
@@ -144,6 +145,16 @@ class WhaleNativeHelper
             if (line == "mouse:stop")
             {
                 mouseEnabled = false;
+                continue;
+            }
+            if (line == "pointer:start")
+            {
+                pointerWatch = true;
+                continue;
+            }
+            if (line == "pointer:stop")
+            {
+                pointerWatch = false;
                 continue;
             }
             if (line == "ping")
@@ -358,7 +369,7 @@ class WhaleNativeHelper
     {
         while (running)
         {
-            if (!mouseEnabled)
+            if (!mouseEnabled && !pointerWatch)
             {
                 Thread.Sleep(20);
                 continue;
@@ -377,8 +388,8 @@ class WhaleNativeHelper
                 WriteLine("{\"type\":\"error\",\"message\":\"" + Escape(error.Message) + "\"}");
                 mouseEnabled = false;
             }
-            if (!left) mouseEnabled = false;
-            Thread.Sleep(8);
+            if (!left && !pointerWatch) mouseEnabled = false;
+            Thread.Sleep(6);
         }
     }
 

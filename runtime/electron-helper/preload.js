@@ -52,6 +52,9 @@ contextBridge.exposeInMainWorld('whaleDesktop', {
   onMouseFollow(callback) {
     ipcRenderer.on('whale:mouse-follow', (_event, payload) => callback(payload))
   },
+  onPointer(callback) {
+    ipcRenderer.on('whale:pointer', (_event, payload) => callback(payload))
+  },
   ready() {
     ipcRenderer.send('whale:ready')
   },

@@ -47,6 +47,7 @@
 
 ### 修复
 
+- 修复桌面挂件悬停/点击/拖动时浏览器视频变黑：全屏透明覆盖层现在始终保持点击穿透，悬停、菜单和拖动命中改由 native helper 的全局鼠标采样转发到挂件，不再把整个工作区切成可点击窗口。
 - 修复 macOS 桌面模式无法吸附窗口：新增 Quartz 原生采样器 `desktop-macos.m`，由 `macos-monitor.js` 通过 `xcrun clang` 编译到私有缓存；窗口和鼠标使用逻辑坐标，Retina 屏幕不再做二次缩放。需要安装 Xcode Command Line Tools。
 - 修复 macOS 页面打字被全局键盘流误拦截：SSE 连接建立不再等同于原生键盘可用，Host 通过 `status` 事件报告 `supported/active`；只有两者都为真时才停用页面按键，断线、退出或重连会自动释放并回退。
 - 修复桌面挂件挡住 DSH 窗口拖动：根节点恢复 `-webkit-app-region: initial`，只有挂件拖动区、菜单和下拉浮层使用 `no-drag`；吸附点层改为零尺寸，避免透明层覆盖整个窗口。
