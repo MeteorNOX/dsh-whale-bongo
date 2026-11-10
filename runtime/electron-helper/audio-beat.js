@@ -112,6 +112,9 @@
     var analysisStartedAt = 0
     var lastResult = null
     var lastTelemetryAt = 0
+    var observedPeriod = 0
+    var phaseErrorMs = 0
+    var periodDriftMs = 0
 
     function telemetry(force) {
       if (typeof opts.onTelemetry !== 'function') return
@@ -152,6 +155,9 @@
         candidateHits: candidateHits,
         candidateRequired: candidateRequired,
         skipNextBeat: skipBeatOnce,
+        observedPeriod: observedPeriod,
+        periodDriftMs: periodDriftMs,
+        phaseErrorMs: phaseErrorMs,
         last: previous ? {
           bpm: previous.bpm,
           confidence: previous.confidence,
@@ -266,6 +272,9 @@
       candidateRequired = 0
       lastBeatAt = 0
       skipBeatOnce = false
+      observedPeriod = 0
+      phaseErrorMs = 0
+      periodDriftMs = 0
       soundStartAt = 0
       if (notify && hadGrid) status('active')
     }
@@ -407,6 +416,36 @@
       return out
     }
 
+    function estimateObservedPeriod(offsets, fallback) {
+      var values = []
+      for (var i = 1; i < offsets.length; i++) {
+        var delta = offsets[i] - offsets[i - 1]
+        if (!isFinite(delta) || delta < 0.25 || delta > 2.0) continue
+        // Keep intervals near the detector's current tempo; a skipped beat
+        // (2x) or a spurious subdivision (0.5x) must not become the period.
+        if (delta > fallback * 0.65 && delta < fallback * 1.55) values.push(delta)
+      }
+      if (!values.length) return fallback
+      values.sort(function (a, b) { return a - b })
+      var median = values[Math.floor(values.length / 2)]
+      if (!isFinite(median) || median <= 0) return fallback
+      return clamp(median, 60 / MAX_BPM, 60 / MIN_BPM)
+    }
+
+    function applyPhaseLock(lastActual, period) {
+      if (!nextBeatAt || !period || !lastActual) return
+      var expectedLast = nextBeatAt - period
+      var error = lastActual - expectedLast
+      // Choose the nearest grid phase instead of allowing a full-period jump.
+      error -= Math.round(error / period) * period
+      phaseErrorMs = error * 1000
+      // Ignore wild phase errors (a wrong beat position, not drift). Small
+      // cumulative errors are nudged back by a limited proportional term.
+      if (Math.abs(error) > period * 0.28) return
+      var correction = clamp(error * 0.18, -0.018, 0.018)
+      nextBeatAt += correction
+    }
+
     function applyBeatResult(result, duration) {
       if (!running || !context) return
       if (!isAudible()) {
@@ -483,21 +522,31 @@
         }
       }
 
-      var nextPeriod = 60 / nextBpm
+      var nominalPeriod = 60 / nextBpm
+      var nextPeriod = estimateObservedPeriod(offsets, nominalPeriod)
+      observedPeriod = nextPeriod
       var last = Number(offsets[offsets.length - 1]) || 0
       var now = context.currentTime
       var bufferEnd = ringEndedAt || now
+      var lastActual = bufferEnd + last
       var target = bufferEnd + Math.max(0.02, last + nextPeriod)
       while (target < now + 0.03) target += nextPeriod
+      var sameTempo = Boolean(bpm && Math.abs(nextBpm - bpm) <= 2.5)
+      periodDriftMs = (nextPeriod - (beatPeriod || nextPeriod)) * 1000
 
       if (!bpm) {
         nextBeatAt = target
         beatPeriod = nextPeriod
-      } else if (Math.abs(nextBpm - bpm) <= 2.5) {
+        phaseErrorMs = 0
+      } else if (sameTempo) {
         // Same tempo (including 112/113): preserve the current phase and timer.
         // Re-anchoring here was the cause of skipped beats (974–1051ms gaps).
-        beatPeriod = nextPeriod
+        // Keep a fractional, observed period and let the phase lock below nudge
+        // the grid back onto the detected beats instead of letting tiny period
+        // errors accumulate over minutes.
+        beatPeriod = beatPeriod + (nextPeriod - beatPeriod) * 0.35
         if (!nextBeatAt) nextBeatAt = target
+        applyPhaseLock(lastActual, beatPeriod)
       } else {
         // A real tempo change is applied at a beat boundary. Clamp the target
         // so the new grid cannot introduce a two-beat hole.
@@ -508,6 +557,7 @@
         nextBeatAt = target
         beatPeriod = nextPeriod
         skipBeatOnce = true
+        phaseErrorMs = 0
       }
 
       bpm = nextBpm
@@ -695,6 +745,9 @@
         candidateHits = 0
         candidateRequired = 0
         skipBeatOnce = false
+        observedPeriod = 0
+        phaseErrorMs = 0
+        periodDriftMs = 0
         clearBeatTimer()
         window.__DSH_WHALE_AUDIO_BEAT_SUPPRESS = suppress
         timer = window.setInterval(tick, TICK_MS)
@@ -728,6 +781,9 @@
         analysisCount: analysisCount,
         analysisMs: lastAnalysisMs,
         beatPeriod: beatPeriod,
+        observedPeriod: observedPeriod,
+        phaseErrorMs: phaseErrorMs,
+        periodDriftMs: periodDriftMs,
         nextBeatIn: context && nextBeatAt ? nextBeatAt - context.currentTime : 0,
         nextPressIn: context && nextBeatAt ? nextBeatAt - pressLeadSeconds() - context.currentTime : 0,
         leadMs: Math.round(pressLeadSeconds() * 1000),
