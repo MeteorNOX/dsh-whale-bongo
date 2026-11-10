@@ -158,7 +158,6 @@ function mountWhaleBongoWidget(options) {
     typingAngleMode: 'position-split',
     audioBeat: true,
     audioBeatLead: 0,
-    audioFxStyle: 'none',
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -283,9 +282,6 @@ function mountWhaleBongoWidget(options) {
     out.filterShortcutKeys = out.filterShortcutKeys === true
     out.audioBeat = out.audioBeat !== false
     out.audioBeatLead = clamp(numberOr(out.audioBeatLead, 0), -100, 150)
-    out.audioFxStyle = out.audioFxStyle === 'spectrum' || out.audioFxStyle === 'notes' || out.audioFxStyle === 'ripple' || out.audioFxStyle === 'none'
-      ? out.audioFxStyle
-      : 'none'
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
@@ -459,16 +455,6 @@ function mountWhaleBongoWidget(options) {
       pointer-events: none;
     }
     #dsh-whale-bongo .dsnw-stage.is-bouncing { overflow: visible; }
-    #dsh-whale-bongo .dsnw-stage.has-fx { overflow: visible; }
-    #dsh-whale-bongo .dsnw-fx {
-      position: absolute;
-      left: -33%;
-      top: 0;
-      z-index: 0;
-      width: 166%;
-      height: 100%;
-      pointer-events: none;
-    }
     #dsh-whale-bongo .dsnw-image-motion {
       position: absolute;
       inset: 0;
@@ -900,32 +886,8 @@ function mountWhaleBongoWidget(options) {
     #dsh-whale-bongo .dsnw-mod-section:empty {
       display: none;
     }
-    #dsh-whale-bongo .dsnw-mod-select {
-      flex: 1 1 auto;
-      min-width: 0;
-      height: 24px;
-      border: 1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.3));
-      border-radius: 6px;
-      background: var(--dsw-alias-bg-base, #1b1b1b);
-      color: var(--dsw-alias-label-primary, #e8e8e8);
-      font: inherit;
-      font-size: 11px;
-      padding: 0 6px;
-    }
     #dsh-whale-bongo .dsnw-mod-section .dsnw-toggle-row {
       margin-top: 6px;
-    }
-    #dsh-whale-bongo .dsnw-mod-select-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 8px;
-      color: var(--dsw-alias-label-secondary, #aaa);
-      font-size: 11px;
-      line-height: 16px;
-    }
-    #dsh-whale-bongo .dsnw-mod-select-row .dsnw-mod-select {
-      flex: 1 1 auto;
     }
     #dsh-whale-bongo .dsnw-mod-slider-head {
       display: flex;
@@ -1224,7 +1186,6 @@ function mountWhaleBongoWidget(options) {
       '<defs><clipPath id="dsnw-alpha-clip" clipPathUnits="objectBoundingBox"></clipPath></defs>' +
     '</svg>' +
     '<div class="dsnw-reveal-shell"><div class="dsnw-move-shell"><div class="dsnw-art"><div class="dsnw-stage">' +
-      '<canvas class="dsnw-fx" aria-hidden="true"></canvas>' +
       '<div class="dsnw-image-motion"><img class="dsnw-portrait" alt="" draggable="false"></div>' +
       '<div class="dsnw-hand" data-side="left">' +
         '<div class="dsnw-trail dsnw-trail--far"></div>' +
@@ -1382,24 +1343,10 @@ function mountWhaleBongoWidget(options) {
         '<span class="dsnw-setting-value"><span data-size-label>140</span><button type="button" data-reset-size title="恢复默认大小">↺</button></span></div>' +
       '</div>' +
       '<button class="dsnw-reset" type="button" data-reset>恢复默认设置</button>' +
-      '<div class="dsnw-foot">v0.3.4</div>' +
+      '<div class="dsnw-foot">v0.3.5</div>' +
     '</div></div>'
 
   var stage = root.querySelector('.dsnw-stage')
-  var fxCanvas = root.querySelector('.dsnw-fx')
-  var fxCtx = fxCanvas && fxCanvas.getContext ? fxCanvas.getContext('2d') : null
-  var audioEnergy = 0
-  var audioEnergyTarget = 0
-  var audioBands = []
-  var audioBandLevels = []
-  var fxBeatEnv = 0
-  var fxNotes = []
-  var fxRipples = []
-  var fxLastAt = 0
-  var fxWasActive = false
-  var fxCanvasW = 0
-  var fxCanvasH = 0
-  var fxCanvasDpr = 0
   var imageMotion = root.querySelector('.dsnw-image-motion')
   var portrait = root.querySelector('.dsnw-portrait')
   var hitbox = root.querySelector('.dsnw-hitbox')
@@ -2048,194 +1995,6 @@ function mountWhaleBongoWidget(options) {
     render()
   }
 
-  function syncFxCanvas() {
-    if (!fxCanvas || !fxCtx) return false
-    var w = Math.max(1, Math.round(fxCanvas.clientWidth || stage.clientWidth || 0))
-    var h = Math.max(1, Math.round(fxCanvas.clientHeight || stage.clientHeight || 0))
-    var dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
-    if (!w || !h) return false
-    if (fxCanvasW !== w || fxCanvasH !== h || fxCanvasDpr !== dpr) {
-      fxCanvas.width = Math.round(w * dpr)
-      fxCanvas.height = Math.round(h * dpr)
-      fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      fxCanvasW = w
-      fxCanvasH = h
-      fxCanvasDpr = dpr
-    }
-    return true
-  }
-
-  function audioFxEnabled() {
-    return Boolean(desktopMode && audioMod && audioMod.isEnabled() && cfg.audioFxStyle !== 'none')
-  }
-
-  function fxCenterX(width) {
-    var stageW = root.clientWidth || cfg.size
-    var axis = isFinite(CONFIG.axisX) ? CONFIG.axisX : 0.5
-    return (width - stageW) / 2 + stageW * axis
-  }
-
-  function fxImageCenterX(width) {
-    var stageW = root.clientWidth || cfg.size
-    var imageX = clamp(numberOr(cfg.imageXPct, 0), -30, 30) / 100
-    return (width - stageW) / 2 + stageW * (0.5 + imageX)
-  }
-
-  function spawnFxNotes(strength) {
-    if (!syncFxCanvas()) return
-    var w = fxCanvasW
-    var h = fxCanvasH
-    var scale = Math.min(w, h) / 320
-    var baseY = h * clamp(imageBottomNorm, 0.45, 1)
-    var centerX = fxCenterX(w)
-    var count = 4 + (Math.random() < 0.5 ? 0 : 1)
-    for (var i = 0; i < count; i++) {
-      var spread = (Math.random() - 0.5) * w * 0.34
-      var speed = (76 + Math.random() * 64) * scale
-      fxNotes.push({
-        x: centerX + spread,
-        y: baseY - (128 + Math.random() * 22) * scale,
-        vx: (Math.random() - 0.5) * 86 * scale,
-        vy: -speed,
-        rot: (Math.random() - 0.5) * 0.5,
-        vr: (Math.random() - 0.5) * 2.6,
-        size: (16 + Math.random() * 9) * scale,
-        hue: Math.floor(Math.random() * 360),
-        life: 1,
-        glyph: ['♪', '♫', '♬'][i % 3],
-        power: strength
-      })
-    }
-    if (fxNotes.length > 60) fxNotes.splice(0, fxNotes.length - 60)
-  }
-
-  function audioFxBeat(strength) {
-    if (!audioFxEnabled()) return
-    fxBeatEnv = Math.max(fxBeatEnv, 0.35 + 0.65 * strength)
-    if (cfg.audioFxStyle === 'notes') spawnFxNotes(strength)
-    if (cfg.audioFxStyle === 'ripple') {
-      for (var i = 0; i < 2; i++) {
-        fxRipples.push({ age: -i * 0.08, life: 0.52 + i * 0.08, power: strength, hue: 182 + i * 18 })
-      }
-      if (fxRipples.length > 12) fxRipples.splice(0, fxRipples.length - 12)
-    }
-  }
-
-  function drawAudioFx() {
-    var active = audioFxEnabled()
-    if (!active) {
-      if (fxWasActive) {
-        if (fxCtx) fxCtx.clearRect(0, 0, fxCanvasW, fxCanvasH)
-        if (stage) stage.classList.remove('has-fx')
-        fxBeatEnv = 0
-        fxWasActive = false
-      }
-      return
-    }
-    if (!fxCtx || !syncFxCanvas()) return
-    if (!fxWasActive) {
-      if (stage) stage.classList.add('has-fx')
-      fxWasActive = true
-    }
-    var w = fxCanvasW
-    var h = fxCanvasH
-    var now = (window.performance && window.performance.now) ? window.performance.now() : Date.now()
-    var dt = fxLastAt ? Math.min(0.05, (now - fxLastAt) / 1000) : 0.016
-    fxLastAt = now
-    audioEnergy += (audioEnergyTarget - audioEnergy) * (1 - Math.exp(-dt * 9))
-    fxBeatEnv *= Math.exp(-dt * 3.4)
-    if (fxBeatEnv < 0.002) fxBeatEnv = 0
-    fxCtx.clearRect(0, 0, w, h)
-    var fxScale = Math.min(w, h) / 320
-    var baseX = fxCenterX(w)
-    var baseY = h * clamp(imageBottomNorm, 0.45, 1) - 2 * fxScale
-    var radius = Math.min(w, h) * 0.64
-    if (audioBandLevels.length !== (audioBands.length || 21)) {
-      audioBandLevels = new Array(audioBands.length || 21)
-      for (var bl = 0; bl < audioBandLevels.length; bl++) audioBandLevels[bl] = 0
-    }
-    for (var bl2 = 0; bl2 < audioBandLevels.length; bl2++) {
-      var targetLevel = Number(audioBands[bl2])
-      if (!isFinite(targetLevel)) targetLevel = 0
-      audioBandLevels[bl2] += (targetLevel - audioBandLevels[bl2]) * (1 - Math.exp(-dt * 15))
-    }
-    if (cfg.audioFxStyle === 'spectrum') {
-      var bars = audioBandLevels.length || 21
-      var audible = audioEnergy > 0.0008 || fxBeatEnv > 0.01
-      if (!audible) return
-      var energy = clamp(audioEnergy * 20 + fxBeatEnv * 0.40, 0, 1)
-      var barsX = fxImageCenterX(w)
-      fxCtx.save()
-      fxCtx.lineCap = 'round'
-      for (var i = 0; i < bars; i++) {
-        var t = bars === 1 ? 0.5 : i / (bars - 1)
-        var angle = -Math.PI * 0.98 + t * Math.PI * 0.96
-        var band = audioBandLevels[i]
-        if (!isFinite(band)) band = 0
-        var shaped = Math.pow(clamp(band, 0, 1), 1.6)
-        var wave = clamp(shaped * 0.76 + fxBeatEnv * 0.10, 0.015, 0.88)
-        var length = (10 + 112 * wave) * fxScale
-        var inner = radius * 0.52
-        var x1 = barsX + Math.cos(angle) * inner
-        var y1 = baseY + Math.sin(angle) * inner
-        var x2 = barsX + Math.cos(angle) * (inner + length)
-        var y2 = baseY + Math.sin(angle) * (inner + length)
-        fxCtx.strokeStyle = 'hsla(' + (184 + t * 64) + ', 94%, ' + (58 + energy * 20) + '%, ' + (0.70 + energy * 0.24) + ')'
-        fxCtx.lineWidth = 6.5 * fxScale
-        fxCtx.beginPath()
-        fxCtx.moveTo(x1, y1)
-        fxCtx.lineTo(x2, y2)
-        fxCtx.stroke()
-      }
-      fxCtx.restore()
-    } else if (cfg.audioFxStyle === 'ripple') {
-      fxCtx.save()
-      var ringRadius = Math.min(w, h) * 0.82
-      for (var r = fxRipples.length - 1; r >= 0; r--) {
-        var ring = fxRipples[r]
-        ring.age += dt
-        if (ring.age < 0) continue
-        var progress = ring.age / ring.life
-        if (progress >= 1) { fxRipples.splice(r, 1); continue }
-        var fade = (1 - progress) * (0.55 + ring.power * 0.35)
-        fxCtx.strokeStyle = 'hsla(' + ring.hue + ', 90%, 66%, ' + fade + ')'
-        fxCtx.lineWidth = 3.2 * fxScale * (1 - progress * 0.55)
-        fxCtx.beginPath()
-        fxCtx.ellipse(
-          baseX, baseY,
-          ringRadius * (0.55 + progress * 0.45),
-          ringRadius * (0.32 + progress * 0.68),
-          0, Math.PI, 2 * Math.PI
-        )
-        fxCtx.stroke()
-      }
-      fxCtx.restore()
-    } else if (cfg.audioFxStyle === 'notes') {
-      fxCtx.save()
-      fxCtx.textAlign = 'center'
-      fxCtx.textBaseline = 'middle'
-      fxCtx.shadowColor = 'rgba(18, 96, 140, 0.28)'
-      fxCtx.shadowBlur = 5 * fxScale
-      for (var n = fxNotes.length - 1; n >= 0; n--) {
-        var note = fxNotes[n]
-        note.life -= dt * 1.35
-        if (note.life <= 0) { fxNotes.splice(n, 1); continue }
-        note.vy += 36 * dt
-        note.x += note.vx * dt
-        note.y += note.vy * dt
-        note.rot += note.vr * dt
-        fxCtx.save()
-        fxCtx.translate(note.x, note.y)
-        fxCtx.rotate(note.rot)
-        fxCtx.fillStyle = 'hsla(' + note.hue + ', 92%, 68%, ' + clamp(note.life, 0, 1) * 0.92 + ')'
-        fxCtx.font = '600 ' + note.size.toFixed(1) + 'px "Segoe UI", sans-serif'
-        fxCtx.fillText(note.glyph, 0, 0)
-        fxCtx.restore()
-      }
-      fxCtx.restore()
-    }
-  }
-
   // Music beats trigger the same two-hand press as a real pointer click.
   // They deliberately do not play the click sound, and are skipped while the
   // user is already dragging or typing.
@@ -2276,7 +2035,6 @@ function mountWhaleBongoWidget(options) {
       pressed.push(hand)
     }
     imageSquash.target = clamp(0.03 * pressQBounceStrength(), 0, 0.14)
-    audioFxBeat(strength)
     render()
     var token = ++beatPressToken
     later(function () {
@@ -2507,7 +2265,6 @@ function mountWhaleBongoWidget(options) {
         }
       }
     }
-    drawAudioFx()
   }
 
   function stepHand(hand, dt) {
@@ -3608,11 +3365,8 @@ function mountWhaleBongoWidget(options) {
       hand: '宽' + fmtSetting(cfg.handWidthPct) + ' 高' + fmtSetting(cfg.handAspectPct) + ' 距' + fmtSetting(cfg.handSpreadPct) + ' 轴' + fmtSetting(cfg.handAxisPct) + ' 纵' + fmtSetting(cfg.handCenterYPct),
       sound: '音量 ' + (Number(cfg.volume) === 0 ? '关' : fmtSetting(cfg.volume)),
       mod: cfg.audioBeat === false ? '律动关' : '律动开',
-      rhythm: (cfg.audioFxStyle === 'notes' ? '彩色音符'
-        : cfg.audioFxStyle === 'ripple' ? '半扇波纹'
-          : cfg.audioFxStyle === 'none' ? '无底层效果' : '半扇频谱') +
-        ' · ' + (Number(cfg.audioBeatLead) > 0 ? '提前 ' + fmtSetting(cfg.audioBeatLead) + 'ms'
-          : Number(cfg.audioBeatLead) < 0 ? '延后 ' + fmtSetting(-cfg.audioBeatLead) + 'ms' : '对齐'),
+      rhythm: Number(cfg.audioBeatLead) > 0 ? '提前 ' + fmtSetting(cfg.audioBeatLead) + 'ms'
+        : Number(cfg.audioBeatLead) < 0 ? '延后 ' + fmtSetting(-cfg.audioBeatLead) + 'ms' : '对齐',
       behavior: cfg.clickPressMode === 'none' ? '手部不跟随' : (cfg.clickPressMode === 'squash' ? '手部变扁' : '手部跟随下压'),
     }
     for (var key in summaries) {
@@ -4820,19 +4574,6 @@ function mountWhaleBongoWidget(options) {
     if (typeof audioMod !== 'undefined' && audioMod) audioMod.setStatus(state, error, bpm)
   }
 
-  function setAudioEnergy(value) {
-    audioEnergyTarget = clamp(Number(value) || 0, 0, 1)
-  }
-
-  function setAudioBands(value) {
-    if (!value || typeof value.length !== 'number') return
-    var next = []
-    for (var i = 0; i < value.length; i++) {
-      next.push(clamp(Number(value[i]) || 0, 0, 1))
-    }
-    audioBands = next
-  }
-
   function setDesktopDisplay(info) {
     if (!desktopMode) return
     var previousDisplay = window.__DSH_WHALE_DESKTOP_DISPLAY
@@ -5213,8 +4954,6 @@ function mountWhaleBongoWidget(options) {
       setDesktopDisplaySwitch: function (payload) { setDesktopDisplaySwitch(payload) },
       setAudioBeatEnabled: function (enabled) { setAudioBeatEnabled(enabled) },
       setAudioBeatStatus: function (state, error, bpm) { setAudioBeatStatus(state, error, bpm) },
-      setAudioEnergy: function (value) { setAudioEnergy(value) },
-      setAudioBands: function (value) { setAudioBands(value) },
       beat: function (strength) { pulseAudioBeat(strength) },
       recall: function () { recallDesktopWidget() },
       returnToClient: function () { leaveDesktopForClient(null) },

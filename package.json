@@ -1,6 +1,6 @@
 {
   "name": "dsh-whale-bongo",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "QQ 弹弹的类 bongo 手手挂件",
   "type": "module",
   "exports": {

@@ -68,13 +68,6 @@ function startAudioBeat() {
       onTelemetry(payload) {
         if (!audioBeatWanted) return
         publishAudioBeatTelemetry(payload)
-        const api = audioBeatApi()
-        if (api && typeof api.setAudioEnergy === 'function') {
-          try { api.setAudioEnergy(payload && payload.energy) } catch {}
-        }
-        if (api && typeof api.setAudioBands === 'function') {
-          try { api.setAudioBands(payload && payload.bands) } catch {}
-        }
       },
     })
   }

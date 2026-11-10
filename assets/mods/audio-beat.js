@@ -3,7 +3,7 @@
  * ----------------------------------------------------------------------------
  * 桌面挂件的可选音律动模块。它只负责三件事：
  *   1. 在设置菜单的 MOD 小节里渲染总开关和连接状态；
- *   2. 在“律动模式”小节里渲染提前量与底层效果选项；
+ *   2. 在“律动模式”小节里渲染额外提前量；
  *   3. 把 helper 送来的节拍事件交给主挂件，复用鼠标点按的按压动效。
  *
  * audio-beat.js（helper 侧）负责系统音频采集和 BPM/节拍网格；本模块不碰
@@ -12,21 +12,8 @@
 (function (global) {
   'use strict'
 
-  var EFFECTS = [
-    { value: 'spectrum', label: '半扇频谱' },
-    { value: 'notes', label: '彩色音符' },
-    { value: 'ripple', label: '半扇波纹' },
-    { value: 'none', label: '关闭' }
-  ]
-
   function clamp(value, min, max) {
     return Math.min(max, Math.max(min, value))
-  }
-
-  function normalizeEffect(value) {
-    return value === 'spectrum' || value === 'notes' || value === 'ripple' || value === 'none'
-      ? value
-      : 'none'
   }
 
   function create(host) {
@@ -41,12 +28,10 @@
     var eventMs = 0
     var eventPeriod = 0
     var lead = clamp(Number(cfg.audioBeatLead) || 0, -100, 150)
-    var effect = normalizeEffect(cfg.audioFxStyle)
     var input = null
     var statusEl = null
     var leadInput = null
     var leadValue = null
-    var effectSelect = null
 
     function isEnabled() {
       return enabled !== false && cfg.audioBeat !== false
@@ -89,7 +74,6 @@
       if (input) input.checked = isEnabled()
       if (leadInput) leadInput.value = String(lead)
       if (leadValue) leadValue.textContent = leadText()
-      if (effectSelect) effectSelect.value = effect
       if (statusEl) {
         statusEl.textContent = statusText()
         statusEl.classList.toggle('is-error', status === 'error' && isEnabled())
@@ -132,31 +116,13 @@
             '<span class="dsnw-mod-slider-value" data-mod-audio-lead-value>对齐节拍</span>' +
           '</div>' +
           '<input class="dsnw-mod-range" type="range" min="-100" max="150" step="5" data-mod-audio-lead aria-label="额外提前量">' +
-          '<p class="dsnw-image-name">0 = 最低点对齐节拍；正值提前、负值延后；已内置 55 ms 按压补偿</p>' +
-          '<label class="dsnw-mod-select-row">' +
-            '<span>底层效果</span>' +
-            '<select class="dsnw-mod-select" data-mod-audio-effect aria-label="律动底层效果">' +
-              EFFECTS.map(function (item) {
-                return '<option value="' + item.value + '">' + item.label + '</option>'
-              }).join('') +
-            '</select>' +
-          '</label>' +
-          '<p class="dsnw-image-name">效果绘制在挂件本体下面，不会改变点击和吸附位置。</p>'
+          '<p class="dsnw-image-name">0 = 最低点对齐节拍；正值提前、负值延后；已内置 55 ms 按压补偿</p>'
         leadInput = detailSlot.querySelector('[data-mod-audio-lead]')
         leadValue = detailSlot.querySelector('[data-mod-audio-lead-value]')
-        effectSelect = detailSlot.querySelector('[data-mod-audio-effect]')
         if (leadInput) {
           leadInput.addEventListener('input', function () {
             lead = clamp(Number(this.value) || 0, -100, 150)
             cfg.audioBeatLead = lead
-            host.save()
-            sync()
-          })
-        }
-        if (effectSelect) {
-          effectSelect.addEventListener('change', function () {
-            effect = normalizeEffect(this.value)
-            cfg.audioFxStyle = effect
             host.save()
             sync()
           })
