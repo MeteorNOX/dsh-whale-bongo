@@ -24,9 +24,9 @@
   }
 
   function normalizeEffect(value) {
-    return value === 'notes' || value === 'ripple' || value === 'none'
+    return value === 'spectrum' || value === 'notes' || value === 'ripple' || value === 'none'
       ? value
-      : 'spectrum'
+      : 'none'
   }
 
   function create(host) {

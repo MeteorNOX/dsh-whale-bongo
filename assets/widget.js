@@ -158,7 +158,7 @@ function mountWhaleBongoWidget(options) {
     typingAngleMode: 'position-split',
     audioBeat: true,
     audioBeatLead: 0,
-    audioFxStyle: 'spectrum',
+    audioFxStyle: 'none',
     displayMode: 'web',
     handTypingAngleDeg: 30,
     inkColor: '#4C2326',
@@ -283,9 +283,9 @@ function mountWhaleBongoWidget(options) {
     out.filterShortcutKeys = out.filterShortcutKeys === true
     out.audioBeat = out.audioBeat !== false
     out.audioBeatLead = clamp(numberOr(out.audioBeatLead, 0), -100, 150)
-    out.audioFxStyle = out.audioFxStyle === 'notes' || out.audioFxStyle === 'ripple' || out.audioFxStyle === 'none'
+    out.audioFxStyle = out.audioFxStyle === 'spectrum' || out.audioFxStyle === 'notes' || out.audioFxStyle === 'ripple' || out.audioFxStyle === 'none'
       ? out.audioFxStyle
-      : 'spectrum'
+      : 'none'
     out.typingAngleMode = out.typingAngleMode === 'off' || out.typingAngleMode === 'random' || out.typingAngleMode === 'position' || out.typingAngleMode === 'position-split' ? out.typingAngleMode : 'position-split'
     out.displayMode = out.displayMode === 'desktop' ? 'desktop' : 'web'
     delete out.handTypingOffsetPx
